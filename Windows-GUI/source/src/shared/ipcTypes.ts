@@ -246,7 +246,7 @@ export interface CloudboxApi {
     create: () => Promise<Result<CaInfo>>;
     install: () => Promise<Result<CaInfo>>;
     uninstall: () => Promise<Result<CaInfo>>;
-    issueServerCert: () => Promise<Result<CertificateInfo>>;
+    issueServerCert: (input: { extraHosts: string }) => Promise<Result<CertificateInfo>>;
     exportClientCert: () => Promise<Result<ClientCertExport>>;
   };
   settings: {

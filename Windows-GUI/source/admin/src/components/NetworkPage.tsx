@@ -46,6 +46,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const [ca, setCa] = useState<CaInfo | null>(null);
   const [caOpen, setCaOpen] = useState(false);
   const [caPending, setCaPending] = useState<string | null>(null);
+  const [extraHosts, setExtraHosts] = useState('');
   const [mtls, setMtls] = useState(false);
   const [trustProxy, setTrustProxy] = useState(false);
   const [trustProxyPending, setTrustProxyPending] = useState(false);
@@ -293,7 +294,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const issueServerCert = async (): Promise<void> => {
     setCaPending('issue');
     try {
-      await call(api.ca.issueServerCert());
+      await call(api.ca.issueServerCert({ extraHosts }));
       setProtocol('https');
       await refreshCa();
       notify('success', '服务端证书已签发，正在应用 HTTPS 配置');
@@ -654,6 +655,22 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
                 尚未生成 CA。生成后会自动安装到系统信任库，并显示指纹与有效期。
               </p>
             )}
+
+            <div>
+              <label className="text-[11px] text-slate-500" htmlFor="ca-extra-hosts">
+                包含的域名或 IP（多个用英文逗号分隔）
+              </label>
+              <input
+                id="ca-extra-hosts"
+                value={extraHosts}
+                onChange={(event) => setExtraHosts(event.target.value)}
+                className={INPUT_CLASS}
+                placeholder="例如：192.168.1.10, 1.2.3.4, cloud.example.com"
+              />
+              <p className="mt-1 text-[10px] leading-5 text-slate-600">
+                如果是局域网访问，填局域网 IP；如果是公网 IP 穿透访问，填公网 IP；如果有域名，填域名。
+              </p>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               {!ca?.exists ? (

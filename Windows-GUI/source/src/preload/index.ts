@@ -39,7 +39,7 @@ const api: CloudboxApi = {
     create: () => invoke(IPC.caCreate),
     install: () => invoke(IPC.caInstall),
     uninstall: () => invoke(IPC.caUninstall),
-    issueServerCert: () => invoke(IPC.caIssueServerCert),
+    issueServerCert: (input) => invoke(IPC.caIssueServerCert, input),
     exportClientCert: () => invoke(IPC.caExportClientCert),
   },
   settings: {

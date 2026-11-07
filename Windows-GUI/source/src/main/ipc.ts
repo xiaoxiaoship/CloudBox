@@ -895,9 +895,9 @@ export function registerIpc(context: IpcContext): void {
     return info;
   });
 
-  register(IPC.caIssueServerCert, z.undefined(), async () => {
+  register(IPC.caIssueServerCert, z.object({ extraHosts: z.string().max(1000).default('') }), async (input) => {
     const admin = actor();
-    const certificate = await context.ca.issueServerCert();
+    const certificate = await context.ca.issueServerCert(input.extraHosts);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
