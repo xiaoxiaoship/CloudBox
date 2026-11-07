@@ -17,12 +17,15 @@ function normalizeEndpoint(base) {
  * 同时把网盘路径约束注入 System Prompt。
  */
 export async function apply(ctx, config) {
-    if (!config?.cloudboxUrl || !config?.mcpToken) {
-        throw new Error('dsh-plugin-cloudbox 需要配置 cloudboxUrl 与 mcpToken');
+    const cloudboxUrl = config?.cloudboxUrl?.trim() || process.env.CLOUDBOX_URL?.trim() || 'http://127.0.0.1:8686';
+    const mcpToken = config?.mcpToken?.trim() || process.env.CLOUDBOX_MCP_TOKEN?.trim() || '';
+    if (!mcpToken) {
+        ctx.logger?.info?.('[cloudbox] 未配置 mcpToken；请在 DSH 插件配置中填入 CloudBox MCP Token，或设置 CLOUDBOX_MCP_TOKEN。');
+        return;
     }
-    const transport = new StreamableHTTPClientTransport(new URL(normalizeEndpoint(config.cloudboxUrl)), {
+    const transport = new StreamableHTTPClientTransport(new URL(normalizeEndpoint(cloudboxUrl)), {
         requestInit: {
-            headers: { Authorization: `Bearer ${config.mcpToken}` },
+            headers: { Authorization: `Bearer ${mcpToken}` },
         },
     });
     const client = new Client({ name: 'dsh-cloudbox', version: '1.0.0' });

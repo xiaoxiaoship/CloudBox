@@ -29,7 +29,7 @@ export declare function apply(ctx: {
         error?: (...args: unknown[]) => void;
     };
     effect?: (dispose: () => void) => void;
-}, config: CloudBoxPluginConfig): Promise<void>;
+}, config?: CloudBoxPluginConfig): Promise<void>;
 declare const _default: {
     name: string;
     inject: string[];

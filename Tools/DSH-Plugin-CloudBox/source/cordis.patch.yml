@@ -1,0 +1,6 @@
+- insert:
+    - id: cloudbox
+      name: dsh-plugin-cloudbox
+      config:
+        cloudboxUrl: http://127.0.0.1:8686
+        mcpToken: ""

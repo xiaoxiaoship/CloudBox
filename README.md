@@ -254,8 +254,8 @@ The license for CloudBox's own code is to be provided by the repository maintain
 - 配置项：`cloudboxUrl`、`mcpToken`。
 - 自动向 System Prompt 注入“path 必须是网盘内 POSIX 相对路径”的约束。
 - 支持文件列表、读取文本、写入文本等 CloudBox MCP 工具。
-- 成品包不包含 `node_modules`；解包后按插件 README 配置并运行 `npm install` / `npm run build`。
-- **DSH Plugin** registers CloudBox MCP tools as `cloudbox_*`; configure `cloudboxUrl` and `mcpToken`. The built archive excludes `node_modules`; follow the plugin README to install and build.
+- 成品包不包含 `node_modules`；可直接作为 DSH bundle 安装，安装后在插件配置中填写 `cloudboxUrl` 和 `mcpToken`。
+- **DSH Plugin** registers CloudBox MCP tools as `cloudbox_*`; the tar.gz is a DSH bundle. Configure `cloudboxUrl` and `mcpToken` after installation.
 
 ## 生成说明 / Generation Note
 
