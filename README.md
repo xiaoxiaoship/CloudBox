@@ -23,6 +23,8 @@ CloudBox is a local multi-user network drive with a Windows Electron administrat
 | [CloudBox-Setup-0.1.0-x64.exe](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/CloudBox-Setup-0.1.0-x64.exe) | Windows 安装版 / Windows installer |
 | [CloudBox-Portable-0.1.0-x64.exe](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/CloudBox-Portable-0.1.0-x64.exe) | Windows 便携版 / Windows portable |
 | [cloudbox-linux-0.1.0.tar.gz](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/cloudbox-linux-0.1.0.tar.gz) | Linux CLI 发布包 / Linux CLI package |
+| [CloudBox-Uninstaller-0.1.0.zip](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/CloudBox-Uninstaller-0.1.0.zip) | Windows 彻底卸载工具（exe + 源码 + README） / Windows uninstaller package |
+| [dsh-plugin-cloudbox-1.0.0.tar.gz](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/dsh-plugin-cloudbox-1.0.0.tar.gz) | DSH/Cordis CloudBox MCP 插件成品包 / DSH CloudBox plugin package |
 
 也可直接查看 [Releases](https://github.com/xiaoxiaoship/CloudBox/releases/tag/v0.1.0)。
 
