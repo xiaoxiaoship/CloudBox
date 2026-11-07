@@ -73,7 +73,7 @@ CloudBox 仅通过独立进程或正常库调用使用第三方组件；未修�
 - 登录会话使用随机会话令牌；数据库只保存令牌的 SHA-256 哈希，浏览器使用 `HttpOnly`、`SameSite=Lax` Cookie。
 - 默认会话有效期 `security.sessionTtlHours = 168` 小时；`last_seen` 每 60 秒最多更新一次，降低数据库写入。
 - 非 GET/HEAD 请求要求 CSRF Token；CSRF Cookie 与 Session Cookie 分离。
-- **登录失败锁定按账号计数，不是按 IP**：默认连续失败 **5 次**后锁定。第 5 次起锁定 60 秒，之后按 `60s × 2^(失败次数-5)` 指数增长，最长 60 分钟。
+- **登录失败锁定按账号计数，不是按 IP**：默认连续失败 **5 次**后锁定；阈值、首次锁定分钟、最长锁定分钟、IP 登录请求上限和统计窗口均可在管理端“登录失败保护”中配置。默认首次锁定 1 分钟，之后按 `基数 × 2^(失败次数-阈值)` 指数增长，最长 60 分钟。
 - 管理员 GUI 的“用户管理”提供 **快速解锁**：清除该账号的 `failed_attempts` 与 `locked_until`，无需等待锁定到期；用户密码重置、禁用账号、会话撤销也在管理端完成。
 - 账号不存在时仍执行一次 scrypt 校验，降低通过响应时间枚举用户名的风险。
 - IP 维度另有独立限流：登录 30 次/15 分钟/IP；全部 API 600 次/分钟/IP；上传 120 次/分钟/IP；注册 2 次/小时/IP；分享创建 10 次/分钟/用户；分享下载 60 次/分钟/IP+Token；解压/查杀 10 次/分钟/用户。
@@ -124,11 +124,11 @@ CloudBox 仅通过独立进程或正常库调用使用第三方组件；未修�
 
 - 静态站点挂载在 `/host/:username/*`，支持 public/private 可见性；private 站点必须登录。
 - 托管读取经过 safePath 校验，CSP sandbox；SPA fallback 到 `index.html`。
-- 私有 CA 通过 mkcert 生成；服务端证书位于 `config/ssl/server/`，CA 位于 `config/ssl/ca/`；支持 HTTPS 与 mTLS。
+- 私有 CA 通过 mkcert 生成；服务端证书位于 `config/ssl/server/`，CA 位于 `config/ssl/ca/`；支持 HTTPS 与 mTLS。一键签发时可填写额外的域名/IP（逗号分隔），会自动加入 SAN，并保留 localhost、127.0.0.1、::1、hostname 与局域网 IP；根 CA 不变。
 - 登录页在 HTTPS 且 CA 可用时显示根证书下载入口；客户端未信任 CA 时需先在浏览器中继续访问或导入根证书。
 - mTLS 开启后客户端必须先有客户端证书，否则 TLS 握手阶段就会失败，登录页无法作为首次证书引导入口。
 - frp 支持 TCP/HTTP/HTTPS 隧道；配置包含 `serverAddr/serverPort`、`auth.method/auth.token`、官方格式要求的顶层 `user`、`[transport] protocol=tcp` 与 `[transport.tls] enable=true`。
-- frp 日志保存在管理端内存环形缓冲，GUI 网络设置实时查看；TCP 可选 PROXY protocol v2，但 Express 默认不解析该协议，建议 HTTP/HTTPS 隧道。
+- frp 日志保存在管理端内存环形缓冲，GUI 网络设置实时查看。TCP 映射可用于 Web 与静态托管，但不携带真实客户端 IP；HTTP/HTTPS 隧道支持域名、locations 和真实 IP。PROXY protocol v2 选项已移除（本地 TLS 前端未适配），不要通过手工配置启用。
 
 ### 邮件、通知与运维
 
@@ -155,7 +155,7 @@ CloudBox 仅通过独立进程或正常库调用使用第三方组件；未修�
 - 管理端“登录失败保护”新增开关与可配置项：账号失败阈值、首次/最长锁定分钟、IP 登录请求上限与统计窗口；默认值与旧行为一致（5 次、1/60 分钟、30 次/15 分钟），手动解锁保持独立。
 - PROXY protocol v2 选项已移除；原位置改为 frp 同源 IP 风险提示，避免误伤同一 frp 后的其他用户。
 - 静态托管支持 TCP 端口映射：可直接使用 `https://公网IP:映射端口/` 作为公网基础地址；TCP 不携带真实客户端 IP。HTTP/HTTPS 隧道仍推荐用于域名、`locations` 和真实 IP。
-- **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已禁用该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
+- **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已移除该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
 - 私有 CA 一键签发服务端证书时新增“包含的域名或 IP（多个用英文逗号分隔）”。会动态追加到 mkcert SAN，并始终保留 `localhost`、`127.0.0.1`、`::1`、本机 hostname 和本机局域网 IP；根 CA 不变。
 - Web 文件页补齐英文：标题、面包屑、上传/刷新/删除、表头、空状态、操作提示和存储空间等；管理端状态栏保持中英文显示正确。
 
@@ -232,7 +232,7 @@ CloudBox uses third-party components only through separate processes or normal l
 - Login sessions use random tokens; only SHA-256 token hashes are stored. The browser cookie is `HttpOnly` and `SameSite=Lax`.
 - Default session TTL is `security.sessionTtlHours = 168` hours. `last_seen` is updated at most once every 60 seconds.
 - Non-GET/HEAD requests require a CSRF token; the CSRF cookie is separate from the session cookie.
-- **Login failure locking is account-based, not IP-based**: after **5 consecutive failures**, the account is locked. The first lock is 60 seconds; subsequent locks grow as `60s × 2^(failures-5)` up to 60 minutes.
+- **Login failure locking is account-based, not IP-based**: after **5 consecutive failures**, the account is locked by default. The threshold, initial/max lock minutes, IP login request limit and window are configurable under “Login failure protection”. The first lock is 1 minute; subsequent locks grow as `base × 2^(failures-threshold)` up to 60 minutes.
 - The administrator GUI provides **quick unlock** in Users: it clears `failed_attempts` and `locked_until` immediately. Password reset, disable and session revocation are also available there.
 - A dummy scrypt verification runs for unknown usernames to reduce timing-based account enumeration.
 - Independent IP rate limits: login 30/15 min/IP; all APIs 600/min/IP; uploads 120/min/IP; registration 2/hour/IP; share creation 10/min/user; share download 60/min/IP+token; extraction/scan 10/min/user.
@@ -283,11 +283,11 @@ CloudBox uses third-party components only through separate processes or normal l
 
 - Static sites are served at `/host/:username/*` with public/private visibility; private sites require login.
 - Hosting reads use safePath and a sandbox CSP; SPAs fall back to `index.html`.
-- Private CA is generated with mkcert. Server certificates live in `config/ssl/server/` and CA files in `config/ssl/ca/`; HTTPS and mTLS are supported.
+- Private CA is generated with mkcert. Server certificates live in `config/ssl/server/` and CA files in `config/ssl/ca/`; HTTPS and mTLS are supported. One-click issuance accepts extra domains/IPs (comma-separated), adds them to the SAN, and always keeps localhost, 127.0.0.1, ::1, the hostname and LAN IPs. The root CA is unchanged.
 - When HTTPS is enabled and the CA exists, the login page exposes a root-certificate download link. Clients that do not trust the CA must bypass the warning first or install the CA.
 - With mTLS enabled, clients must present a client certificate before the TLS handshake completes, so the login page cannot serve as the first certificate bootstrap.
 - frp supports TCP/HTTP/HTTPS tunnels. Config includes `serverAddr/serverPort`, `auth.method/auth.token`, the official top-level `user`, `[transport] protocol=tcp` and `[transport.tls] enable=true`.
-- frpc output is kept in an in-memory ring buffer and shown live in the admin network page. TCP PROXY protocol v2 is optional, but Express does not parse it by default; HTTP/HTTPS tunnels are recommended.
+- frpc output is kept in an in-memory ring buffer and shown live in the admin network page. TCP mappings work for web and static hosting but do not carry the real client IP; HTTP/HTTPS tunnels support domains, locations and real IPs. The PROXY protocol v2 option has been removed (the local TLS frontend does not parse it); do not enable it by hand.
 
 ### Email, Notifications and Operations
 
@@ -314,6 +314,6 @@ CloudBox uses third-party components only through separate processes or normal l
 - Added a “Login failure protection” switch with configurable account threshold, initial/max lock minutes, IP login request limit and window; defaults preserve the old behavior (5 failures, 1/60 minutes, 30 requests/15 minutes). Manual unlock remains independent.
 - Removed the PROXY protocol v2 option; its position now explains the frp shared-IP risk to avoid blocking other users behind the same frp endpoint.
 - Static hosting supports TCP port mapping: use `https://public-ip:mapped-port/` as the public base URL. TCP does not carry the real client IP. HTTP/HTTPS tunnels remain recommended for domains, `locations` and real client IPs.
-- **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option is now disabled and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
+- **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option has been removed and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
 - One-click private CA server-certificate issuance now accepts “Included domains or IPs (comma-separated)”. Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.
 - The web file page now has complete English labels for title, breadcrumbs, upload/refresh/delete, table headers, empty state, action titles and storage. Admin status text remains correct in both languages.
