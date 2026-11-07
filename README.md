@@ -142,6 +142,10 @@ See [THIRD_PARTY_NOTICES.md](Windows-GUI/THIRD_PARTY_NOTICES.md) for the complet
 CloudBox 项目自身代码的许可证由仓库维护者补充；第三方组件遵循各自许可证。
 The license for CloudBox's own code is to be provided by the repository maintainer; third-party components remain under their respective licenses.
 
+## Tools / 工具
+
+- [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
+
 ## 生成说明 / Generation Note
 
 本仓库的发布目录、中英文说明文档与发布整理流程由 **DSH（DeepSeek Harness）** 辅助生成。DSH 用于组织打包产物、生成文档、整理发布结构与执行 Git/GitHub 发布操作。
