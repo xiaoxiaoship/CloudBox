@@ -196,3 +196,204 @@ npm run electron:start
 - `resources/plugins/dark-neon-theme`：CSS 主题注入。
 
 导入 `resources/plugins` 下的目录，启用后在“插件”页查看。
+
+---
+
+# CloudBox Plugin API — English
+
+CloudBox plugins run in **isolated child processes**. The main process only forwards HTTP requests, core events and logs through IPC; it **never `require`s plugin code**.
+
+## 1. Directory Layout
+
+```text
+plugins/
+└─ my-plugin/
+   ├─ manifest.json          # required
+   ├─ index.js               # required; exports activate(ctx)
+   ├─ admin-ui/
+   │  └─ index.html          # optional administrator GUI iframe
+   ├─ web-theme.css          # optional; injected into the user web <head>
+   └─ web-override/
+      ├─ index.html          # optional; fully takes over the web home page
+      └─ assets...
+```
+
+## 2. manifest.json
+
+```json
+{
+  "name": "ai-summary",
+  "version": "1.0.0",
+  "description": "Call an external AI service to generate summaries",
+  "author": "CloudBox"
+}
+```
+
+- `name`: lowercase letters, digits and hyphens, 2–64 characters; also used as the plugin directory name and part of its URL.
+- `version`: non-empty string.
+- `description` / `author`: optional.
+
+## 3. index.js and the Restricted ctx
+
+```js
+module.exports = async function activate(ctx) {
+  const router = ctx.createRouter();
+
+  router.post('/generate', async (req) => {
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: { ok: true },
+    };
+  });
+
+  ctx.registerRouter('', router);
+  ctx.on('file.uploaded', (payload) => {
+    ctx.logger.info('uploaded', payload.path);
+  });
+};
+```
+
+### `ctx.registerRouter(prefix, router)`
+
+Mounts routes under `/api/plugins/{name}/`.
+
+- `prefix` is relative to the plugin mount, for example `/generate`.
+- `router` is created by `ctx.createRouter()` and supports `get/post/put/patch/delete/all`.
+- A route handler returns `{ status?, headers?, body? }` or a JSON body directly.
+- `req` has this shape:
+
+```ts
+{
+  method: string;
+  path: string;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+  body: unknown;
+  user: { id, username, role } | null;
+}
+```
+
+### `ctx.on(event, handler)`
+
+Supported core events:
+
+- `file.uploaded`
+- `file.deleted`
+- `user.registered`
+- `user.created`
+
+### `ctx.storage`
+
+Plugin-private directory (`plugins/.storage/{name}`):
+
+```js
+ctx.storage.get('apiKey', '');
+ctx.storage.set('apiKey', '...');
+ctx.storage.read('data.json');
+ctx.storage.write('data.json', '{}');
+ctx.storage.dir;
+```
+
+### `ctx.logger`
+
+`ctx.logger.info/warn/error(...)` is written to the main process log as `[plugin:name:level]`.
+
+### `ctx.manifest`
+
+The contents of the plugin's `manifest.json`.
+
+## 4. Core REST API
+
+### Calling a Plugin Route
+
+```http
+POST /api/plugins/ai-summary/generate
+Content-Type: application/json
+Cookie: cloudbox_session=...
+X-CSRF-Token: ...
+
+{"text":"text to summarize"}
+```
+
+Response:
+
+```json
+{
+  "summary": "...",
+  "model": "gpt-4o-mini"
+}
+```
+
+- Plugin APIs require a user session.
+- Non-GET/HEAD requests require a CloudBox CSRF token.
+- A disabled or stopped plugin returns 404 `PLUGIN_NOT_RUNNING`.
+
+### Theme
+
+```http
+GET /api/public/plugin-theme.css
+```
+
+Returns the concatenated `web-theme.css` content of all enabled plugins.
+
+### Web Override Assets
+
+```http
+GET /plugin-web/{name}/{asset}
+```
+
+Only files inside that plugin's `web-override/` directory are served; path traversal is rejected.
+
+## 5. Frontend Extensions
+
+### CSS Injection
+
+When a plugin with `web-theme.css` is enabled, CloudBox injects this into the returned HTML `<head>`:
+
+```html
+<link rel="stylesheet" href="/api/public/plugin-theme.css" />
+```
+
+### Full Web Takeover
+
+1. The plugin contains `web-override/index.html`.
+2. Enable the plugin.
+3. On the Plugins page, enable “Allow this plugin to take over the web UI” and confirm the red security warning.
+4. Requests to `/` then return that HTML.
+
+A takeover page can communicate with the backend only through the standard `/api/*` endpoints (session + CSRF) and cannot access the local filesystem. CloudBox sets the page CSP; assets should live in `web-override/` and be referenced through `/plugin-web/{name}/...`.
+
+### Administrator Configuration iframe
+
+A plugin may provide `admin-ui/index.html`. The administrator app loads it in a sandboxed iframe at `plugin-admin://{name}/index.html` with `sandbox="allow-scripts allow-forms"`.
+
+## 6. Security Boundary
+
+- Plugins run in `child_process.fork` child processes; the main process never loads plugin code.
+- Child process environment variables are reduced to a minimal set such as PATH/SystemRoot/TEMP.
+- Plugin route requests are forwarded through IPC and must pass CloudBox authentication and CSRF checks.
+- Plugin storage directories are created by the main process; plugins cannot use ctx to access other plugins or user files.
+- ZIP imports validate every path and reject `../` and absolute paths.
+- Enable/disable, web takeover and uninstall operations are written to the audit log.
+
+> Note: the Node child process provides process-level isolation and a restricted API, not a virtual-machine security boundary. Install only trusted plugins, especially those requesting web takeover.
+
+## 7. Debugging
+
+```bash
+npm run build:desktop
+npm run electron:start
+```
+
+- Main process logs include `[plugin:name]` stdout/stderr and logger output.
+- A plugin exception returns `PLUGIN_ERROR` for that request without affecting the main service.
+- Disabling a plugin sends shutdown to and terminates its child process; enabling it forks a new process.
+- Imported plugins are disabled by default; review the manifest and code before enabling.
+
+## 8. Example Plugins
+
+- `resources/plugins/ai-summary`: external AI summaries + admin-ui.
+- `resources/plugins/dark-neon-theme`: CSS theme injection.
+
+Import the directories under `resources/plugins` and inspect them on the Plugins page after enabling.
