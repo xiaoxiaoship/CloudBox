@@ -104,9 +104,14 @@ export const LOCK_MAX_MS = 60 * 60_000;
 /** 会话 last_seen 的更新节流，避免每个请求都写库 */
 export const SESSION_TOUCH_INTERVAL_MS = 60_000;
 
-export function computeLockDurationMs(failedAttempts: number, threshold: number): number {
+export function computeLockDurationMs(
+  failedAttempts: number,
+  threshold: number,
+  baseMs = LOCK_BASE_MS,
+  maxMs = LOCK_MAX_MS,
+): number {
   const overflow = Math.max(0, Math.trunc(failedAttempts) - Math.trunc(threshold));
-  return Math.min(LOCK_BASE_MS * 2 ** overflow, LOCK_MAX_MS);
+  return Math.min(baseMs * 2 ** overflow, maxMs);
 }
 
 function normalizeUsername(value: unknown): string {
@@ -184,7 +189,8 @@ export class AuthService {
       throw new AuthError(AUTH_ERROR.INVALID_CREDENTIALS, '用户名或密码错误', 401);
     }
 
-    if (user.lockedUntil !== null && user.lockedUntil > now) {
+    const securityEnabled = this.settings.get('security.lockEnabled');
+    if (securityEnabled && user.lockedUntil !== null && user.lockedUntil > now) {
       const retryAfterMs = user.lockedUntil - now;
       this.recordAudit({
         actorType: user.role === 'admin' ? 'admin' : 'user',
@@ -210,7 +216,14 @@ export class AuthService {
       const threshold = this.settings.get('security.maxLoginFailures');
       const attempts = user.failedAttempts + 1;
       const lockedUntil =
-        attempts >= threshold ? now + computeLockDurationMs(attempts, threshold) : null;
+        securityEnabled && attempts >= threshold
+          ? now + computeLockDurationMs(
+              attempts,
+              threshold,
+              this.settings.get('security.lockBaseMinutes') * 60_000,
+              this.settings.get('security.lockMaxMinutes') * 60_000,
+            )
+          : null;
 
       this.users.recordLoginFailure(user.id, now, lockedUntil);
       this.recordAudit({

@@ -8,7 +8,12 @@ interface SettingDefinitions {
   'server.port': { schema: z.ZodType<number>; fallback: number };
   'server.bind': { schema: z.ZodType<string>; fallback: string };
   'security.sessionTtlHours': { schema: z.ZodType<number>; fallback: number };
+  'security.lockEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.maxLoginFailures': { schema: z.ZodType<number>; fallback: number };
+  'security.lockBaseMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.lockMaxMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.ipLoginLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.ipWindowMinutes': { schema: z.ZodType<number>; fallback: number };
   'upload.maxFileBytes': { schema: z.ZodType<number>; fallback: number };
   'frp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'frp.serverAddr': { schema: z.ZodType<string>; fallback: string };
@@ -63,7 +68,12 @@ const DEFINITIONS: SettingDefinitions = {
   'server.port': { schema: z.number().int().min(1024).max(65_535), fallback: 8686 },
   'server.bind': { schema: z.string().min(1), fallback: '0.0.0.0' },
   'security.sessionTtlHours': { schema: z.number().int().min(1).max(8760), fallback: 168 },
+  'security.lockEnabled': { schema: z.boolean(), fallback: true },
   'security.maxLoginFailures': { schema: z.number().int().min(3).max(50), fallback: 5 },
+  'security.lockBaseMinutes': { schema: z.number().int().min(1).max(1440), fallback: 1 },
+  'security.lockMaxMinutes': { schema: z.number().int().min(1).max(10080), fallback: 60 },
+  'security.ipLoginLimit': { schema: z.number().int().min(1).max(10000), fallback: 30 },
+  'security.ipWindowMinutes': { schema: z.number().int().min(1).max(1440), fallback: 15 },
   'upload.maxFileBytes': { schema: z.number().int().min(1), fallback: 2 * 1024 ** 3 },
   'frp.enabled': { schema: z.boolean(), fallback: false },
   'frp.serverAddr': { schema: z.string().max(255), fallback: '' },

@@ -78,6 +78,9 @@ export function createApp(options: CreateAppOptions): Express {
 
   const limiters = createRateLimiters({
     onAlert: (info) => services.events.emit('security.alert', info),
+    securityEnabled: services.settings.get('security.lockEnabled'),
+    loginLimit: services.settings.get('security.ipLoginLimit'),
+    loginWindowMs: services.settings.get('security.ipWindowMinutes') * 60_000,
   });
   const requireUser = createRequireUser(services.auth);
   const csrf = createCsrfProtection(services.audit);

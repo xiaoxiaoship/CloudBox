@@ -823,7 +823,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
                 : `当前使用 ${frpConfig.tunnelType.toUpperCase()} 隧道，frps 会注入 X-Forwarded-For，请同时开启“信任反向代理的真实 IP”。`}
             </p>
             <p className="mt-1 text-[11px] leading-5 text-amber-300">
-              静态托管统一挂载在 <code>/host/</code>。TCP 映射可直接用 <code>https://公网IP:映射端口/</code> 作为基础地址访问；HTTP/HTTPS 隧道支持域名、locations <code> ["/", "/host"] </code> 和真实 IP，推荐优先使用。
+              TCP 隧道不携带 X-Forwarded-For；HTTP/HTTPS 隧道支持域名与真实客户端 IP。PROXY protocol v2 需要本地 TLS 前端先解析，当前版本尚未适配，开启会导致连接失败。
             </p>
           </div>
 
@@ -989,17 +989,9 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
         </div>
 
         {frpConfig.tunnelType === 'tcp' ? (
-          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] leading-5 text-slate-400">
-            <input
-              type="checkbox"
-              checked={false}
-              disabled
-              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-indigo-500 opacity-50"
-            />
-            <span>
-              TCP 隧道启用 PROXY protocol v2（当前版本未适配本地 HTTPS/TLS 解析，开启会导致 frpc 连接失败，暂不可用；推荐使用 HTTP/HTTPS 隧道）。
-            </span>
-          </label>
+          <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-[11px] leading-5 text-amber-300">
+            注意：使用 frp 时，frps 可能将多个客户端表现为同一个来源 IP。按 IP 的封禁可能误伤同一 frp 后的其他用户，请结合账号锁定与“用户管理”中的手动解锁处理；当前版本不启用 PROXY protocol v2。
+          </p>
         ) : null}
 
         <div className="mt-4">

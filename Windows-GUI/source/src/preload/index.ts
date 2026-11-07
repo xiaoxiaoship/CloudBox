@@ -46,6 +46,7 @@ const api: CloudboxApi = {
     get: () => invoke(IPC.settingsGet),
     setPublicRegistration: (input) => invoke(IPC.settingsSetPublicRegistration, input),
     setTrustProxy: (input) => invoke(IPC.settingsSetTrustProxy, input),
+    setSecurity: (input) => invoke(IPC.settingsSetSecurity, input),
     setPermissions: (input) => invoke(IPC.settingsSetPermissions, input),
     setScan: (input) => invoke(IPC.settingsSetScan, input),
     setAi: (input) => invoke(IPC.settingsSetAi, input),

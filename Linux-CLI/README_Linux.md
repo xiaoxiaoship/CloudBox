@@ -190,6 +190,9 @@ Linux 发布包不包含 Electron 与 Chromium；7za 以独立二进制形式分
 ## 近期重要变更
 
 - 管理端侧边栏不再显示监听端口，改为实时显示上传/下载速率（2 秒采样，基于服务端累计收发字节）。
+- 修复空文件夹部署误报“路径不存在”：现在先校验目录，缺少 `index.html` 时明确提示；部署路径统一为不带前导斜杠的相对路径。
+- 管理端“登录失败保护”新增开关与可配置项：账号失败阈值、首次/最长锁定分钟、IP 登录请求上限与统计窗口；默认值与旧行为一致（5 次、1/60 分钟、30 次/15 分钟），手动解锁保持独立。
+- PROXY protocol v2 选项已移除；原位置改为 frp 同源 IP 风险提示，避免误伤同一 frp 后的其他用户。
 - 静态托管支持 TCP 端口映射：可直接使用 `https://公网IP:映射端口/` 作为公网基础地址；TCP 不携带真实客户端 IP。HTTP/HTTPS 隧道仍推荐用于域名、`locations` 和真实 IP。
 - **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已禁用该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
 - 私有 CA 一键签发服务端证书时新增“包含的域名或 IP（多个用英文逗号分隔）”。会动态追加到 mkcert SAN，并始终保留 `localhost`、`127.0.0.1`、`::1`、本机 hostname 和本机局域网 IP；根 CA 不变。
@@ -385,6 +388,9 @@ The Linux release does not include Electron or Chromium. 7za is distributed as a
 ## Recent Changes
 
 - The admin sidebar no longer displays the listening port; it now shows real-time upload/download rates (sampled every 2 seconds from server byte counters).
+- Fixed the misleading “path does not exist” error for empty folders: the directory is validated first and a missing `index.html` is reported explicitly; deploy paths are normalized to relative paths without a leading slash.
+- Added a “Login failure protection” switch with configurable account threshold, initial/max lock minutes, IP login request limit and window; defaults preserve the old behavior (5 failures, 1/60 minutes, 30 requests/15 minutes). Manual unlock remains independent.
+- Removed the PROXY protocol v2 option; its position now explains the frp shared-IP risk to avoid blocking other users behind the same frp endpoint.
 - Static hosting supports TCP port mapping: use `https://public-ip:mapped-port/` as the public base URL. TCP does not carry the real client IP. HTTP/HTTPS tunnels remain recommended for domains, `locations` and real client IPs.
 - **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option is now disabled and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
 - One-click private CA server-certificate issuance now accepts “Included domains or IPs (comma-separated)”. Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.

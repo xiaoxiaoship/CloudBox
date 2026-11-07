@@ -652,6 +652,14 @@ export function registerIpc(context: IpcContext): void {
     return {
       allowPublicRegistration: context.services.settings.get('allow_public_registration'),
       trustProxy: context.services.settings.get('network.trustProxy'),
+      security: {
+        enabled: context.services.settings.get('security.lockEnabled'),
+        maxLoginFailures: context.services.settings.get('security.maxLoginFailures'),
+        lockBaseMinutes: context.services.settings.get('security.lockBaseMinutes'),
+        lockMaxMinutes: context.services.settings.get('security.lockMaxMinutes'),
+        ipLoginLimit: context.services.settings.get('security.ipLoginLimit'),
+        ipWindowMinutes: context.services.settings.get('security.ipWindowMinutes'),
+      },
       permissions: {
         allowUserPreviewImage: context.services.settings.get('allow_user_preview_image'),
         allowUserPreviewVideo: context.services.settings.get('allow_user_preview_video'),
@@ -737,6 +745,33 @@ export function registerIpc(context: IpcContext): void {
       return adminSettings();
     },
   );
+
+  register(IPC.settingsSetSecurity, z.object({
+    enabled: z.boolean(),
+    maxLoginFailures: z.number().int().min(3).max(50),
+    lockBaseMinutes: z.number().int().min(1).max(1440),
+    lockMaxMinutes: z.number().int().min(1).max(10080),
+    ipLoginLimit: z.number().int().min(1).max(10000),
+    ipWindowMinutes: z.number().int().min(1).max(1440),
+  }), (input) => {
+    const admin = actor();
+    const settings = context.services.settings;
+    settings.set('security.lockEnabled', input.enabled, admin.id);
+    settings.set('security.maxLoginFailures', input.maxLoginFailures, admin.id);
+    settings.set('security.lockBaseMinutes', input.lockBaseMinutes, admin.id);
+    settings.set('security.lockMaxMinutes', input.lockMaxMinutes, admin.id);
+    settings.set('security.ipLoginLimit', input.ipLoginLimit, admin.id);
+    settings.set('security.ipWindowMinutes', input.ipWindowMinutes, admin.id);
+    context.services.audit.record({
+      actorType: 'admin',
+      actorId: admin.id,
+      action: 'settings.security.update',
+      result: 'success',
+      targetType: 'settings',
+      detail: input,
+    });
+    return adminSettings();
+  });
 
   register(IPC.settingsSetPermissions, featurePermissionsSchema, (input) => {
     const admin = actor();

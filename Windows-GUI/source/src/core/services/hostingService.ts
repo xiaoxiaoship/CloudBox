@@ -74,9 +74,8 @@ export class HostingService {
 
     // 目录必须真实存在，必须是目录
     await this.files.list(user, normalized, ctx);
-    await this.files.inspectFile(user, path.posix.join(normalized, 'index.html'), ctx, 'hosting.deploy');
     if (input.enabled && !existsSync(path.join(this.storageRoot, user.storageKey, ...normalized.split('/'), 'index.html'))) {
-      throw new Error('站点根目录缺少 index.html');
+      throw new Error('站点根目录缺少 index.html，请先上传 index.html 再部署');
     }
 
     const record: HostingRecord = {

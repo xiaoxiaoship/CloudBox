@@ -47,6 +47,15 @@ export function SettingsPage({
     allowUserScan: true,
   });
   const [permissionsPending, setPermissionsPending] = useState(false);
+  const [security, setSecurity] = useState({
+    enabled: true,
+    maxLoginFailures: 5,
+    lockBaseMinutes: 1,
+    lockMaxMinutes: 60,
+    ipLoginLimit: 30,
+    ipWindowMinutes: 15,
+  });
+  const [securityPending, setSecurityPending] = useState(false);
   const [scan, setScan] = useState<ScanConfig>({
     enabled: false,
     mode: 'local',
@@ -95,6 +104,7 @@ export function SettingsPage({
         if (!active) return;
         setAllowRegistration(settings.allowPublicRegistration);
         setPermissions(settings.permissions);
+        setSecurity(settings.security);
         setScan(settings.scan);
         setAi(settings.ai);
         setMcp(settings.mcp);
@@ -140,6 +150,19 @@ export function SettingsPage({
       notify('error', errorMessage(cause));
     } finally {
       setPermissionsPending(false);
+    }
+  };
+
+  const saveSecurity = async (): Promise<void> => {
+    setSecurityPending(true);
+    try {
+      const settings = await call(api.settings.setSecurity(security));
+      setSecurity(settings.security);
+      notify('success', '登录保护设置已保存；IP 限流在服务重启后生效');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setSecurityPending(false);
     }
   };
 
@@ -390,6 +413,44 @@ export function SettingsPage({
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <KeyIcon className="h-4 w-4 text-rose-400" />
+              <h2 className="text-sm font-semibold text-slate-100">登录失败保护</h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              控制账号密码失败锁定与同 IP 登录请求限流；手动解锁仍可在“用户管理”中立即执行。
+            </p>
+          </div>
+          <button type="button" role="switch" aria-checked={security.enabled} onClick={() => setSecurity((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${security.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${security.enabled ? 'left-6' : 'left-1'}`} />
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="text-[11px] text-slate-500">账号失败次数阈值
+            <input type="number" min={3} max={50} value={security.maxLoginFailures} onChange={(event) => setSecurity((current) => ({ ...current, maxLoginFailures: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">首次锁定分钟
+            <input type="number" min={1} max={1440} value={security.lockBaseMinutes} onChange={(event) => setSecurity((current) => ({ ...current, lockBaseMinutes: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">最长锁定分钟
+            <input type="number" min={1} max={10080} value={security.lockMaxMinutes} onChange={(event) => setSecurity((current) => ({ ...current, lockMaxMinutes: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">IP 登录请求上限
+            <input type="number" min={1} max={10000} value={security.ipLoginLimit} onChange={(event) => setSecurity((current) => ({ ...current, ipLoginLimit: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">IP 统计窗口（分钟）
+            <input type="number" min={1} max={1440} value={security.ipWindowMinutes} onChange={(event) => setSecurity((current) => ({ ...current, ipWindowMinutes: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+        </div>
+        <button type="button" onClick={() => void saveSecurity()} disabled={securityPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+          {securityPending ? <Spinner className="h-4 w-4" /> : null}
+          保存登录保护设置
+        </button>
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
@@ -694,7 +755,7 @@ export function SettingsPage({
         <label className="mt-3 block text-[11px] text-slate-500" htmlFor="hosting-base-url">公网基础地址（用于生成链接）</label>
         <input id="hosting-base-url" value={hosting.baseUrl} onChange={(event) => setHosting((current) => ({ ...current, baseUrl: event.target.value }))} className={INPUT_CLASS} placeholder="例如：https://pan.yourdomain.com" />
         <p className="mt-2 text-[11px] leading-5 text-amber-300">
-          frp 必须使用 HTTP 或 HTTPS 隧道，并用 customDomains/locations（如 <code>["/", "/host"]</code>）合并到同一公网端口；不要为托管单独映射 TCP 端口。
+          TCP 端口映射同样可以访问托管站点：公网基础地址可填 <code>https://公网IP:映射端口/</code>，站点仍挂载在 <code>/host/</code>。TCP 不携带 X-Forwarded-For，真实客户端 IP 不可用；HTTP/HTTPS 隧道支持域名、locations 与真实 IP，推荐优先使用。
         </p>
         <button type="button" onClick={() => void saveHosting()} disabled={hostingPending} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
           {hostingPending ? <Spinner className="h-4 w-4" /> : null}

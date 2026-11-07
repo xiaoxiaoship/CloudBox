@@ -81,6 +81,14 @@ export interface ClientCertExport {
 export interface AdminSettings {
   allowPublicRegistration: boolean;
   trustProxy: boolean;
+  security: {
+    enabled: boolean;
+    maxLoginFailures: number;
+    lockBaseMinutes: number;
+    lockMaxMinutes: number;
+    ipLoginLimit: number;
+    ipWindowMinutes: number;
+  };
   permissions: {
     allowUserPreviewImage: boolean;
     allowUserPreviewVideo: boolean;
@@ -257,6 +265,7 @@ export interface CloudboxApi {
       input: { enabled: boolean },
     ) => Promise<Result<AdminSettings>>;
     setTrustProxy: (input: { enabled: boolean }) => Promise<Result<AdminSettings>>;
+    setSecurity: (input: AdminSettings['security']) => Promise<Result<AdminSettings>>;
     setPermissions: (input: FeaturePermissions) => Promise<Result<AdminSettings>>;
     setScan: (input: ScanConfig) => Promise<Result<AdminSettings>>;
     setAi: (input: {
@@ -359,6 +368,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSetPublicRegistration: 'settings:set-public-registration',
   settingsSetTrustProxy: 'settings:set-trust-proxy',
+  settingsSetSecurity: 'settings:set-security',
   settingsSetPermissions: 'settings:set-permissions',
   settingsSetScan: 'settings:set-scan',
   settingsSetAi: 'settings:set-ai',
