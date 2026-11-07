@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Agent, fetch as undiciFetch } from 'undici';
 
 export const name = 'cloudbox';
 /** DSH/Cordis 插件注入：等待 tools 服务可用后再 apply。 */
@@ -8,6 +11,7 @@ export const inject = ['tools'];
 export interface CloudBoxPluginConfig {
   cloudboxUrl: string;
   mcpToken: string;
+  caCertPath?: string;
 }
 
 const SYSTEM_PROMPT = [
@@ -50,10 +54,19 @@ export async function apply(
     return;
   }
 
+  const caPath = config?.caCertPath?.trim() || path.join(process.env.APPDATA ?? '', 'cloudbox', 'config', 'ssl', 'ca', 'rootCA.pem');
+  const ca = caPath && existsSync(caPath) ? readFileSync(caPath) : null;
+  const dispatcher = ca ? new Agent({ connect: { ca } }) : undefined;
+  const customFetch = dispatcher
+    ? ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+        undiciFetch(input as never, { ...(init as object), dispatcher } as never)) as unknown as typeof fetch
+    : undefined;
+
   const transport = new StreamableHTTPClientTransport(new URL(normalizeEndpoint(cloudboxUrl)), {
     requestInit: {
       headers: { Authorization: `Bearer ${mcpToken}` },
     },
+    ...(customFetch ? { fetch: customFetch } : {}),
   });
   const client = new Client({ name: 'dsh-cloudbox', version: '1.0.0' });
   await client.connect(transport);

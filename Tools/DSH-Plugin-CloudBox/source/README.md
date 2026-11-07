@@ -37,6 +37,7 @@ dsh plugin --profile default add ./dsh-plugin-cloudbox-1.0.0.tar.gz
 ```yaml
 cloudboxUrl: https://127.0.0.1:8888
 mcpToken: cbx_xxxxxxxxxxxxxxxxx
+caCertPath: "" # 可选；默认 %APPDATA%\cloudbox\config\ssl\ca\rootCA.pem
 ```
 
 `mcpToken` 在 CloudBox 管理端：

@@ -4,6 +4,7 @@ export declare const inject: string[];
 export interface CloudBoxPluginConfig {
     cloudboxUrl: string;
     mcpToken: string;
+    caCertPath?: string;
 }
 /**
  * DSH 插件入口。通过 Cordis 的 tools 服务注册 MCP 工具；

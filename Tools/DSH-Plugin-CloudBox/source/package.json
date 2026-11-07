@@ -1,34 +1,35 @@
 {
-    "name":  "dsh-plugin-cloudbox",
-    "version":  "1.0.1",
-    "private":  false,
-    "type":  "module",
-    "description":  "DSH plugin that exposes CloudBox MCP file tools to DSH models.",
-    "main":  "dist/index.js",
-    "types":  "dist/index.d.ts",
-    "files":  [
-                  "dist",
-                  "cordis.patch.yml",
-                  "README.md"
-              ],
-    "scripts":  {
-                    "build":  "tsc -p tsconfig.json",
-                    "typecheck":  "tsc -p tsconfig.json --noEmit"
-                },
-    "dsh":  {
-                "bundle":  {
-                               "patch":  "./cordis.patch.yml"
-                           }
-            },
-    "publishConfig":  {
-                          "access":  "public"
-                      },
-    "dependencies":  {
-                         "@modelcontextprotocol/sdk":  "^1.32.2",
-                         "zod":  "^4.1.12"
-                     },
-    "devDependencies":  {
-                            "@types/node":  "^24.0.0",
-                            "typescript":  "^5.9.0"
-                        }
+  "name": "dsh-plugin-cloudbox",
+  "version": "1.0.2",
+  "private": false,
+  "type": "module",
+  "description": "DSH plugin that exposes CloudBox MCP file tools to DSH models.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "undici": "^7.30.2",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
 }

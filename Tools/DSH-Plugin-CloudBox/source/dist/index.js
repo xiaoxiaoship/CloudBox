@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Agent, fetch as undiciFetch } from 'undici';
 export const name = 'cloudbox';
 /** DSH/Cordis 插件注入：等待 tools 服务可用后再 apply。 */
 export const inject = ['tools'];
@@ -23,10 +26,17 @@ export async function apply(ctx, config) {
         ctx.logger?.info?.('[cloudbox] 未配置 mcpToken；请在 DSH 插件配置中填入 CloudBox MCP Token，或设置 CLOUDBOX_MCP_TOKEN。');
         return;
     }
+    const caPath = config?.caCertPath?.trim() || path.join(process.env.APPDATA ?? '', 'cloudbox', 'config', 'ssl', 'ca', 'rootCA.pem');
+    const ca = caPath && existsSync(caPath) ? readFileSync(caPath) : null;
+    const dispatcher = ca ? new Agent({ connect: { ca } }) : undefined;
+    const customFetch = dispatcher
+        ? ((input, init) => undiciFetch(input, { ...init, dispatcher }))
+        : undefined;
     const transport = new StreamableHTTPClientTransport(new URL(normalizeEndpoint(cloudboxUrl)), {
         requestInit: {
             headers: { Authorization: `Bearer ${mcpToken}` },
         },
+        ...(customFetch ? { fetch: customFetch } : {}),
     });
     const client = new Client({ name: 'dsh-cloudbox', version: '1.0.0' });
     await client.connect(transport);
