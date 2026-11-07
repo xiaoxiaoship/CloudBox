@@ -238,6 +238,17 @@ export class FrpService {
       lines.push(`auth.token = ${JSON.stringify(this.config.token.trim())}`);
       lines.push('');
     }
+    if (this.config.user.trim()) {
+      lines.push(`user = ${JSON.stringify(this.config.user.trim())}`);
+      lines.push('');
+    }
+
+    lines.push('[transport]');
+    lines.push('protocol = "tcp"');
+    lines.push('');
+    lines.push('[transport.tls]');
+    lines.push('enable = true');
+    lines.push('');
 
     lines.push('[[proxies]]');
     lines.push(`name = ${JSON.stringify(this.config.proxyName)}`);

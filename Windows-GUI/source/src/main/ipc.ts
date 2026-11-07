@@ -149,6 +149,7 @@ const frpConfigSchema = z.object({
   serverPort: z.number().int().min(1).max(65_535),
   remotePort: z.number().int().min(0).max(65_535),
   token: z.string().max(255),
+  user: z.string().max(255),
   proxyName: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   tunnelType: z.enum(['tcp', 'http', 'https']),
   customDomain: z.string().max(253),
@@ -953,6 +954,7 @@ export function registerIpc(context: IpcContext): void {
     context.services.settings.set('frp.serverPort', input.serverPort, admin.id);
     context.services.settings.set('frp.remotePort', input.remotePort, admin.id);
     context.services.settings.set('frp.token', input.token, admin.id);
+    context.services.settings.set('frp.user', input.user, admin.id);
     context.services.settings.set('frp.proxyName', input.proxyName, admin.id);
     context.services.settings.set('frp.tunnelType', input.tunnelType, admin.id);
     context.services.settings.set('frp.customDomain', input.customDomain, admin.id);

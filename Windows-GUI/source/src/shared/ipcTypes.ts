@@ -165,6 +165,7 @@ export interface FrpConfig {
   serverPort: number;
   remotePort: number;
   token: string;
+  user: string;
   proxyName: string;
   tunnelType: 'tcp' | 'http' | 'https';
   customDomain: string;

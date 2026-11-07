@@ -104,6 +104,7 @@ export function createMainContext(): MainContext {
       serverPort: services.settings.get('frp.serverPort'),
       remotePort: services.settings.get('frp.remotePort'),
       token: services.settings.get('frp.token'),
+      user: services.settings.get('frp.user'),
       proxyName: services.settings.get('frp.proxyName'),
       tunnelType: services.settings.get('frp.tunnelType'),
       customDomain: services.settings.get('frp.customDomain'),

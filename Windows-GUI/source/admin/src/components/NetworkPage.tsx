@@ -56,6 +56,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     serverPort: 7000,
     remotePort: 0,
     token: '',
+    user: '',
     proxyName: 'cloudbox',
     tunnelType: 'tcp',
     customDomain: '',
@@ -932,6 +933,19 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
               onChange={(event) => updateFrpConfig('token', event.target.value)}
               className={INPUT_CLASS}
               placeholder="与 frps 的 auth.token 一致"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-500" htmlFor="frp-user">
+              用户令牌 user
+            </label>
+            <input
+              id="frp-user"
+              type="password"
+              value={frpConfig.user}
+              onChange={(event) => updateFrpConfig('user', event.target.value)}
+              className={INPUT_CLASS}
+              placeholder="面板配置中的顶层 user 字段"
             />
           </div>
           <div>

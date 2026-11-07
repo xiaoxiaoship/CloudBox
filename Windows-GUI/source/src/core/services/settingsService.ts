@@ -15,6 +15,7 @@ interface SettingDefinitions {
   'frp.serverPort': { schema: z.ZodType<number>; fallback: number };
   'frp.remotePort': { schema: z.ZodType<number>; fallback: number };
   'frp.token': { schema: z.ZodType<string>; fallback: string };
+  'frp.user': { schema: z.ZodType<string>; fallback: string };
   'frp.proxyName': { schema: z.ZodType<string>; fallback: string };
   'frp.tunnelType': { schema: z.ZodType<'tcp' | 'http' | 'https'>; fallback: 'tcp' };
   'frp.customDomain': { schema: z.ZodType<string>; fallback: string };
@@ -69,6 +70,7 @@ const DEFINITIONS: SettingDefinitions = {
   'frp.serverPort': { schema: z.number().int().min(1).max(65_535), fallback: 7000 },
   'frp.remotePort': { schema: z.number().int().min(0).max(65_535), fallback: 0 },
   'frp.token': { schema: z.string().max(255), fallback: '' },
+  'frp.user': { schema: z.string().max(255), fallback: '' },
   'frp.proxyName': { schema: z.string().max(64), fallback: 'cloudbox' },
   'frp.tunnelType': { schema: z.enum(['tcp', 'http', 'https']), fallback: 'tcp' },
   'frp.customDomain': { schema: z.string().max(253), fallback: '' },
