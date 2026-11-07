@@ -133,3 +133,13 @@ See [THIRD_PARTY_NOTICES.md](Windows-GUI/THIRD_PARTY_NOTICES.md) for the complet
 
 CloudBox 项目自身代码的许可证由仓库维护者补充；第三方组件遵循各自许可证。
 The license for CloudBox's own code is to be provided by the repository maintainer; third-party components remain under their respective licenses.
+
+## 生成说明 / Generation Note
+
+本仓库的发布目录、中英文说明文档与发布整理流程由 **DSH（DeepSeek Harness）** 辅助生成。DSH 用于组织打包产物、生成文档、整理发布结构与执行 Git/GitHub 发布操作。
+
+产品源码、第三方组件及其许可证仍归各自作者所有；DSH 不改变第三方组件的授权方式。发布内容的具体版本、构建产物和许可证信息以本仓库中的文件及 `THIRD_PARTY_NOTICES.md` 为准。
+
+The release layout, bilingual documentation and publishing workflow in this repository were generated with assistance from **DSH (DeepSeek Harness)**. DSH was used to organize the packaged artifacts, generate documentation, structure the release and perform the Git/GitHub publishing steps.
+
+The product source code and third-party components remain the property of their respective authors; DSH does not change the licensing of any third-party component. Refer to the files in this repository and `THIRD_PARTY_NOTICES.md` for the exact versions, build artifacts and license information.
