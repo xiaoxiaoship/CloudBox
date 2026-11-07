@@ -42,6 +42,11 @@ CloudBox_v0.1.0_Release/
 │  ├─ docs/PLUGIN_API.md
 │  ├─ THIRD_PARTY_NOTICES.md
 │  └─ README_Linux.md
+├─ Tools/
+│  ├─ CloudBox-Uninstaller/      # 管理员权限卸载与数据清理工具
+│  └─ DSH-Plugin-CloudBox/       # DSH/Cordis 对接 CloudBox MCP 插件
+│     ├─ source/
+│     └─ bin/dsh-plugin-cloudbox-1.0.0.tar.gz
 └─ README.md
 ```
 
@@ -240,6 +245,15 @@ The license for CloudBox's own code is to be provided by the repository maintain
 
 - [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
 - [CloudBox DSH Plugin](Tools/DSH-Plugin-CloudBox/README.md) — DSH/Cordis 对接 CloudBox MCP 的插件；源码与 `bin/dsh-plugin-cloudbox-1.0.0.tar.gz` 成品包已包含。
+
+### DSH Plugin / DSH 插件
+
+- 将 CloudBox 的 MCP 工具注册为 DSH 的 `cloudbox_*` 工具。
+- 配置项：`cloudboxUrl`、`mcpToken`。
+- 自动向 System Prompt 注入“path 必须是网盘内 POSIX 相对路径”的约束。
+- 支持文件列表、读取文本、写入文本等 CloudBox MCP 工具。
+- 成品包不包含 `node_modules`；解包后按插件 README 配置并运行 `npm install` / `npm run build`。
+- **DSH Plugin** registers CloudBox MCP tools as `cloudbox_*`; configure `cloudboxUrl` and `mcpToken`. The built archive excludes `node_modules`; follow the plugin README to install and build.
 
 ## 生成说明 / Generation Note
 
