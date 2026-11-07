@@ -15,6 +15,15 @@ function normalizeEndpoint(base) {
     const trimmed = base.replace(/\/+$/, '');
     return trimmed.endsWith('/api/mcp') ? trimmed : `${trimmed}/api/mcp`;
 }
+const TOOL_OUTPUT = {
+    schema: { type: 'object' },
+    render: (_args, value) => [
+        {
+            type: 'text',
+            text: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
+        },
+    ],
+};
 /**
  * DSH 插件入口。通过 Cordis 的 tools 服务注册 MCP 工具；
  * 同时把网盘路径约束注入 System Prompt。
@@ -55,6 +64,7 @@ export async function apply(ctx, config) {
             name: `cloudbox_${tool.name}`,
             description: `[CloudBox 网盘] ${tool.description ?? tool.name}。path 必须是网盘内 POSIX 相对路径。`,
             inputSchema: tool.inputSchema,
+            output: TOOL_OUTPUT,
             execute: async (args) => client.callTool({ name: tool.name, arguments: (args ?? {}) }),
         });
     }

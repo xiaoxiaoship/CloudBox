@@ -16,6 +16,10 @@ export declare function apply(ctx: {
             name: string;
             description: string;
             inputSchema: unknown;
+            output: {
+                schema: unknown;
+                render: (args: unknown, value: unknown) => unknown;
+            };
             execute: (args: unknown) => Promise<unknown>;
         }) => void;
         add?: (tool: unknown) => void;
