@@ -1,0 +1,2 @@
+# Windows installers are distributed via GitHub Releases (GitHub's 100MB Git limit).
+Windows-GUI/bin/*.exe

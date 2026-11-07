@@ -1,0 +1,32 @@
+{
+  "name": "cloudbox-linux",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CloudBox headless Linux CLI server",
+  "bin": { "cloudbox": "bin/cloudbox" },
+  "scripts": {
+    "start": "node src/cli/index.ts start",
+    "init": "node src/cli/index.ts init",
+    "typecheck": "tsc --noEmit",
+    "package:tar": "node scripts/package-tar.mjs"
+  },
+  "engines": { "node": ">=22.18.0" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "adm-zip": "^0.5.16",
+    "better-sqlite3": "^13.0.3",
+    "clamscan": "^2.4.0",
+    "commander": "^5.1.0",
+    "express": "^5.1.0",
+    "i18next": "^25.0.0",
+    "node-7z": "^3.0.0",
+    "nodemailer": "^7.0.0",
+    "7zip-bin": "^5.2.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

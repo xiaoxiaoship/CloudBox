@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# runtime data (SQLite, user files, uploads)
+data/
+
+# build output
+dist/
+out/
+release/
+
+# e2e screenshots
+artifacts/
+
+# local environment
+.env
+.env.local
+
+# logs / coverage
+*.log
+coverage/
+.vitest/
+
+# OS noise
+Thumbs.db
+Desktop.ini
+.DS_Store
