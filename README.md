@@ -2,11 +2,11 @@
 
 > ⚠️ **开发验证阶段说明**
 >
-> 当前版本仍处于开发与验证阶段，功能和稳定性可能继续调整，尚未经过完整的生产环境验证。请勿直接用于承载唯一副本或关键业务数据；升级或部署前请先备份，并在测试环境中充分验证。
+> 当前版本仍处于开发与验证阶段，功能和稳定性可能继续调整，尚未经过完整的生产环境验证。请勿直接用于承载唯一副本或关键业务数据；升级或部署前请先备份，并在测试环境中充分验证。Linux CLI 版目前无针对性测试，可用性未知。
 >
 > **Development / Validation Stage**
 >
-> This release is still under development and validation. Features and stability may change, and it has not been fully validated in production. Do not use it as the sole copy of important data; back up before upgrading or deploying and validate it thoroughly in a test environment.
+> This release is still under development and validation. Features and stability may change, and it has not been fully validated in production. Do not use it as the sole copy of important data; back up before upgrading or deploying and validate it thoroughly in a test environment. The Linux CLI edition currently has no dedicated tests; its usability is unknown.
 
 CloudBox 是一个本地多用户网盘系统，提供 Windows Electron 管理员控制台、Web 用户端，以及独立无头 Linux CLI 版本。
 
