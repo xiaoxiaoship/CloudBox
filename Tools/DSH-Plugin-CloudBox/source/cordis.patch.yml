@@ -2,5 +2,5 @@
     - id: cloudbox
       name: dsh-plugin-cloudbox
       config:
-        cloudboxUrl: http://127.0.0.1:8686
+        cloudboxUrl: https://127.0.0.1:8888
         mcpToken: ""

@@ -35,7 +35,7 @@ dsh plugin --profile default add ./dsh-plugin-cloudbox-1.0.0.tar.gz
 在 DSH 的插件配置中填写：
 
 ```yaml
-cloudboxUrl: http://127.0.0.1:8686
+cloudboxUrl: https://127.0.0.1:8888
 mcpToken: cbx_xxxxxxxxxxxxxxxxx
 ```
 
