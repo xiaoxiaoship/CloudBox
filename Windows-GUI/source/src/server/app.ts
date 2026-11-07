@@ -20,6 +20,7 @@ import {
 } from './routes/shares.routes.ts';
 import { createTasksRouter } from './routes/tasks.routes.ts';
 import { createMcpRouter } from './routes/mcp.routes.ts';
+import { recordDownloadBytes, recordUploadBytes } from './traffic.ts';
 
 /** 默认构建产物目录；Electron 主进程会传入 app.getAppPath() 下的绝对路径 */
 const DEFAULT_WEB_DIST = path.resolve(process.cwd(), 'dist', 'web');
@@ -65,6 +66,15 @@ export function createApp(options: CreateAppOptions): Express {
   );
   app.use(requestId);
   app.use(express.json({ limit: '1mb' }));
+  app.use((req, res, next) => {
+    const uploadLength = Number(req.headers['content-length']);
+    if (Number.isFinite(uploadLength)) recordUploadBytes(uploadLength);
+    res.on('finish', () => {
+      const length = Number(res.getHeader('content-length'));
+      if (Number.isFinite(length)) recordDownloadBytes(length);
+    });
+    next();
+  });
 
   const limiters = createRateLimiters({
     onAlert: (info) => services.events.emit('security.alert', info),

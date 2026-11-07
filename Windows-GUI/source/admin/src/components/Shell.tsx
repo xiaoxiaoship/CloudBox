@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdminStatus, AdminUser, ServerStatus } from '../../../src/shared/ipcTypes.ts';
 import { api, call, errorMessage } from '../api/ipc.ts';
@@ -53,11 +53,27 @@ interface ShellProps {
 export function Shell({ status, user, page, onNavigate, onLogout, notify }: ShellProps) {
   const { t } = useTranslation();
   const [server, setServer] = useState<ServerStatus | null>(null);
+  const [speed, setSpeed] = useState({ up: 0, down: 0 });
+  const lastTraffic = useRef<{ time: number; up: number; down: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const refreshServer = useCallback(async (): Promise<void> => {
     try {
-      setServer(await call(api.server.status()));
+      const next = await call(api.server.status());
+      const now = Date.now();
+      if (lastTraffic.current !== null && next.running) {
+        const elapsed = Math.max(0.001, (now - lastTraffic.current.time) / 1000);
+        setSpeed({
+          up: Math.max(0, (next.uploadedBytes - lastTraffic.current.up) / elapsed),
+          down: Math.max(0, (next.downloadedBytes - lastTraffic.current.down) / elapsed),
+        });
+      } else {
+        setSpeed({ up: 0, down: 0 });
+      }
+      lastTraffic.current = next.running
+        ? { time: now, up: next.uploadedBytes, down: next.downloadedBytes }
+        : null;
+      setServer(next);
     } catch {
       // 后台轮询失败不打扰用户
     }
@@ -67,7 +83,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
     void refreshServer();
     const timer = window.setInterval(() => {
       void refreshServer();
-    }, 5_000);
+    }, 2_000);
     return () => window.clearInterval(timer);
   }, [refreshServer]);
 
@@ -123,7 +139,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
               }`}
             />
             <span className="text-[11px] text-slate-400">
-              {server?.running ? `在线 · ${server.port}` : '离线模式'}
+              {server?.running ? `在线 · ↑ ${formatRate(speed.up)} ↓ ${formatRate(speed.down)}` : '离线模式'}
             </span>
           </div>
 
@@ -149,7 +165,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
           <div>
             <h1 className="text-sm font-semibold text-slate-100">{t(PAGE_TITLES[page])}</h1>
             <p className="text-[11px] text-slate-500">
-              {server?.running ? `服务运行中 · 0.0.0.0:${server.port}` : '服务未启动，仅本机管理'}
+              {server?.running ? '服务运行中' : '服务未启动，仅本机管理'}
             </p>
           </div>
 
@@ -206,4 +222,10 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
       </div>
     </div>
   );
+}
+
+function formatRate(bytesPerSecond: number): string {
+  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${Math.round(bytesPerSecond)} B/s`;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FileEntry } from '../api/client.ts';
 import {
   fileExtension,
@@ -128,6 +129,7 @@ export function FileTable({
   onToggleSelected,
   onSelectAll,
 }: FileTableProps) {
+  const { t } = useTranslation();
   const selectAllRef = useRef<HTMLInputElement>(null);
   const allSelected = entries.length > 0 && entries.every((entry) => selected.includes(entry.path));
 
@@ -148,10 +150,10 @@ export function FileTable({
           <UploadIcon className="h-6 w-6" />
         </div>
         <p className="mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">
-          这里还没有文件
+          {t('files.empty')}
         </p>
         <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-          点击「上传文件」或把文件拖拽到此页面即可开始
+          {t('files.emptyHint')}
         </p>
       </div>
     );
@@ -168,10 +170,10 @@ export function FileTable({
           aria-label="全选当前目录"
           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:focus:ring-indigo-400"
         />
-        <span>名称</span>
-        <span className="text-right">大小</span>
-        <span className="text-right">修改时间</span>
-        <span className="text-right">操作</span>
+        <span>{t('files.name')}</span>
+        <span className="text-right">{t('files.size')}</span>
+        <span className="text-right">{t('files.modified')}</span>
+        <span className="text-right">{t('files.actions')}</span>
       </div>
 
       <ul className="divide-y divide-slate-50 dark:divide-slate-800/70">
@@ -262,7 +264,7 @@ export function FileTable({
                     onClick={() => onShare(entry)}
                     className="rounded-lg p-1.5 text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
                     aria-label={`分享 ${entry.name}`}
-                    title="分享直链"
+                    title={t('common.share')}
                   >
                     <ShareIcon className="h-4 w-4" />
                   </button>
@@ -273,7 +275,7 @@ export function FileTable({
                     onClick={() => onDownload(entry)}
                     className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                     aria-label={`下载 ${entry.name}`}
-                    title="下载"
+                    title={t('common.download')}
                   >
                     <DownloadIcon className="h-4 w-4" />
                   </button>
@@ -283,7 +285,7 @@ export function FileTable({
                   onClick={() => onRename(entry)}
                   className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                   aria-label={`重命名 ${entry.name}`}
-                  title="重命名"
+                  title={t('common.rename')}
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
@@ -292,7 +294,7 @@ export function FileTable({
                   onClick={() => onDelete(entry)}
                   className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
                   aria-label={`删除 ${entry.name}`}
-                  title="删除"
+                  title={t('common.delete')}
                 >
                   <TrashIcon className="h-4 w-4" />
                 </button>

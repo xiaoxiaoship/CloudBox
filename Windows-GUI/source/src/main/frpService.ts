@@ -258,10 +258,8 @@ export class FrpService {
 
     if (this.config.tunnelType === 'tcp') {
       lines.push(`remotePort = ${this.config.remotePort}`);
-      if (this.config.proxyProtocol) {
-        // 仅当本地服务支持 PROXY protocol v2 时启用；Express 默认不解析该协议。
-        lines.push('transport.proxyProtocolVersion = "v2"');
-      }
+      // PROXY protocol v2 需要本地 HTTP/TLS 前端先解析；当前 Express/HTTPS 前端未适配，
+      // 强行写入会导致 frpc 连接被本地服务拒绝。保留设置字段用于未来兼容，但暂不生成。
     } else {
       lines.push(`customDomains = [${JSON.stringify(this.config.customDomain.trim())}]`);
       // 主界面与静态托管共享同一 HTTP 隧道端口，不额外映射 TCP 端口

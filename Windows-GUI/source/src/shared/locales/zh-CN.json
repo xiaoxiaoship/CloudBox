@@ -59,12 +59,22 @@
     "title": "我的文件",
     "root": "根目录",
     "empty": "这里还没有文件",
+    "emptyHint": "点击「上传文件」或把文件拖拽到此页面即可开始",
     "selected": "已选 {{count}} 项",
     "deploySite": "部署为网站",
     "currentHosting": "该目录正在托管中：{{url}}",
     "dropHint": "拖拽文件到这里上传",
     "downloadSelected": "下载选中文件",
-    "deleteSelected": "删除选中项"
+    "deleteSelected": "删除选中项",
+    "name": "名称",
+    "size": "大小",
+    "modified": "修改时间",
+    "actions": "操作",
+    "storage": "存储空间",
+    "footer": "已登录为 {{username}} · 文件保存在本机 CloudBox 服务中",
+    "targetDir": "目标目录：{{path}}",
+    "createIn": "将在「{{path}}」下创建",
+    "folderName": "文件夹名称"
   },
   "settings": {
     "title": "系统设置",

@@ -275,7 +275,7 @@ export function FilesPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-              我的文件
+              {t('files.title')}
             </h1>
             <div className="mt-1.5">
               <Breadcrumbs path={currentPath} disabled={listingLoading} onNavigate={(path) => void navigate(path)} />
@@ -301,9 +301,9 @@ export function FilesPage() {
 
         {hosting?.enabled && hosting.rootPath === currentPath ? (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200">
-            <span>该目录正在托管中：{hosting.url}</span>
+            <span>{t('files.currentHosting', { url: hosting.url })}</span>
             <button type="button" onClick={() => void api.disableHosting().then(setHosting).catch(() => {})} className="rounded-lg border border-indigo-300 px-3 py-1 text-xs hover:bg-indigo-100 dark:border-indigo-800 dark:hover:bg-indigo-950">
-              取消部署
+              {t('common.cancelDeploy')}
             </button>
           </div>
         ) : null}
@@ -363,7 +363,7 @@ export function FilesPage() {
                 className={PRIMARY_BUTTON}
               >
                 <UploadIcon className="h-4 w-4" />
-                上传文件
+                {t('common.upload')}
               </button>
               <button
                 type="button"
@@ -378,17 +378,17 @@ export function FilesPage() {
                 onClick={() => void refresh()}
                 disabled={listingLoading}
                 className={SECONDARY_BUTTON}
-                title="刷新"
+                title={t('common.refresh')}
               >
                 <RefreshIcon className={`h-4 w-4 ${listingLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">刷新</span>
+                <span className="hidden sm:inline">{t('common.refresh')}</span>
               </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {selected.length > 0 ? (
                 <span className="mr-1 text-xs text-slate-500 dark:text-slate-400">
-                  已选 {selected.length} 项
+                   {t('files.selected', { count: selected.length })}
                 </span>
               ) : null}
 
@@ -397,7 +397,7 @@ export function FilesPage() {
                 disabled={!canDownload}
                 onClick={() => singleSelected && download(singleSelected)}
                 className={SECONDARY_BUTTON}
-                title="下载选中文件"
+                title={t('files.downloadSelected')}
               >
                 <DownloadIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.download')}</span>
@@ -408,7 +408,7 @@ export function FilesPage() {
                 disabled={!publicSettings?.hosting_enabled || singleSelected?.type !== 'dir'}
                 onClick={() => void deploySelectedFolder()}
                 className={SECONDARY_BUTTON}
-                title="将选中的文件夹部署为静态网站"
+                title={t('files.deploySite')}
               >
                 <FolderIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('files.deploySite')}</span>
@@ -419,7 +419,7 @@ export function FilesPage() {
                 disabled={!canDownload}
                 onClick={() => singleSelected && setDialog({ kind: 'share', entry: singleSelected })}
                 className={SECONDARY_BUTTON}
-                title="分享选中文件"
+                title={t('common.share')}
               >
                 <ShareIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.share')}</span>
@@ -430,7 +430,7 @@ export function FilesPage() {
                 disabled={!singleSelected}
                 onClick={() => singleSelected && setDialog({ kind: 'rename', entry: singleSelected })}
                 className={SECONDARY_BUTTON}
-                title="重命名选中项"
+                title={t('common.rename')}
               >
                 <PencilIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.rename')}</span>
@@ -441,10 +441,10 @@ export function FilesPage() {
                 disabled={selectedEntries.length === 0}
                 onClick={() => setDialog({ kind: 'delete', entries: selectedEntries })}
                 className={DANGER_BUTTON}
-                title="删除选中项"
+                title={t('files.deleteSelected')}
               >
                 <TrashIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">删除</span>
+                <span className="hidden sm:inline">{t('common.delete')}</span>
               </button>
             </div>
           </div>
@@ -472,9 +472,7 @@ export function FilesPage() {
         </section>
 
         <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
-          已登录为 {user?.displayName || user?.username}
-          {' · '}
-          文件保存在本机 CloudBox 服务中
+          {t('files.footer', { username: user?.displayName || user?.username })}
         </p>
       </main>
 

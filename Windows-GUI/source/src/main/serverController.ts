@@ -4,6 +4,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import os from 'node:os';
 import type { CoreServices } from '../core/container.ts';
 import { createApp } from '../server/app.ts';
+import { getTrafficSnapshot, resetTraffic } from '../server/traffic.ts';
 
 export const SERVER_ERROR = {
   PORT_IN_USE: 'PORT_IN_USE',
@@ -36,6 +37,8 @@ export interface ServerStatus {
   urls: string[];
   lanIps: string[];
   startedAt: number | null;
+  uploadedBytes: number;
+  downloadedBytes: number;
   error: string | null;
 }
 
@@ -124,6 +127,7 @@ export class ServerController {
       this.activeProtocol ?? (this.httpsEnabled ? 'https' : 'http');
     const lanIps = listLanIps();
     const urls = lanIps.map((ip) => `${protocol}://${ip}:${port}`);
+    const traffic = getTrafficSnapshot();
 
     return {
       running,
@@ -135,6 +139,8 @@ export class ServerController {
       urls,
       lanIps,
       startedAt: this.startedAt,
+      uploadedBytes: traffic.uploadedBytes,
+      downloadedBytes: traffic.downloadedBytes,
       error: this.lastError,
     };
   }
@@ -152,13 +158,13 @@ export class ServerController {
   }
 
   async start(port: number): Promise<void> {
-    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
-      throw new ServerError(SERVER_ERROR.INVALID_PORT, '端口必须在 1024-65535 之间');
+    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {      throw new ServerError(SERVER_ERROR.INVALID_PORT, '端口必须在 1024-65535 之间');
     }
 
     if (this.server !== null) {
       await this.stop();
     }
+    resetTraffic();
 
     const protocol: ServerProtocol = this.httpsEnabled ? 'https' : 'http';
 

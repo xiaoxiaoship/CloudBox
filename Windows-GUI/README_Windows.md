@@ -65,72 +65,6 @@ CloudBox 仅通过独立进程或正常库调用使用第三方组件；未修�
 
 ---
 
-# CloudBox Windows GUI v1.0.0 — English
-
-CloudBox is a local multi-user network drive. The Windows edition provides an Electron administrator console and a browser-based web client.
-
-## Core Features
-
-- Local multi-user drive: uploads, downloads, folders and quotas
-- Image, video, audio, PDF and text previews with HTTP Range seeking
-- Share links with expiry and access control
-- Archive extraction for zip / 7z / rar / tar.gz with path-traversal protection
-- ClamAV local scanning and VirusTotal API scanning
-- Native AI assistant and MCP server
-- Plugin platform with isolated child processes and sandboxed iframe configuration UIs
-- Embedded static website hosting
-- SMTP email alerts with AES-256-GCM encrypted passwords
-- Chinese/English UI and user avatars
-- Private CA / HTTPS / mTLS, frp tunneling and data-directory migration
-
-## Installation
-
-### Installer
-
-1. Run `bin/CloudBox-Setup-0.1.0-x64.exe`.
-2. Follow the installation wizard.
-3. Start CloudBox.
-4. On first run, create the administrator account and choose the data directory.
-5. In the administrator console, enable the local web service and open the displayed address in a browser.
-
-### Portable
-
-1. Run `bin/CloudBox-Portable-0.1.0-x64.exe`.
-2. Create the administrator account on first launch.
-3. Data is stored in `%APPDATA%/CloudBox` by default; change it in Settings.
-
-> The installers are not code-signed. Windows SmartScreen may show an “Unknown publisher” warning. Verify the file source before continuing.
-
-## Directory Layout
-
-```text
-Windows-GUI/
-├─ bin/
-│  ├─ CloudBox-Setup-0.1.0-x64.exe
-│  └─ CloudBox-Portable-0.1.0-x64.exe
-├─ source/                 # full source (without node_modules/release/.git)
-├─ docs/
-│  └─ PLUGIN_API.md
-├─ THIRD_PARTY_NOTICES.md
-└─ README_Windows.md
-```
-
-## Acknowledgments and Open Source Licenses
-
-CloudBox is built on the following open-source projects:
-
-- **frp**: used for NAT traversal and HTTP/HTTPS tunnels, licensed under Apache-2.0. CloudBox invokes it as a separate `frpc` process and does not modify its source.
-- **ClamAV**: used for local antivirus scanning, licensed under GPLv2. CloudBox invokes it as a separate `clamscan` process and does not modify its source.
-- **7-Zip / 7za**: used for archive extraction. 7za is licensed under LGPL-2.1+ and is subject to the unRAR restriction. CloudBox starts a separate `7za` process through `node-7z` and does not modify its source.
-- Electron, Node.js, Express, better-sqlite3, React, Vite, Tailwind CSS, i18next, pdfjs-dist and others are listed in the component inventory.
-
-See the complete third-party component, license and redistribution information here:
-
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
-
-CloudBox uses third-party components only through separate processes or normal library calls. It does not modify the source code of frp, ClamAV or 7za, and does not merge their source code with CloudBox.
-
-
 ## 完整功能与实现机制（补充）
 
 ### 账号、会话与安全
@@ -214,6 +148,79 @@ CloudBox uses third-party components only through separate processes or normal l
 - Linux 系统模式：`/var/lib/cloudbox`
 - Linux `--portable`：当前目录 `./data`
 
+## 近期重要变更
+
+- 管理端侧边栏不再显示监听端口，改为实时显示上传/下载速率（2 秒采样，基于服务端累计收发字节）。
+- 静态托管支持 TCP 端口映射：可直接使用 `https://公网IP:映射端口/` 作为公网基础地址；TCP 不携带真实客户端 IP。HTTP/HTTPS 隧道仍推荐用于域名、`locations` 和真实 IP。
+- **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已禁用该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
+- 私有 CA 一键签发服务端证书时新增“包含的域名或 IP（多个用英文逗号分隔）”。会动态追加到 mkcert SAN，并始终保留 `localhost`、`127.0.0.1`、`::1`、本机 hostname 和本机局域网 IP；根 CA 不变。
+- Web 文件页补齐英文：标题、面包屑、上传/刷新/删除、表头、空状态、操作提示和存储空间等；管理端状态栏保持中英文显示正确。
+
+# CloudBox Windows GUI v1.0.0 — English
+
+CloudBox is a local multi-user network drive. The Windows edition provides an Electron administrator console and a browser-based web client.
+
+## Core Features
+
+- Local multi-user drive: uploads, downloads, folders and quotas
+- Image, video, audio, PDF and text previews with HTTP Range seeking
+- Share links with expiry and access control
+- Archive extraction for zip / 7z / rar / tar.gz with path-traversal protection
+- ClamAV local scanning and VirusTotal API scanning
+- Native AI assistant and MCP server
+- Plugin platform with isolated child processes and sandboxed iframe configuration UIs
+- Embedded static website hosting
+- SMTP email alerts with AES-256-GCM encrypted passwords
+- Chinese/English UI and user avatars
+- Private CA / HTTPS / mTLS, frp tunneling and data-directory migration
+
+## Installation
+
+### Installer
+
+1. Run `bin/CloudBox-Setup-0.1.0-x64.exe`.
+2. Follow the installation wizard.
+3. Start CloudBox.
+4. On first run, create the administrator account and choose the data directory.
+5. In the administrator console, enable the local web service and open the displayed address in a browser.
+
+### Portable
+
+1. Run `bin/CloudBox-Portable-0.1.0-x64.exe`.
+2. Create the administrator account on first launch.
+3. Data is stored in `%APPDATA%/CloudBox` by default; change it in Settings.
+
+> The installers are not code-signed. Windows SmartScreen may show an “Unknown publisher” warning. Verify the file source before continuing.
+
+## Directory Layout
+
+```text
+Windows-GUI/
+├─ bin/
+│  ├─ CloudBox-Setup-0.1.0-x64.exe
+│  └─ CloudBox-Portable-0.1.0-x64.exe
+├─ source/                 # full source (without node_modules/release/.git)
+├─ docs/
+│  └─ PLUGIN_API.md
+├─ THIRD_PARTY_NOTICES.md
+└─ README_Windows.md
+```
+
+## Acknowledgments and Open Source Licenses
+
+CloudBox is built on the following open-source projects:
+
+- **frp**: used for NAT traversal and HTTP/HTTPS tunnels, licensed under Apache-2.0. CloudBox invokes it as a separate `frpc` process and does not modify its source.
+- **ClamAV**: used for local antivirus scanning, licensed under GPLv2. CloudBox invokes it as a separate `clamscan` process and does not modify its source.
+- **7-Zip / 7za**: used for archive extraction. 7za is licensed under LGPL-2.1+ and is subject to the unRAR restriction. CloudBox starts a separate `7za` process through `node-7z` and does not modify its source.
+- Electron, Node.js, Express, better-sqlite3, React, Vite, Tailwind CSS, i18next, pdfjs-dist and others are listed in the component inventory.
+
+See the complete third-party component, license and redistribution information here:
+
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+
+CloudBox uses third-party components only through separate processes or normal library calls. It does not modify the source code of frp, ClamAV or 7za, and does not merge their source code with CloudBox.
+
 ## Complete Features & Mechanisms (English)
 
 ### Accounts, Sessions and Security
@@ -296,3 +303,11 @@ CloudBox uses third-party components only through separate processes or normal l
 - Windows cache: `%LOCALAPPDATA%\cloudbox`
 - Linux system mode: `/var/lib/cloudbox`
 - Linux `--portable`: `./data`
+
+## Recent Changes
+
+- The admin sidebar no longer displays the listening port; it now shows real-time upload/download rates (sampled every 2 seconds from server byte counters).
+- Static hosting supports TCP port mapping: use `https://public-ip:mapped-port/` as the public base URL. TCP does not carry the real client IP. HTTP/HTTPS tunnels remain recommended for domains, `locations` and real client IPs.
+- **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option is now disabled and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
+- One-click private CA server-certificate issuance now accepts “Included domains or IPs (comma-separated)”. Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.
+- The web file page now has complete English labels for title, breadcrumbs, upload/refresh/delete, table headers, empty state, action titles and storage. Admin status text remains correct in both languages.

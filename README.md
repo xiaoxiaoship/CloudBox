@@ -2,11 +2,11 @@
 
 > ⚠️ **开发验证阶段说明**
 >
-> 当前版本仍处于开发与验证阶段，功能和稳定性可能继续调整，尚未经过完整的生产环境验证。请勿直接用于承载唯一副本或关键业务数据；升级或部署前请先备份，并在测试环境中充分验证。Linux CLI 版目前无针对性测试，可用性未知。目前主要适配中文，英文仅兼容尚未完全翻译。
+> 当前版本仍处于开发与验证阶段，功能和稳定性可能继续调整，尚未经过完整的生产环境验证。请勿直接用于承载唯一副本或关键业务数据；升级或部署前请先备份，并在测试环境中充分验证。
 >
 > **Development / Validation Stage**
 >
-> This release is still under development and validation. Features and stability may change, and it has not been fully validated in production. Do not use it as the sole copy of important data; back up before upgrading or deploying and validate it thoroughly in a test environment. The Linux CLI edition currently has no dedicated tests; its usability is unknown. The interface is primarily localized for Chinese; English support is partial and not fully translated.
+> This release is still under development and validation. Features and stability may change, and it has not been fully validated in production. Do not use it as the sole copy of important data; back up before upgrading or deploying and validate it thoroughly in a test environment.
 
 CloudBox 是一个本地多用户网盘系统，提供 Windows Electron 管理员控制台、Web 用户端，以及独立无头 Linux CLI 版本。
 
@@ -91,72 +91,6 @@ CloudBox 使用了 **frp**（Apache-2.0）进行内网穿透、**ClamAV**（GPLv
 
 完整组件和许可证信息见 [THIRD_PARTY_NOTICES.md](Windows-GUI/THIRD_PARTY_NOTICES.md)。
 
-## English
-
-### Core Features
-
-- Local multi-user drive with uploads, downloads, folders and quotas
-- Image, video, audio, PDF and text previews with HTTP Range seeking
-- Share links, secure 7za extraction and ClamAV scanning
-- AI assistant and MCP server
-- Plugin platform with isolated child processes and sandboxed iframe configuration UIs
-- Static website hosting
-- SMTP email alerts with AES-256-GCM encrypted passwords
-- Chinese/English UI and user avatars
-- Private CA / HTTPS / mTLS, frp tunneling and data-directory migration
-
-### Windows Installation
-
-1. Download `CloudBox-Setup-0.1.0-x64.exe` or `CloudBox-Portable-0.1.0-x64.exe`.
-2. Run the installer or portable executable.
-3. Create the administrator account on first launch.
-4. Enable the local web service in the administrator console and open the displayed address.
-
-The installers are unsigned. Windows SmartScreen may report an “Unknown publisher” warning; verify the download source before continuing.
-
-### Linux CLI
-
-```bash
-tar -xzf cloudbox-linux-0.1.0.tar.gz
-cd cloudbox-linux-0.1.0
-sudo bash install.sh
-```
-
-See [Linux-CLI/README_Linux.md](Linux-CLI/README_Linux.md) for commands, deployment and feature differences.
-
-### Documentation
-
-- [Windows README](Windows-GUI/README_Windows.md)
-- [Linux README](Linux-CLI/README_Linux.md)
-- [Plugin API](Windows-GUI/docs/PLUGIN_API.md)
-- [Third-Party Notices](Windows-GUI/THIRD_PARTY_NOTICES.md)
-
-### Acknowledgments and Licenses
-
-CloudBox uses **frp** (Apache-2.0) for NAT traversal, **ClamAV** (GPLv2) for local antivirus scanning, and **7-Zip / 7za** (LGPL-2.1+, including the unRAR restriction) for archive extraction. These tools are invoked as separate processes; their source code is not modified.
-
-See [THIRD_PARTY_NOTICES.md](Windows-GUI/THIRD_PARTY_NOTICES.md) for the complete component and license inventory.
-
-## License
-
-CloudBox 项目自身代码的许可证由仓库维护者补充；第三方组件遵循各自许可证。
-The license for CloudBox's own code is to be provided by the repository maintainer; third-party components remain under their respective licenses.
-
-## Tools / 工具
-
-- [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
-
-## 生成说明 / Generation Note
-
-本仓库的发布目录、中英文说明文档与发布整理流程由 **DSH（DeepSeek Harness）** 辅助生成。DSH 用于组织打包产物、生成文档、整理发布结构与执行 Git/GitHub 发布操作。
-
-产品源码、第三方组件及其许可证仍归各自作者所有；DSH 不改变第三方组件的授权方式。发布内容的具体版本、构建产物和许可证信息以本仓库中的文件及 `THIRD_PARTY_NOTICES.md` 为准。
-
-The release layout, bilingual documentation and publishing workflow in this repository were generated with assistance from **DSH (DeepSeek Harness)**. DSH was used to organize the packaged artifacts, generate documentation, structure the release and perform the Git/GitHub publishing steps.
-
-The product source code and third-party components remain the property of their respective authors; DSH does not change the licensing of any third-party component. Refer to the files in this repository and `THIRD_PARTY_NOTICES.md` for the exact versions, build artifacts and license information.
-
-
 ## 完整功能与实现机制（补充）
 
 ### 账号、会话与安全
@@ -240,6 +174,79 @@ The product source code and third-party components remain the property of their 
 - Linux 系统模式：`/var/lib/cloudbox`
 - Linux `--portable`：当前目录 `./data`
 
+## 近期重要变更
+
+- 管理端侧边栏不再显示监听端口，改为实时显示上传/下载速率（2 秒采样，基于服务端累计收发字节）。
+- 静态托管支持 TCP 端口映射：可直接使用 `https://公网IP:映射端口/` 作为公网基础地址；TCP 不携带真实客户端 IP。HTTP/HTTPS 隧道仍推荐用于域名、`locations` 和真实 IP。
+- **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已禁用该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
+- 私有 CA 一键签发服务端证书时新增“包含的域名或 IP（多个用英文逗号分隔）”。会动态追加到 mkcert SAN，并始终保留 `localhost`、`127.0.0.1`、`::1`、本机 hostname 和本机局域网 IP；根 CA 不变。
+- Web 文件页补齐英文：标题、面包屑、上传/刷新/删除、表头、空状态、操作提示和存储空间等；管理端状态栏保持中英文显示正确。
+
+## English
+
+### Core Features
+
+- Local multi-user drive with uploads, downloads, folders and quotas
+- Image, video, audio, PDF and text previews with HTTP Range seeking
+- Share links, secure 7za extraction and ClamAV scanning
+- AI assistant and MCP server
+- Plugin platform with isolated child processes and sandboxed iframe configuration UIs
+- Static website hosting
+- SMTP email alerts with AES-256-GCM encrypted passwords
+- Chinese/English UI and user avatars
+- Private CA / HTTPS / mTLS, frp tunneling and data-directory migration
+
+### Windows Installation
+
+1. Download `CloudBox-Setup-0.1.0-x64.exe` or `CloudBox-Portable-0.1.0-x64.exe`.
+2. Run the installer or portable executable.
+3. Create the administrator account on first launch.
+4. Enable the local web service in the administrator console and open the displayed address.
+
+The installers are unsigned. Windows SmartScreen may report an “Unknown publisher” warning; verify the download source before continuing.
+
+### Linux CLI
+
+```bash
+tar -xzf cloudbox-linux-0.1.0.tar.gz
+cd cloudbox-linux-0.1.0
+sudo bash install.sh
+```
+
+See [Linux-CLI/README_Linux.md](Linux-CLI/README_Linux.md) for commands, deployment and feature differences.
+
+### Documentation
+
+- [Windows README](Windows-GUI/README_Windows.md)
+- [Linux README](Linux-CLI/README_Linux.md)
+- [Plugin API](Windows-GUI/docs/PLUGIN_API.md)
+- [Third-Party Notices](Windows-GUI/THIRD_PARTY_NOTICES.md)
+
+### Acknowledgments and Licenses
+
+CloudBox uses **frp** (Apache-2.0) for NAT traversal, **ClamAV** (GPLv2) for local antivirus scanning, and **7-Zip / 7za** (LGPL-2.1+, including the unRAR restriction) for archive extraction. These tools are invoked as separate processes; their source code is not modified.
+
+See [THIRD_PARTY_NOTICES.md](Windows-GUI/THIRD_PARTY_NOTICES.md) for the complete component and license inventory.
+
+## License
+
+CloudBox 项目自身代码的许可证由仓库维护者补充；第三方组件遵循各自许可证。
+The license for CloudBox's own code is to be provided by the repository maintainer; third-party components remain under their respective licenses.
+
+## Tools / 工具
+
+- [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
+
+## 生成说明 / Generation Note
+
+本仓库的发布目录、中英文说明文档与发布整理流程由 **DSH（DeepSeek Harness）** 辅助生成。DSH 用于组织打包产物、生成文档、整理发布结构与执行 Git/GitHub 发布操作。
+
+产品源码、第三方组件及其许可证仍归各自作者所有；DSH 不改变第三方组件的授权方式。发布内容的具体版本、构建产物和许可证信息以本仓库中的文件及 `THIRD_PARTY_NOTICES.md` 为准。
+
+The release layout, bilingual documentation and publishing workflow in this repository were generated with assistance from **DSH (DeepSeek Harness)**. DSH was used to organize the packaged artifacts, generate documentation, structure the release and perform the Git/GitHub publishing steps.
+
+The product source code and third-party components remain the property of their respective authors; DSH does not change the licensing of any third-party component. Refer to the files in this repository and `THIRD_PARTY_NOTICES.md` for the exact versions, build artifacts and license information.
+
 ## Complete Features & Mechanisms (English)
 
 ### Accounts, Sessions and Security
@@ -322,3 +329,11 @@ The product source code and third-party components remain the property of their 
 - Windows cache: `%LOCALAPPDATA%\cloudbox`
 - Linux system mode: `/var/lib/cloudbox`
 - Linux `--portable`: `./data`
+
+## Recent Changes
+
+- The admin sidebar no longer displays the listening port; it now shows real-time upload/download rates (sampled every 2 seconds from server byte counters).
+- Static hosting supports TCP port mapping: use `https://public-ip:mapped-port/` as the public base URL. TCP does not carry the real client IP. HTTP/HTTPS tunnels remain recommended for domains, `locations` and real client IPs.
+- **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option is now disabled and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
+- One-click private CA server-certificate issuance now accepts “Included domains or IPs (comma-separated)”. Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.
+- The web file page now has complete English labels for title, breadcrumbs, upload/refresh/delete, table headers, empty state, action titles and storage. Admin status text remains correct in both languages.

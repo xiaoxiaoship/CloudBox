@@ -157,6 +157,8 @@ export interface ServerStatus {
   urls: string[];
   lanIps: string[];
   startedAt: number | null;
+  uploadedBytes: number;
+  downloadedBytes: number;
   error: string | null;
 }
 

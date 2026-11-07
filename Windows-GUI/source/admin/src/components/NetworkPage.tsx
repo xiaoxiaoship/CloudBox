@@ -819,12 +819,11 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {frpConfig.tunnelType === 'tcp'
-                ? `当前使用 TCP 隧道指向本地 ${server?.protocol.toUpperCase() ?? 'HTTP'} 端口；TCP 本身不携带 X-Forwarded-For。`
+                ? `当前使用 TCP 隧道指向本地 ${server?.protocol.toUpperCase() ?? 'HTTP'} 端口。TCP 端口映射也可以访问托管站点；但 TCP 不携带 X-Forwarded-For，真实客户端 IP 不可用。`
                 : `当前使用 ${frpConfig.tunnelType.toUpperCase()} 隧道，frps 会注入 X-Forwarded-For，请同时开启“信任反向代理的真实 IP”。`}
             </p>
             <p className="mt-1 text-[11px] leading-5 text-amber-300">
-              静态托管统一挂载在 <code>/host/</code>，frp 必须选择 HTTP 或 HTTPS，并使用 locations
-              <code> ["/", "/host"] </code>（或通配域名）复用同一端口；不要为托管单独开 TCP 端口。
+              静态托管统一挂载在 <code>/host/</code>。TCP 映射可直接用 <code>https://公网IP:映射端口/</code> 作为基础地址访问；HTTP/HTTPS 隧道支持域名、locations <code> ["/", "/host"] </code> 和真实 IP，推荐优先使用。
             </p>
           </div>
 
@@ -993,14 +992,12 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] leading-5 text-slate-400">
             <input
               type="checkbox"
-              checked={frpConfig.proxyProtocol}
-              onChange={(event) =>
-                updateFrpConfig('proxyProtocol', event.target.checked)
-              }
-              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-indigo-500"
+              checked={false}
+              disabled
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-indigo-500 opacity-50"
             />
             <span>
-              TCP 隧道启用 PROXY protocol v2（仅当本地服务支持时开启；Express 默认不解析该协议，推荐使用 HTTP 隧道）。
+              TCP 隧道启用 PROXY protocol v2（当前版本未适配本地 HTTPS/TLS 解析，开启会导致 frpc 连接失败，暂不可用；推荐使用 HTTP/HTTPS 隧道）。
             </span>
           </label>
         ) : null}

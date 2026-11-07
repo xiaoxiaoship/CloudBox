@@ -59,12 +59,22 @@
     "title": "My files",
     "root": "Root",
     "empty": "No files yet",
+    "emptyHint": "Click Upload or drag files here to get started",
     "selected": "{{count}} selected",
     "deploySite": "Deploy as website",
     "currentHosting": "This folder is hosted at {{url}}",
     "dropHint": "Drop files here to upload",
     "downloadSelected": "Download selected",
-    "deleteSelected": "Delete selected"
+    "deleteSelected": "Delete selected",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "actions": "Actions",
+    "storage": "Storage",
+    "footer": "Signed in as {{username}} · Files stay on this CloudBox server",
+    "targetDir": "Target folder: {{path}}",
+    "createIn": "Will be created under “{{path}}”",
+    "folderName": "Folder name"
   },
   "settings": {
     "title": "Settings",

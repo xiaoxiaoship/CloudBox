@@ -1,4 +1,5 @@
 import { ChevronRightIcon } from './Icons.tsx';
+import { useTranslation } from 'react-i18next';
 
 interface BreadcrumbsProps {
   path: string;
@@ -7,6 +8,7 @@ interface BreadcrumbsProps {
 }
 
 export function Breadcrumbs({ path, disabled = false, onNavigate }: BreadcrumbsProps) {
+  const { t } = useTranslation();
   const segments = path === '' ? [] : path.split('/');
 
   return (
@@ -21,7 +23,7 @@ export function Breadcrumbs({ path, disabled = false, onNavigate }: BreadcrumbsP
             : 'text-slate-500 dark:text-slate-400'
         }`}
       >
-        根目录
+        {t('files.root')}
       </button>
 
       {segments.map((segment, index) => {
