@@ -92,3 +92,112 @@ CloudBox 卸载与数据清理工具
 源代码
 ------
 Cleaner.cs 为完整 C# WinForms 源代码，可使用 Windows 自带的 .NET Framework 编译器重新构建。
+
+CloudBox Uninstaller & Data Cleanup Tool
+=========================================
+
+Purpose
+-------
+Completely uninstall CloudBox, including:
+- Default data folders
+- Custom data / storage / plugins folders changed in Settings
+- Program installation folders
+- Desktop / Start Menu shortcuts
+- Uninstall registry entries, CloudBox software keys and startup entries
+
+The tool requests administrator rights through Windows UAC at startup so it can remove
+items under Program Files, HKLM registry entries and public shortcuts. If you click
+"No" in the UAC prompt, the program will not start.
+
+The top-right corner provides a Chinese / English switch. Buttons, lists, warnings,
+confirmation dialogs and results follow the selected language.
+
+Detected Data Folders
+---------------------
+Default locations:
+1. %APPDATA%\cloudbox
+   cloudbox.db, storage, plugins, config, tmp, certificates and Electron caches.
+2. %LOCALAPPDATA%\cloudbox
+   Default local cache, if present.
+
+Custom locations from:
+%APPDATA%\cloudbox\cloudbox-paths.json
+- dataDir
+- storageDir
+- pluginsDir
+
+Custom folders are not checked by default and require manual confirmation. A custom path
+inside the default folder is removed with the default folder and is not listed twice.
+
+Detected Program Files and System Integration
+---------------------------------------------
+- Registry Uninstall entries (HKCU / HKLM, 64-bit and 32-bit views)
+- InstallLocation target folder
+- %LOCALAPPDATA%\Programs\CloudBox
+- %ProgramFiles%\CloudBox
+- %ProgramFiles(x86)%\CloudBox
+- CloudBox.lnk in Desktop, Public Desktop, Start Menu, Common Start Menu and Startup
+- HKCU\Software\CloudBox
+- HKCU\Software\com.cloudbox.app
+- HKLM\Software\CloudBox
+- CloudBox startup value under HKCU Run
+
+A folder is treated as the program installation folder only when it contains
+CloudBox.exe or cloudbox.exe.
+
+Usage
+-----
+1. Double-click CloudBoxUninstaller.exe.
+2. Review the default data folders, custom folders and detected program items.
+3. Uncheck anything you want to keep; custom data folders are unchecked by default.
+4. Click "Delete selected folders".
+5. Confirm in the dialog.
+6. If CloudBox is running, the tool asks whether to close it.
+7. A result dialog lists removed data folders, program files, shortcuts, registry entries,
+   and any skipped or failed items.
+
+The "Open Windows Apps" button is only a fallback. When "Also remove program files,
+shortcuts and registry entries" is checked, the tool performs those removals directly.
+
+Administrator Rights
+--------------------
+- The application manifest uses requireAdministrator, so administrator rights are
+  requested on every launch.
+- This allows removal of Program Files, HKLM registry entries and public Desktop /
+  Start Menu shortcuts.
+- If UAC is declined, the program does not start. This is intentional so an uninstall
+  is not left incomplete because of insufficient permissions.
+- Do not run this tool from an untrusted directory.
+
+Language
+--------
+- Chinese is the default.
+- Use the top-right drop-down to switch to English.
+- Changing the language rescans the folders and updates the interface and dialogs.
+
+Safety Limits
+-------------
+- Default data folders must be directly under the current user's %APPDATA% or
+  %LOCALAPPDATA% and must be named cloudbox.
+- Custom folders are read only from cloudbox-paths.json and pass path safety checks.
+- The tool refuses to delete drive roots, Windows, System32, Program Files roots,
+  user-profile roots, AppData roots and other dangerous locations.
+- A program installation folder must contain CloudBox.exe and cannot be the folder
+  containing this tool.
+- Directory junctions and symbolic links are not followed when deleting contents.
+- Unchecked data folders, program files, shortcuts, registry entries and other files
+  are not deleted.
+
+Important
+---------
+- Deletion cannot be undone. Back up any data you need first.
+- Exit CloudBox before running the tool; it also offers to close a running instance.
+- Custom folders may contain files you placed manually. Only select folders that you
+  are sure are CloudBox data folders.
+- The tool does not delete itself. If you want to remove it, delete the
+  CloudBox_Uninstaller folder manually.
+
+Source Code
+-----------
+Cleaner.cs is the complete C# WinForms source. It can be rebuilt with the .NET Framework
+compiler included with Windows.
