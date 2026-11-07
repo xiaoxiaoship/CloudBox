@@ -59,7 +59,6 @@ export interface PublicSettings {
   scan_enabled: boolean;
   ai_enabled: boolean;
   ai_mode: 'admin' | 'user';
-  mcp_enabled: boolean;
   hosting_enabled: boolean;
   hosting_base_url: string;
 }

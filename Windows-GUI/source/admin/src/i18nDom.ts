@@ -46,11 +46,8 @@ const EN: Record<string, string> = {
   'ClamAV 目录': 'ClamAV directory',
   '仅保存在本机数据库': 'Stored only in the local database',
   '保存查杀设置': 'Save scan settings',
-  'AI 与 MCP 服务': 'AI & MCP services',
   'AI 已开启': 'AI enabled',
   'AI 已关闭': 'AI disabled',
-  'API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。MCP 依赖 AI 总开关。':
-    'API keys are encrypted with AES-256-GCM and masked in the UI. MCP requires the AI master switch.',
   'AI 总开关': 'AI master switch',
   'AI 模式': 'AI mode',
   '管理员共享配置': 'Administrator shared configuration',
@@ -60,11 +57,7 @@ const EN: Record<string, string> = {
   '留空保持现有 Key': 'Leave blank to keep the current key',
   '用户模式：管理员 Base URL / API Key 已隐藏，普通用户必须在 Web“个人设置”中填写自己的配置。':
     'User mode: administrator Base URL / API Key are hidden. Users configure them in Web personal settings.',
-  '启用原生 MCP Server（/api/mcp）': 'Enable native MCP server (/api/mcp)',
-  '生成随机 Token': 'Generate random token',
-  'MCP Token': 'MCP token',
-  '客户端配置模板': 'Client configuration template',
-  '保存 AI 与 MCP 设置': 'Save AI & MCP settings',
+  '保存 AI 设置': 'Save AI settings',
   '内嵌静态托管': 'Static hosting',
   '站点统一挂载在': 'Sites are served under',
   '下，不额外监听端口。端口复用依赖 frp HTTP/HTTPS 隧道。':

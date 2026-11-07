@@ -24,7 +24,6 @@ CloudBox is a local multi-user network drive with a Windows Electron administrat
 | [CloudBox-Portable-0.1.0-x64.exe](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/CloudBox-Portable-0.1.0-x64.exe) | Windows 便携版 / Windows portable |
 | [cloudbox-linux-0.1.0.tar.gz](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/cloudbox-linux-0.1.0.tar.gz) | Linux CLI 发布包 / Linux CLI package |
 | [CloudBox-Uninstaller-0.1.0.zip](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/CloudBox-Uninstaller-0.1.0.zip) | Windows 彻底卸载工具（exe + 源码 + README） / Windows uninstaller package |
-| [dsh-plugin-cloudbox-1.0.4.tar.gz](https://github.com/xiaoxiaoship/CloudBox/releases/download/v0.1.0/dsh-plugin-cloudbox-1.0.4.tar.gz) | DSH/Cordis CloudBox MCP 插件成品包 / DSH CloudBox plugin package |
 
 也可直接查看 [Releases](https://github.com/xiaoxiaoship/CloudBox/releases/tag/v0.1.0)。
 
@@ -46,9 +45,7 @@ CloudBox_v0.1.0_Release/
 │  └─ README_Linux.md
 ├─ Tools/
 │  ├─ CloudBox-Uninstaller/      # 管理员权限卸载与数据清理工具
-│  └─ DSH-Plugin-CloudBox/       # DSH/Cordis 对接 CloudBox MCP 插件
 │     ├─ source/
-│     └─ bin/dsh-plugin-cloudbox-1.0.4.tar.gz
 └─ README.md
 ```
 
@@ -59,7 +56,7 @@ CloudBox_v0.1.0_Release/
 - 本地多用户网盘：上传、下载、目录、配额
 - 图片、视频、音频、PDF、文本在线预览，支持 HTTP Range
 - 文件分享、7za 安全解压、ClamAV 本地查杀
-- AI 助手与 MCP Server
+- AI 助手
 - 插件平台：独立子进程、沙箱 iframe 配置界面
 - 静态网站托管
 - 邮件告警（SMTP 密码 AES-256-GCM 加密）
@@ -134,14 +131,15 @@ CloudBox 使用了 **frp**（Apache-2.0）进行内网穿透、**ClamAV**（GPLv
 - 用户可自助注册（可开关，默认关闭）；注册限流 2 次/小时/IP，默认分配 5 GB 配额。
 - 用户可在 Web Header 点击头像上传 PNG/JPEG/WebP（最大 600 KB）；头像以 data URL 保存到 `users.avatar_data`，管理端用户列表显示缩略图。
 
-### AI 与 MCP
+### AI 助手
+
+- 外部 MCP/DSH 集成已移除；文件读写只通过 CloudBox 内置 API/Web 使用。
 
 - 原生 AI 助手兼容 OpenAI 风格 Chat Completions，支持 Function Calling / ReAct 工具循环。
 - AI 模式：管理员共享 Key 或用户自填 Key；API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
 - 每日请求上限默认 50；工作范围可选“仅指定文件夹”或“全盘”（高危），高危工具调用需要用户确认。
 - AI 工具的文件路径同样经过网盘相对路径和 safePath 校验，不能访问宿主机绝对路径。
 - 中英文界面切换时，英文请求会在 System Prompt 追加 “Please reply to the user in English.”。
-- 原生 MCP Server 使用 Streamable HTTP，端点 `/api/mcp`，Bearer Token 鉴权，可绑定一个网盘用户；支持文件列表、读取、写入、搜索等工具（以实际工具注册表为准）。
 
 ### 插件平台
 
@@ -199,7 +197,7 @@ CloudBox 使用了 **frp**（Apache-2.0）进行内网穿透、**ClamAV**（GPLv
 - Local multi-user drive with uploads, downloads, folders and quotas
 - Image, video, audio, PDF and text previews with HTTP Range seeking
 - Share links, secure 7za extraction and ClamAV scanning
-- AI assistant and MCP server
+- AI assistant
 - Plugin platform with isolated child processes and sandboxed iframe configuration UIs
 - Static website hosting
 - SMTP email alerts with AES-256-GCM encrypted passwords
@@ -246,16 +244,6 @@ The license for CloudBox's own code is to be provided by the repository maintain
 ## Tools / 工具
 
 - [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
-- [CloudBox DSH Plugin](Tools/DSH-Plugin-CloudBox/README.md) — DSH/Cordis 对接 CloudBox MCP 的插件；源码与 `bin/dsh-plugin-cloudbox-1.0.4.tar.gz` 成品包已包含。
-
-### DSH Plugin / DSH 插件
-
-- 将 CloudBox 的 MCP 工具注册为 DSH 的 `cloudbox_*` 工具。
-- 配置项：`cloudboxUrl`、`mcpToken`。
-- 自动向 System Prompt 注入“path 必须是网盘内 POSIX 相对路径”的约束。
-- 支持文件列表、读取文本、写入文本等 CloudBox MCP 工具。
-- 成品包不包含 `node_modules`；可直接作为 DSH bundle 安装，安装后在插件配置中填写 `cloudboxUrl` 和 `mcpToken`。
-- **DSH Plugin** registers CloudBox MCP tools as `cloudbox_*`; the tar.gz is a DSH bundle. Configure `cloudboxUrl` and `mcpToken` after installation.
 
 ## 生成说明 / Generation Note
 
@@ -303,14 +291,15 @@ The product source code and third-party components remain the property of their 
 - Optional public registration (default off), limited to 2 registrations/hour/IP and 5 GB default quota.
 - Users can upload a PNG/JPEG/WebP avatar (max 600 KB) from the web header. It is stored as a data URL in `users.avatar_data`; the admin user list shows a thumbnail.
 
-### AI and MCP
+### AI Assistant
+
+- External MCP/DSH integration has been removed; file access is available only through the built-in CloudBox API/Web UI.
 
 - Native AI assistant compatible with OpenAI-style Chat Completions, Function Calling and a ReAct tool loop.
 - AI modes: administrator-shared key or user-supplied key. API keys are AES-256-GCM encrypted and masked in the UI.
 - Default daily limit is 50. Work scope can be a specific folder or the entire drive (high risk); high-risk tool calls require confirmation.
 - AI tool paths use the same relative-path and safePath checks; host absolute paths are rejected.
 - When the UI is English, the system prompt appends “Please reply to the user in English.”
-- Native MCP server uses Streamable HTTP at `/api/mcp`, Bearer-token authentication and an optional bound CloudBox user. Available tools follow the registered tool set (file listing, reading, writing, search, etc.).
 
 ### Plugin Platform
 

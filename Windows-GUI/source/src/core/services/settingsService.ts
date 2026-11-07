@@ -43,9 +43,6 @@ interface SettingDefinitions {
   'ai.admin_api_key': { schema: z.ZodType<string>; fallback: string };
   'ai.admin_model': { schema: z.ZodType<string>; fallback: string };
   'ai.user_daily_limit': { schema: z.ZodType<number>; fallback: number };
-  'mcp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
-  'mcp.token': { schema: z.ZodType<string>; fallback: string };
-  'mcp.bound_user_id': { schema: z.ZodType<number>; fallback: number };
   'hosting.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'hosting.base_url': { schema: z.ZodType<string>; fallback: string };
   'mail.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -103,9 +100,6 @@ const DEFINITIONS: SettingDefinitions = {
   'ai.admin_api_key': { schema: z.string().max(2000), fallback: '' },
   'ai.admin_model': { schema: z.string().max(200), fallback: 'gpt-4o-mini' },
   'ai.user_daily_limit': { schema: z.number().int().min(1).max(10_000), fallback: 50 },
-  'mcp.enabled': { schema: z.boolean(), fallback: false },
-  'mcp.token': { schema: z.string().max(256), fallback: '' },
-  'mcp.bound_user_id': { schema: z.number().int().min(0), fallback: 0 },
   'hosting.enabled': { schema: z.boolean(), fallback: false },
   'hosting.base_url': { schema: z.string().max(500), fallback: '' },
   'mail.enabled': { schema: z.boolean(), fallback: false },

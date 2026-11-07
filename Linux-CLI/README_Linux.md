@@ -73,7 +73,7 @@ cloudbox plugin list
 Linux CLI 保留：
 
 - SQLite、用户/配额、文件上传下载、预览与 Range
-- 分享、解压、ClamAV 查杀、AI、MCP
+- 分享、解压、ClamAV 查杀、AI
 - 插件子进程、静态托管、邮件告警
 - Web 用户端
 
@@ -83,7 +83,7 @@ Linux CLI 不包含：
 - 私有 CA / HTTPS / mTLS 管理
 - frp 可视化配置与启动管理（仅提供 `frpc` 解析）
 - 可视化目录迁移
-- 完整的邮件/AI/MCP/托管/权限设置 CLI（目前 `config` 仅支持 port/host）
+- 完整的邮件/AI/托管/权限设置 CLI（目前 `config` 仅支持 port/host）
 
 需要 HTTPS 时，建议使用 Nginx/Caddy 反向代理。
 
@@ -94,7 +94,7 @@ CloudBox Linux 使用了以下开源项目：
 - **frp**：内网穿透与 HTTP/HTTPS 隧道，Apache-2.0；通过独立 `frpc` 进程调用，未修改源码。
 - **ClamAV**：本地病毒扫描，GPLv2；调用系统 `/usr/bin/clamscan`，未修改源码。
 - **7-Zip / 7za**：压缩包解压，LGPL-2.1+（含 unRAR 限制条款）；通过独立 `7za` 进程调用，未修改源码。
-- Node.js、Express、better-sqlite3、i18next、MCP SDK 等，详见完整清单。
+- Node.js、Express、better-sqlite3、i18next、Node.js 等，详见完整清单。
 
 完整组件与许可证信息见：
 
@@ -140,14 +140,15 @@ Linux 发布包不包含 Electron 与 Chromium；7za 以独立二进制形式分
 - 用户可自助注册（可开关，默认关闭）；注册限流 2 次/小时/IP，默认分配 5 GB 配额。
 - 用户可在 Web Header 点击头像上传 PNG/JPEG/WebP（最大 600 KB）；头像以 data URL 保存到 `users.avatar_data`，管理端用户列表显示缩略图。
 
-### AI 与 MCP
+### AI 助手
+
+- 外部 MCP/DSH 集成已移除；文件读写只通过 CloudBox 内置 API/Web 使用。
 
 - 原生 AI 助手兼容 OpenAI 风格 Chat Completions，支持 Function Calling / ReAct 工具循环。
 - AI 模式：管理员共享 Key 或用户自填 Key；API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
 - 每日请求上限默认 50；工作范围可选“仅指定文件夹”或“全盘”（高危），高危工具调用需要用户确认。
 - AI 工具的文件路径同样经过网盘相对路径和 safePath 校验，不能访问宿主机绝对路径。
 - 中英文界面切换时，英文请求会在 System Prompt 追加 “Please reply to the user in English.”。
-- 原生 MCP Server 使用 Streamable HTTP，端点 `/api/mcp`，Bearer Token 鉴权，可绑定一个网盘用户；支持文件列表、读取、写入、搜索等工具（以实际工具注册表为准）。
 
 ### 插件平台
 
@@ -273,7 +274,6 @@ cloudbox plugin list
 The Linux CLI includes:
 
 - SQLite, users/quotas, file upload/download, previews and HTTP Range
-- Sharing, archive extraction, ClamAV scanning, AI and MCP
 - Plugin child processes, static hosting and email alerts
 - Web client
 
@@ -283,7 +283,7 @@ The Linux CLI does not include:
 - Private CA / HTTPS / mTLS management
 - Visual frp configuration and process management (only `frpc` binary resolution is provided)
 - Visual data-directory migration
-- Complete CLI settings for email/AI/MCP/hosting/permissions (currently `config` supports only port and host)
+- Complete CLI settings for email/AI/hosting/permissions (currently `config` supports only port and host)
 
 For HTTPS, use an Nginx or Caddy reverse proxy.
 
@@ -294,7 +294,7 @@ CloudBox Linux uses the following open-source projects:
 - **frp**: NAT traversal and HTTP/HTTPS tunnels, Apache-2.0; invoked as a separate `frpc` process without source modifications.
 - **ClamAV**: local antivirus scanning, GPLv2; invoked as the system `/usr/bin/clamscan` without source modifications.
 - **7-Zip / 7za**: archive extraction, LGPL-2.1+ (including the unRAR restriction); invoked as a separate `7za` process without source modifications.
-- Node.js, Express, better-sqlite3, i18next, the MCP SDK and others are listed in the full inventory.
+- Node.js, Express, better-sqlite3, i18next, Node.js and others are listed in the full inventory.
 
 See the complete component and license information here:
 
@@ -338,14 +338,15 @@ The Linux release does not include Electron or Chromium. 7za is distributed as a
 - Optional public registration (default off), limited to 2 registrations/hour/IP and 5 GB default quota.
 - Users can upload a PNG/JPEG/WebP avatar (max 600 KB) from the web header. It is stored as a data URL in `users.avatar_data`; the admin user list shows a thumbnail.
 
-### AI and MCP
+### AI Assistant
+
+- External MCP/DSH integration has been removed; file access is available only through the built-in CloudBox API/Web UI.
 
 - Native AI assistant compatible with OpenAI-style Chat Completions, Function Calling and a ReAct tool loop.
 - AI modes: administrator-shared key or user-supplied key. API keys are AES-256-GCM encrypted and masked in the UI.
 - Default daily limit is 50. Work scope can be a specific folder or the entire drive (high risk); high-risk tool calls require confirmation.
 - AI tool paths use the same relative-path and safePath checks; host absolute paths are rejected.
 - When the UI is English, the system prompt appends “Please reply to the user in English.”
-- Native MCP server uses Streamable HTTP at `/api/mcp`, Bearer-token authentication and an optional bound CloudBox user. Available tools follow the registered tool set (file listing, reading, writing, search, etc.).
 
 ### Plugin Platform
 

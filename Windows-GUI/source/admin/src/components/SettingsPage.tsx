@@ -72,12 +72,6 @@ export function SettingsPage({
     apiKeyMasked: '',
     dailyLimit: 50,
   });
-  const [mcp, setMcp] = useState({
-    enabled: false,
-    token: '',
-    boundUserId: 0,
-    configTemplate: {} as unknown,
-  });
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [aiPending, setAiPending] = useState(false);
   const [hosting, setHosting] = useState({ enabled: false, baseUrl: '' });
@@ -107,7 +101,6 @@ export function SettingsPage({
         setSecurity(settings.security);
         setScan(settings.scan);
         setAi(settings.ai);
-        setMcp(settings.mcp);
         setHosting(settings.hosting);
         setMail(settings.mail);
       })
@@ -190,31 +183,11 @@ export function SettingsPage({
           apiKey: apiKeyInput,
           model: ai.model,
           dailyLimit: ai.dailyLimit,
-          mcpEnabled: mcp.enabled,
-          mcpToken: mcp.token,
         }),
       );
       setAi(settings.ai);
-      setMcp(settings.mcp);
       setApiKeyInput('');
-      notify('success', 'AI 与 MCP 设置已保存');
-    } catch (cause) {
-      notify('error', errorMessage(cause));
-    } finally {
-      setAiPending(false);
-    }
-  };
-
-  const generateMcpToken = async (): Promise<void> => {
-    setAiPending(true);
-    try {
-      const settings = (await call(api.settings.generateMcpToken())) as {
-        ai: typeof ai;
-        mcp: typeof mcp;
-      };
-      setAi(settings.ai);
-      setMcp(settings.mcp);
-      notify('success', 'MCP Token 已重新生成');
+      notify('success', 'AI 设置已保存');
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -658,13 +631,13 @@ export function SettingsPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-100">AI 与 MCP 服务</h2>
+              <h2 className="text-sm font-semibold text-slate-100">AI 服务</h2>
               <span className={`rounded-full px-2 py-0.5 text-[10px] ${ai.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
                 {ai.enabled ? 'AI 已开启' : 'AI 已关闭'}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。MCP 依赖 AI 总开关。
+              API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
             </p>
           </div>
           <button
@@ -713,25 +686,9 @@ export function SettingsPage({
           )}
         </div>
 
-        <div className="mt-5 rounded-xl border border-slate-800 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input type="checkbox" checked={mcp.enabled} onChange={(event) => setMcp((current) => ({ ...current, enabled: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
-              启用原生 MCP Server（/api/mcp）
-            </label>
-            <button type="button" onClick={() => void generateMcpToken()} disabled={aiPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
-              生成随机 Token
-            </button>
-          </div>
-          <label className="mt-3 block text-[11px] text-slate-500" htmlFor="mcp-token">MCP Token</label>
-          <input id="mcp-token" value={mcp.token} onChange={(event) => setMcp((current) => ({ ...current, token: event.target.value }))} className={INPUT_CLASS} />
-          <label className="mt-3 block text-[11px] text-slate-500" htmlFor="mcp-config">客户端配置模板</label>
-          <pre id="mcp-config" className="mt-1 overflow-x-auto rounded-lg bg-slate-950 p-3 text-[10px] text-slate-400">{JSON.stringify(mcp.configTemplate, null, 2)}</pre>
-        </div>
-
         <button type="button" onClick={() => void saveAi()} disabled={aiPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60">
           {aiPending ? <Spinner className="h-4 w-4" /> : null}
-          保存 AI 与 MCP 设置
+          保存 AI 设置
         </button>
       </section>
 

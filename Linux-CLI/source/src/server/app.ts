@@ -19,7 +19,6 @@ import {
   createSharesRouter,
 } from './routes/shares.routes.ts';
 import { createTasksRouter } from './routes/tasks.routes.ts';
-import { createMcpRouter } from './routes/mcp.routes.ts';
 
 /** 默认构建产物目录；Electron 主进程会传入 app.getAppPath() 下的绝对路径 */
 const DEFAULT_WEB_DIST = path.resolve(process.cwd(), 'dist', 'web');
@@ -105,7 +104,6 @@ export function createApp(options: CreateAppOptions): Express {
       scan_enabled: services.settings.get('scan.enabled'),
       ai_enabled: services.settings.get('ai.enabled'),
       ai_mode: services.settings.get('ai.mode'),
-      mcp_enabled: services.settings.get('mcp.enabled'),
       hosting_enabled: services.settings.get('hosting.enabled'),
       hosting_base_url: services.settings.get('hosting.base_url'),
     });
@@ -113,8 +111,6 @@ export function createApp(options: CreateAppOptions): Express {
 
   app.use('/api/hosting', requireUser, createHostingApiRouter(services, { csrf }));
   app.use('/host', createHostingSiteRouter(services));
-
-  app.all('/api/mcp', createMcpRouter(services));
 
   app.use('/api/ai', requireUser, createAiRouter(services, { csrf }));
 

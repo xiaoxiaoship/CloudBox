@@ -111,12 +111,6 @@ export interface AdminSettings {
     apiKeyMasked: string;
     dailyLimit: number;
   };
-  mcp: {
-    enabled: boolean;
-    token: string;
-    boundUserId: number;
-    configTemplate: unknown;
-  };
   hosting: {
     enabled: boolean;
     baseUrl: string;
@@ -275,10 +269,7 @@ export interface CloudboxApi {
       apiKey?: string;
       model: string;
       dailyLimit: number;
-      mcpEnabled: boolean;
-      mcpToken?: string;
     }) => Promise<Result<AdminSettings>>;
-    generateMcpToken: () => Promise<Result<AdminSettings>>;
     setHosting: (input: { enabled: boolean; baseUrl: string }) => Promise<Result<AdminSettings>>;
     setMail: (input: {
       enabled: boolean;
@@ -372,7 +363,6 @@ export const IPC = {
   settingsSetPermissions: 'settings:set-permissions',
   settingsSetScan: 'settings:set-scan',
   settingsSetAi: 'settings:set-ai',
-  settingsGenerateMcpToken: 'settings:generate-mcp-token',
   settingsSetHosting: 'settings:set-hosting',
   settingsSetMail: 'settings:set-mail',
   settingsTestMail: 'settings:test-mail',

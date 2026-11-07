@@ -50,7 +50,6 @@ const api: CloudboxApi = {
     setPermissions: (input) => invoke(IPC.settingsSetPermissions, input),
     setScan: (input) => invoke(IPC.settingsSetScan, input),
     setAi: (input) => invoke(IPC.settingsSetAi, input),
-    generateMcpToken: () => invoke(IPC.settingsGenerateMcpToken),
     setHosting: (input) => invoke(IPC.settingsSetHosting, input),
     setMail: (input) => invoke(IPC.settingsSetMail, input),
     testMail: () => invoke(IPC.settingsTestMail),

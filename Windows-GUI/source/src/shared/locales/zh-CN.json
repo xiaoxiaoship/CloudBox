@@ -82,7 +82,6 @@
     "language": "界面语言",
     "mail": "邮件通知",
     "hosting": "内嵌静态托管",
-    "aiMcp": "AI 与 MCP 服务",
     "security": "安全查杀",
     "permissions": "用户功能权限",
     "database": "数据库备份",

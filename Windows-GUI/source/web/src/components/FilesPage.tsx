@@ -211,7 +211,7 @@ export function FilesPage() {
     try {
       const current = hosting ?? (await api.hostingSettings());
       const result = await api.saveHosting({
-        rootPath: singleSelected.path,
+        rootPath: singleSelected.path.replace(/^\/+/, ''),
         enabled: true,
         visibility: current.visibility,
       });

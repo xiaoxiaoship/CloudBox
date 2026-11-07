@@ -124,8 +124,6 @@ const aiConfigSchema = z.object({
   apiKey: z.string().max(2000).optional(),
   model: z.string().max(200),
   dailyLimit: z.number().int().min(1).max(10_000),
-  mcpEnabled: z.boolean(),
-  mcpToken: z.string().max(256).optional(),
 });
 const mailConfigSchema = z.object({
   enabled: z.boolean(),
@@ -642,12 +640,6 @@ export function registerIpc(context: IpcContext): void {
       hasApiKey: boolean;
       apiKeyMasked: string;
       dailyLimit: number;
-      mcp: {
-        enabled: boolean;
-        token: string;
-        boundUserId: number;
-        configTemplate: unknown;
-      };
     };
     return {
       allowPublicRegistration: context.services.settings.get('allow_public_registration'),
@@ -682,7 +674,6 @@ export function registerIpc(context: IpcContext): void {
         apiKeyMasked: aiAdmin.apiKeyMasked,
         dailyLimit: aiAdmin.dailyLimit,
       },
-      mcp: aiAdmin.mcp,
       hosting: {
         enabled: context.services.settings.get('hosting.enabled'),
         baseUrl: context.services.settings.get('hosting.base_url'),
@@ -827,25 +818,10 @@ export function registerIpc(context: IpcContext): void {
       detail: {
         enabled: input.enabled,
         mode: input.mode,
-        mcpEnabled: input.mcpEnabled,
         hasApiKey: Boolean(input.apiKey && !input.apiKey.includes('***')),
       },
     });
     return adminSettings();
-  });
-
-  register(IPC.settingsGenerateMcpToken, z.undefined(), () => {
-    const admin = actor();
-    const token = context.services.ai.generateMcpToken();
-    context.services.audit.record({
-      actorType: 'admin',
-      actorId: admin.id,
-      action: 'settings.mcp-token',
-      result: 'success',
-      targetType: 'settings',
-      detail: { generated: true },
-    });
-    return { ...adminSettings(), generatedToken: token };
   });
 
   register(

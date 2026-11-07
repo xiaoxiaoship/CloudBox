@@ -4,16 +4,19 @@
   "private": true,
   "type": "module",
   "description": "CloudBox headless Linux CLI server",
-  "bin": { "cloudbox": "bin/cloudbox" },
+  "bin": {
+    "cloudbox": "bin/cloudbox"
+  },
   "scripts": {
     "start": "node src/cli/index.ts start",
     "init": "node src/cli/index.ts init",
     "typecheck": "tsc --noEmit",
     "package:tar": "node scripts/package-tar.mjs"
   },
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.2",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^13.0.3",
     "clamscan": "^2.4.0",

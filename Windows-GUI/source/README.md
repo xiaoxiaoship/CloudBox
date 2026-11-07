@@ -286,15 +286,6 @@ E2E 使用本机 Edge（`playwright-core`，不下载 Chromium），覆盖登录
   - Web 悬浮球 / Markdown / SSE 流式输出 / 5 秒全盘权限防误触
   - ReAct + Function Calling：列表、读取、建目录、重命名、删除、写入/追加文本
   - 覆盖或删除返回 `require_confirmation` 与 `actionId`，确认后执行
-- **原生 MCP Server**：
-  - `@modelcontextprotocol/sdk` Streamable HTTP `/api/mcp`
-  - Bearer Token 鉴权；Token 绑定用户网盘根目录
-  - 复用 safePath 与工作目录边界；绝对路径和 `../` 一律拒绝
-  - 与 AI 相同工具集，高危操作审计；管理端生成配置模板
-- **DSH 对接插件**：[dsh-plugin-cloudbox](dsh-plugin-cloudbox)
-  - `inject: ['tools']`，拉取 CloudBox MCP 工具并注册给 DSH
-  - 强制 System Prompt 注入网盘相对路径约束
-  - 独立 TypeScript 工程，`npm install && npm run build`
 - **内嵌静态托管**：
   - `/host/{username}/` 单端口托管，不额外映射公网端口
   - 用户选择网盘文件夹作为站点根目录；公开或私有访问
@@ -434,14 +425,15 @@ tests/
 - 用户可自助注册（可开关，默认关闭）；注册限流 2 次/小时/IP，默认分配 5 GB 配额。
 - 用户可在 Web Header 点击头像上传 PNG/JPEG/WebP（最大 600 KB）；头像以 data URL 保存到 `users.avatar_data`，管理端用户列表显示缩略图。
 
-### AI 与 MCP
+### AI 助手
+
+- 外部 MCP/DSH 集成已移除；文件读写只通过 CloudBox 内置 API/Web 使用。
 
 - 原生 AI 助手兼容 OpenAI 风格 Chat Completions，支持 Function Calling / ReAct 工具循环。
 - AI 模式：管理员共享 Key 或用户自填 Key；API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
 - 每日请求上限默认 50；工作范围可选“仅指定文件夹”或“全盘”（高危），高危工具调用需要用户确认。
 - AI 工具的文件路径同样经过网盘相对路径和 safePath 校验，不能访问宿主机绝对路径。
 - 中英文界面切换时，英文请求会在 System Prompt 追加 “Please reply to the user in English.”。
-- 原生 MCP Server 使用 Streamable HTTP，端点 `/api/mcp`，Bearer Token 鉴权，可绑定一个网盘用户；支持文件列表、读取、写入、搜索等工具（以实际工具注册表为准）。
 
 ### 插件平台
 
@@ -517,14 +509,15 @@ tests/
 - Optional public registration (default off), limited to 2 registrations/hour/IP and 5 GB default quota.
 - Users can upload a PNG/JPEG/WebP avatar (max 600 KB) from the web header. It is stored as a data URL in `users.avatar_data`; the admin user list shows a thumbnail.
 
-### AI and MCP
+### AI Assistant
+
+- External MCP/DSH integration has been removed; file access is available only through the built-in CloudBox API/Web UI.
 
 - Native AI assistant compatible with OpenAI-style Chat Completions, Function Calling and a ReAct tool loop.
 - AI modes: administrator-shared key or user-supplied key. API keys are AES-256-GCM encrypted and masked in the UI.
 - Default daily limit is 50. Work scope can be a specific folder or the entire drive (high risk); high-risk tool calls require confirmation.
 - AI tool paths use the same relative-path and safePath checks; host absolute paths are rejected.
 - When the UI is English, the system prompt appends “Please reply to the user in English.”
-- Native MCP server uses Streamable HTTP at `/api/mcp`, Bearer-token authentication and an optional bound CloudBox user. Available tools follow the registered tool set (file listing, reading, writing, search, etc.).
 
 ### Plugin Platform
 

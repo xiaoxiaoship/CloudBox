@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { AiChatClient } from '../../src/core/services/aiService.ts';
 import type { RequestContext } from '../../src/core/services/fileService.ts';
 import { createTestServer, type TestServer } from '../helpers/testServer.ts';
 
 const ctx: RequestContext = { ip: '127.0.0.1', userAgent: 'test', requestId: null };
 
-describe('native AI and MCP', () => {
+describe('native AI', () => {
   let t: TestServer | null = null;
 
   afterEach(async () => {
@@ -44,7 +42,6 @@ describe('native AI and MCP', () => {
       apiKey: 'sk-secret-12345',
       model: 'test-model',
       dailyLimit: 50,
-      mcpEnabled: false,
     });
 
     const raw = t.services.settings.get('ai.admin_api_key');
@@ -52,7 +49,6 @@ describe('native AI and MCP', () => {
     assert.ok(!raw.includes('sk-secret-12345'));
     const admin = t.services.ai.adminSettings() as {
       apiKeyMasked: string;
-      mcp: { configTemplate: unknown };
     };
     assert.equal(admin.apiKeyMasked, 'sk-***345');
 
@@ -113,7 +109,6 @@ describe('native AI and MCP', () => {
       apiKey: 'sk-secret-67890',
       model: 'test-model',
       dailyLimit: 50,
-      mcpEnabled: false,
     });
     await t.client.upload('existing.txt', Buffer.from('old content'));
 
@@ -141,49 +136,4 @@ describe('native AI and MCP', () => {
     );
   });
 
-  it('MCP Token 鉴权、工具列表和工具调用', async () => {
-    t = await createTestServer();
-    t.services.ai.saveAdmin({
-      enabled: true,
-      mode: 'admin',
-      baseUrl: 'https://example.invalid/v1',
-      apiKey: 'sk-secret-mcp',
-      model: 'test-model',
-      dailyLimit: 50,
-      mcpEnabled: true,
-      mcpToken: 'cbx_test_token',
-    });
-    t.services.settings.set('mcp.bound_user_id', t.user.id, null);
-
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`${t.client.baseUrl}/api/mcp`),
-      { requestInit: { headers: { Authorization: 'Bearer cbx_test_token' } } },
-    );
-    const client = new Client({ name: 'cloudbox-test', version: '1.0.0' });
-    await client.connect(transport);
-    const tools = await client.listTools();
-    assert.ok(tools.tools.some((tool) => tool.name === 'write_text_file'));
-    const blocked = await client.callTool({
-      name: 'read_text_file',
-      arguments: { path: 'C:\\Windows\\win.ini' },
-    });
-    assert.match(JSON.stringify(blocked), /PATH|INVALID|绝对|非法/);
-    await client.callTool({
-      name: 'write_text_file',
-      arguments: { path: 'mcp/hello.txt', content: 'from mcp' },
-    });
-    assert.equal(
-      (await t.services.files.readText(t.user, 'mcp/hello.txt', ctx)).content,
-      'from mcp',
-    );
-    await client.close();
-
-    const badTransport = new StreamableHTTPClientTransport(
-      new URL(`${t.client.baseUrl}/api/mcp`),
-      { requestInit: { headers: { Authorization: 'Bearer wrong' } } },
-    );
-    const badClient = new Client({ name: 'bad', version: '1.0.0' });
-    await assert.rejects(() => badClient.connect(badTransport));
-    await badClient.close().catch(() => {});
-  });
 });

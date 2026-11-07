@@ -46,7 +46,6 @@ CloudBox 使用了以下第三方开源软件、库和可执行工具。本项�
 | 7zip-bin | 7za 二进制分发 | MIT（7za 本体为 LGPL-2.1+） |
 | adm-zip | ZIP 处理 | MIT |
 | clamscan (npm) | ClamAV Node.js 封装 | MIT（ClamAV 本体为 GPLv2） |
-| @modelcontextprotocol/sdk | MCP Server/Client | MIT |
 | node-forge | TLS/证书处理 | BSD-3-Clause |
 | qrcode | 二维码生成 | MIT |
 | pdfjs-dist | PDF 渲染 | Apache-2.0 |
@@ -135,7 +134,6 @@ Notes:
 | 7zip-bin | 7za binary distribution | MIT (7za itself is LGPL-2.1+) |
 | adm-zip | ZIP handling | MIT |
 | clamscan (npm) | ClamAV Node.js wrapper | MIT (ClamAV itself is GPLv2) |
-| @modelcontextprotocol/sdk | MCP Server/Client | MIT |
 | @mkcert/node | Local certificate helper | MIT (per the actual package) |
 | node-forge | TLS/certificate handling | BSD-3-Clause |
 | qrcode | QR code generation | MIT |
