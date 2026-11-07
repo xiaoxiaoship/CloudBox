@@ -1,0 +1,6 @@
+{
+  "name": "ai-summary",
+  "version": "1.0.0",
+  "description": "示例插件：调用外部 AI 模型生成文本摘要",
+  "author": "CloudBox"
+}

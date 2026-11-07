@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>AI Summary 配置</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 20px; }
+      label { display: block; margin: 12px 0 4px; font-size: 13px; color: #94a3b8; }
+      input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #334155; background: #020617; color: #e2e8f0; box-sizing: border-box; }
+      button { margin-top: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: #6366f1; color: white; cursor: pointer; }
+      pre { background: #020617; padding: 10px; border-radius: 8px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h3>AI Summary 插件配置</h3>
+    <p style="color:#94a3b8;font-size:13px">此页面运行在沙箱 iframe 中，通过 postMessage 与宿主演示。</p>
+    <label>API Key</label>
+    <input id="key" type="password" placeholder="sk-..." />
+    <label>Endpoint</label>
+    <input id="endpoint" value="https://api.openai.com/v1/chat/completions" />
+    <label>Model</label>
+    <input id="model" value="gpt-4o-mini" />
+    <button id="save">保存到插件 storage</button>
+    <pre id="out">等待操作…</pre>
+    <script>
+      document.getElementById('save').onclick = () => {
+        const config = {
+          apiKey: document.getElementById('key').value,
+          endpoint: document.getElementById('endpoint').value,
+          model: document.getElementById('model').value,
+        };
+        window.parent.postMessage({ type: 'plugin-config', config }, '*');
+        document.getElementById('out').textContent = '配置已发送给宿主（示例 UI 通过插件 API 保存）';
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,51 @@
+appId: com.cloudbox.app
+productName: CloudBox
+copyright: Copyright © 2026 CloudBox
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**/*
+  - resources/**/*
+  - '!resources/bin/**'
+  - package.json
+  - '!**/*.map'
+
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - '**/*'
+
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+
+# better-sqlite3 13 使用 N-API 预编译二进制，Electron 45 可直接加载；
+# 关闭自动 rebuild，避免在缺少 MSVC/Python 的机器上打包失败。
+npmRebuild: false
+buildDependenciesFromSource: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CloudBox
+  artifactName: CloudBox-Setup-${version}-${arch}.${ext}
+
+portable:
+  artifactName: CloudBox-Portable-${version}-${arch}.${ext}

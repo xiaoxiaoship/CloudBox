@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 中启用 class 模式的深色变体（等价于 v3 的 darkMode: 'class'）。
+ * 由 <html class="dark"> 控制，theme-init.js 在首屏渲染前完成设置，避免闪烁。
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --scrollbar-thumb: rgb(203 213 225);
+}
+
+.dark {
+  color-scheme: dark;
+  --scrollbar-thumb: rgb(51 65 85);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  font-family: var(--font-sans);
+}
+
+/* 让滚动条在桌面端更轻量 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* 预览文本保留空白但不允许横向撑破容器 */
+pre {
+  tab-size: 2;
+}

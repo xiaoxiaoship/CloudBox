@@ -1,0 +1,26 @@
+/* Dark Neon Theme — 示例 CSS 注入 */
+:root {
+  --plugin-neon: #22d3ee;
+}
+
+html,
+body {
+  background: radial-gradient(circle at top left, #1e1b4b 0%, #020617 55%) !important;
+  color: #e2e8f0 !important;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(34, 211, 238, 0.16), transparent 35%),
+    radial-gradient(circle at 85% 90%, rgba(168, 85, 247, 0.14), transparent 35%);
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}

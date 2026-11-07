@@ -1,0 +1,6 @@
+{
+  "name": "dark-neon-theme",
+  "version": "1.0.0",
+  "description": "示例插件：通过 web-theme.css 注入深色霓虹主题",
+  "author": "CloudBox"
+}
