@@ -42,6 +42,7 @@ export async function apply(
       setSystemPrompt?: (prompt: string) => void;
     };
     systemPrompt?: { push?: (prompt: string) => void; prepend?: (prompt: string) => void };
+    get?: (name: string) => { push?: (prompt: string) => void; prepend?: (prompt: string) => void } | undefined;
     logger?: { info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void };
     effect?: (dispose: () => void) => void;
   },
@@ -80,8 +81,9 @@ export async function apply(
   }
 
   ctx.tools?.setSystemPrompt?.(SYSTEM_PROMPT);
-  ctx.systemPrompt?.push?.(SYSTEM_PROMPT);
-  ctx.systemPrompt?.prepend?.(SYSTEM_PROMPT);
+  const systemPrompt = ctx.get?.('systemPrompt');
+  systemPrompt?.push?.(SYSTEM_PROMPT);
+  systemPrompt?.prepend?.(SYSTEM_PROMPT);
 
   for (const tool of tools.tools) {
     register({

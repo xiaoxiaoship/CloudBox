@@ -47,8 +47,9 @@ export async function apply(ctx, config) {
         throw new Error('DSH tools 服务不可用，无法注册 CloudBox 工具');
     }
     ctx.tools?.setSystemPrompt?.(SYSTEM_PROMPT);
-    ctx.systemPrompt?.push?.(SYSTEM_PROMPT);
-    ctx.systemPrompt?.prepend?.(SYSTEM_PROMPT);
+    const systemPrompt = ctx.get?.('systemPrompt');
+    systemPrompt?.push?.(SYSTEM_PROMPT);
+    systemPrompt?.prepend?.(SYSTEM_PROMPT);
     for (const tool of tools.tools) {
         register({
             name: `cloudbox_${tool.name}`,

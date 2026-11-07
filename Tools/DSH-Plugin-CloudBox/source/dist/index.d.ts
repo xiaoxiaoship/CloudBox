@@ -25,6 +25,10 @@ export declare function apply(ctx: {
         push?: (prompt: string) => void;
         prepend?: (prompt: string) => void;
     };
+    get?: (name: string) => {
+        push?: (prompt: string) => void;
+        prepend?: (prompt: string) => void;
+    } | undefined;
     logger?: {
         info?: (...args: unknown[]) => void;
         error?: (...args: unknown[]) => void;

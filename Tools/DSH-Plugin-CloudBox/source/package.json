@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-cloudbox",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": false,
   "type": "module",
   "description": "DSH plugin that exposes CloudBox MCP file tools to DSH models.",
