@@ -239,6 +239,7 @@ The license for CloudBox's own code is to be provided by the repository maintain
 ## Tools / 工具
 
 - [CloudBox Uninstaller](Tools/CloudBox-Uninstaller/README.txt) — Windows 彻底卸载与数据清理工具（管理员权限、中英文界面）。
+- [CloudBox DSH Plugin](Tools/DSH-Plugin-CloudBox/README.md) — DSH/Cordis 对接 CloudBox MCP 的插件；源码与 `bin/dsh-plugin-cloudbox-1.0.0.tar.gz` 成品包已包含。
 
 ## 生成说明 / Generation Note
 
