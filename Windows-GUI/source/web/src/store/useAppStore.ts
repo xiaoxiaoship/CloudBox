@@ -46,6 +46,7 @@ interface AppState {
   init: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  renameAccount: (username: string) => Promise<void>;
   uploadAvatar: (file: File) => Promise<void>;
   load: (path: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -131,6 +132,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const result = await api.login(username, password);
     set({ user: result.user, error: null });
     await get().load('');
+  },
+
+  renameAccount: async (username) => {
+    const result = await api.renameAccount(username);
+    set({ user: result.user, error: null });
   },
 
   uploadAvatar: async (file) => {

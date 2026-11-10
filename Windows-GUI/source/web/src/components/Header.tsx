@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
+import { PromptDialog } from './Dialog.tsx';
 import { api } from '../api/client.ts';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore.ts';
-import { CloudIcon, FolderIcon, GearIcon, LogoutIcon, Spinner } from './Icons.tsx';
+import { CloudIcon, FolderIcon, GearIcon, LogoutIcon, PencilIcon, Spinner } from './Icons.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { AiSettingsDialog } from './AiAssistant.tsx';
 import { HostingDialog } from './HostingDialog.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
 
 export function Header() {
+  const { t } = useTranslation();
   const user = useAppStore((state) => state.user);
   const logout = useAppStore((state) => state.logout);
   const uploadAvatar = useAppStore((state) => state.uploadAvatar);
+  const renameAccount = useAppStore((state) => state.renameAccount);
   const avatarInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [hostingEnabled, setHostingEnabled] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [hostingOpen, setHostingOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   useEffect(() => {
     void api
@@ -51,7 +56,7 @@ export function Header() {
             CloudBox
           </span>
           <span className="ml-1 hidden rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400 sm:inline">
-            我的网盘
+            {t('header.myDrive')}
           </span>
         </div>
 
@@ -63,8 +68,8 @@ export function Header() {
               type="button"
               onClick={() => setAiSettingsOpen(true)}
               className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-              aria-label="AI 个人设置"
-              title="AI 个人设置"
+              aria-label={t('header.aiSettings')}
+              title={t('header.aiSettings')}
             >
               <GearIcon className="h-4 w-4" />
             </button>
@@ -74,12 +79,22 @@ export function Header() {
               type="button"
               onClick={() => setHostingOpen(true)}
               className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-              aria-label="站点托管设置"
-              title="站点托管设置"
+              aria-label={t('header.hostingSettings')}
+              title={t('header.hostingSettings')}
             >
               <FolderIcon className="h-4 w-4" />
             </button>
           ) : null}
+
+          <button
+            type="button"
+            onClick={() => setRenameOpen(true)}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+            aria-label={t('header.changeUsername')}
+            title={t('header.changeUsername')}
+          >
+            <PencilIcon className="h-4 w-4" />
+          </button>
 
           <div className="flex min-w-0 items-center gap-2">
             <input
@@ -92,7 +107,7 @@ export function Header() {
                 event.target.value = '';
                 if (!file) return;
                 void uploadAvatar(file).catch((error: unknown) => {
-                  window.alert(error instanceof Error ? error.message : '头像上传失败');
+                  window.alert(error instanceof Error ? error.message : t('header.avatarUploadFailed'));
                 });
               }}
             />
@@ -100,8 +115,8 @@ export function Header() {
               type="button"
               onClick={() => avatarInput.current?.click()}
               className="h-8 w-8 shrink-0 overflow-hidden rounded-full ring-2 ring-transparent transition hover:ring-indigo-400"
-              title="更换头像"
-              aria-label="更换头像"
+              title={t('header.changeAvatar')}
+              aria-label={t('header.changeAvatar')}
             >
               {user?.avatarDataUrl ? (
                 <img src={user.avatarDataUrl} alt={displayName} className="h-full w-full object-cover" />
@@ -116,7 +131,7 @@ export function Header() {
                 {displayName}
               </p>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                {user?.role === 'admin' ? '管理员' : '普通用户'}
+                {user?.role === 'admin' ? t('header.adminRole') : t('header.userRole')}
               </p>
             </div>
           </div>
@@ -126,15 +141,29 @@ export function Header() {
             onClick={() => void handleLogout()}
             disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            title="退出登录"
+            title={t('header.logout')}
           >
             {pending ? <Spinner className="h-4 w-4" /> : <LogoutIcon className="h-4 w-4" />}
-            <span className="hidden sm:inline">退出</span>
+            <span className="hidden sm:inline">{t('header.logoutShort')}</span>
           </button>
         </div>
       </div>
       {aiSettingsOpen ? <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} /> : null}
       {hostingOpen ? <HostingDialog onClose={() => setHostingOpen(false)} /> : null}
+      {renameOpen ? (
+        <PromptDialog
+          title={t('header.changeUsername')}
+          description={t('header.usernameChangedHint')}
+          label={t('header.newUsername')}
+          initialValue={user?.username ?? ''}
+          confirmLabel={t('header.save')}
+          onClose={() => setRenameOpen(false)}
+          onSubmit={async (username) => {
+            await renameAccount(username);
+            setRenameOpen(false);
+          }}
+        />
+      ) : null}
     </header>
   );
 }

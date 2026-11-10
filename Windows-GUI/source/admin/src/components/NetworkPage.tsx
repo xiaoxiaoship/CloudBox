@@ -64,6 +64,10 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     proxyProtocol: false,
   });
   const [frpPending, setFrpPending] = useState<string | null>(null);
+  const [frpSync, setFrpSync] = useState(false);
+  const [frpSyncPending, setFrpSyncPending] = useState(false);
+  const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
+  const [schedulePending, setSchedulePending] = useState(false);
   const frpLoaded = useRef(false);
 
   useEffect(() => {
@@ -96,6 +100,55 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([call(api.server.getSchedule()), call(api.frp.getSync())])
+      .then(([nextSchedule, nextSync]) => {
+        if (!active) return;
+        setSchedule(nextSchedule);
+        setFrpSync(nextSync.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveSchedule = async (): Promise<void> => {
+    setSchedulePending(true);
+    try {
+      setSchedule(await call(api.server.setSchedule(schedule)));
+      notify('success', 'Web 服务定时设置已保存');
+    } catch (error) {
+      notify('error', errorMessage(error));
+    } finally {
+      setSchedulePending(false);
+    }
+  };
+
+  const toggleFrpSync = async (enabled: boolean): Promise<void> => {
+    setFrpSyncPending(true);
+    try {
+      const result = await call(api.frp.setSync({ enabled }));
+      setFrpSync(result.enabled);
+      notify('success', enabled ? 'frp 将随 Web 服务同步启停' : 'frp 同步已关闭');
+    } catch (error) {
+      notify('error', errorMessage(error));
+    } finally {
+      setFrpSyncPending(false);
+    }
+  };
+
+  const toggleAutoStart = async (enabled: boolean): Promise<void> => {
+    try {
+      await call(api.server.setAutoStart({ enabled }));
+      notify('success', enabled ? '程序启动后将自动开启 Web 服务' : '已关闭程序启动自动在线');
+      await refreshServer();
+    } catch (error) {
+      notify('error', errorMessage(error));
+    }
+  };
 
   const toggleTrustProxy = async (enabled: boolean): Promise<void> => {
     setTrustProxyPending(true);
@@ -413,6 +466,30 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             {server.error}
           </div>
         ) : null}
+
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-200">Web 服务定时开关</p>
+              <p className="mt-1 text-[11px] text-slate-500">启用后每天在指定时间窗口自动启停 Web 服务；跨午夜会自动识别。</p>
+            </div>
+            <button type="button" role="switch" aria-checked={schedule.enabled} aria-label="Web 服务定时开关" onClick={() => setSchedule((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${schedule.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${schedule.enabled ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          {schedule.enabled ? (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="text-[11px] text-slate-500">开始时间<input type="time" value={schedule.start} onChange={(event) => setSchedule((current) => ({ ...current, start: event.target.value }))} className={`${INPUT_CLASS} mt-1 w-32`} /></label>
+              <label className="text-[11px] text-slate-500">停止时间<input type="time" value={schedule.end} onChange={(event) => setSchedule((current) => ({ ...current, end: event.target.value }))} className={`${INPUT_CLASS} mt-1 w-32`} /></label>
+              <button type="button" onClick={() => void saveSchedule()} disabled={schedulePending} className={PRIMARY_BUTTON}>{schedulePending ? <Spinner className="h-4 w-4" /> : null}保存定时</button>
+            </div>
+          ) : null}
+        </div>
+
+        <label className="mt-4 flex w-fit items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+          <input type="checkbox" checked={server?.autoStart ?? false} onChange={(event) => void toggleAutoStart(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
+          程序启动后自动开启在线模式
+        </label>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
@@ -822,9 +899,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
                 ? `当前使用 TCP 隧道指向本地 ${server?.protocol.toUpperCase() ?? 'HTTP'} 端口。TCP 端口映射也可以访问托管站点；但 TCP 不携带 X-Forwarded-For，真实客户端 IP 不可用。`
                 : `当前使用 ${frpConfig.tunnelType.toUpperCase()} 隧道，frps 会注入 X-Forwarded-For，请同时开启“信任反向代理的真实 IP”。`}
             </p>
-            <p className="mt-1 text-[11px] leading-5 text-amber-300">
-              TCP 隧道不携带 X-Forwarded-For；HTTP/HTTPS 隧道支持域名与真实客户端 IP。PROXY protocol v2 需要本地 TLS 前端先解析，当前版本尚未适配，开启会导致连接失败。
-            </p>
           </div>
 
           <div className="flex gap-2">
@@ -857,6 +931,11 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </button>
           </div>
         </div>
+
+        <label className="mt-4 flex w-fit items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+          <input type="checkbox" checked={frpSync} disabled={frpSyncPending} onChange={(event) => void toggleFrpSync(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
+          frp 启停与 Web 服务启停同步
+        </label>
 
         {!frp?.available ? (
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-[11px] leading-5 text-amber-300">

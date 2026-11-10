@@ -78,8 +78,6 @@
   - `cloudbox.db`、`storage/`、`plugins/`、`config/`、`tmp/`
   - `config/ssl/`、`config/frpc.toml`
 - Windows 默认缓存目录：`%LOCALAPPDATA%\cloudbox`
-- Linux 系统模式：`/var/lib/cloudbox`
-- Linux `--portable`：当前目录 `./data`
 
 ## Complete Features & Mechanisms (English)
 
@@ -160,5 +158,3 @@
   - `cloudbox.db`, `storage/`, `plugins/`, `config/`, `tmp/`
   - `config/ssl/`, `config/frpc.toml`
 - Windows cache: `%LOCALAPPDATA%\cloudbox`
-- Linux system mode: `/var/lib/cloudbox`
-- Linux `--portable`: `./data`

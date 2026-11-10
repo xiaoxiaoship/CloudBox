@@ -1,18 +1,16 @@
+﻿> **已停止支持 / Support discontinued**: CloudBox Linux CLI is no longer maintained or released. The historical source and binaries are kept only for reference.
+
 # CloudBox Linux CLI v1.0.0
 
-CloudBox Linux 是无头命令行版本，不包含 Electron、Chromium 或管理员 GUI；保留核心网盘后端和 Web 用户端。
+CloudBox Linux 鏄棤澶村懡浠よ鐗堟湰锛屼笉鍖呭惈 Electron銆丆hromium 鎴栫鐞嗗憳 GUI锛涗繚鐣欐牳蹇冪綉鐩樺悗绔拰 Web 鐢ㄦ埛绔€?
+## 閮ㄧ讲鎸囧崡
 
-## 部署指南
-
-### 环境要求
+### 鐜瑕佹眰
 
 - Linux x86_64
 - Node.js >= 22.18
-- 可选：ClamAV（`/usr/bin/clamscan`）
-- 可选：frpc（内网穿透，放入 PATH 或 `resources/bin/frpc`）
-- 可选：7za（压缩包已提供 `resources/bin/7za`）
-
-### 安装
+- 鍙€夛細ClamAV锛坄/usr/bin/clamscan`锛?- 鍙€夛細frpc锛堝唴缃戠┛閫忥紝鏀惧叆 PATH 鎴?`resources/bin/frpc`锛?- 鍙€夛細7za锛堝帇缂╁寘宸叉彁渚?`resources/bin/7za`锛?
+### 瀹夎
 
 ```bash
 tar -xzf cloudbox-linux-0.1.0.tar.gz
@@ -20,15 +18,15 @@ cd cloudbox-linux-0.1.0
 sudo bash install.sh
 ```
 
-安装脚本会：
+瀹夎鑴氭湰浼氾細
 
-1. 创建 `cloudbox` 系统用户
-2. 部署到 `/opt/cloudbox`
-3. 创建 `/var/lib/cloudbox`
-4. 安装生产依赖
-5. 注册并启动 `cloudbox.service`
+1. 鍒涘缓 `cloudbox` 绯荤粺鐢ㄦ埛
+2. 閮ㄧ讲鍒?`/opt/cloudbox`
+3. 鍒涘缓 `/var/lib/cloudbox`
+4. 瀹夎鐢熶骇渚濊禆
+5. 娉ㄥ唽骞跺惎鍔?`cloudbox.service`
 
-### 手动运行
+### 鎵嬪姩杩愯
 
 ```bash
 cd source
@@ -37,15 +35,14 @@ node src/cli/index.ts init
 node src/cli/index.ts start
 ```
 
-便携模式（数据写入当前目录 `./data`）：
+渚挎惡妯″紡锛堟暟鎹啓鍏ュ綋鍓嶇洰褰?`./data`锛夛細
 
 ```bash
 node src/cli/index.ts --portable start
 ```
 
-默认监听 `0.0.0.0:8686`，Web 用户端使用 `dist/web`。
-
-## 指令大全
+榛樿鐩戝惉 `0.0.0.0:8686`锛學eb 鐢ㄦ埛绔娇鐢?`dist/web`銆?
+## 鎸囦护澶у叏
 
 ```text
 cloudbox start [--portable] [--port <port>] [--host <host>]
@@ -58,8 +55,7 @@ cloudbox plugin enable <name>
 cloudbox plugin disable <name>
 ```
 
-示例：
-
+绀轰緥锛?
 ```bash
 cloudbox init --username admin
 cloudbox start --portable --port 8686
@@ -68,138 +64,63 @@ cloudbox reset-admin
 cloudbox plugin list
 ```
 
-## 功能差异说明
+## 鍔熻兘宸紓璇存槑
 
-Linux CLI 保留：
+Linux CLI 淇濈暀锛?
+- SQLite銆佺敤鎴?閰嶉銆佹枃浠朵笂浼犱笅杞姐€侀瑙堜笌 Range
+- 鍒嗕韩銆佽В鍘嬨€丆lamAV 鏌ユ潃銆丄I
+- 鎻掍欢瀛愯繘绋嬨€侀潤鎬佹墭绠°€侀偖浠跺憡璀?- Web 鐢ㄦ埛绔?
+Linux CLI 涓嶅寘鍚細
 
-- SQLite、用户/配额、文件上传下载、预览与 Range
-- 分享、解压、ClamAV 查杀、AI
-- 插件子进程、静态托管、邮件告警
-- Web 用户端
+- Electron 绠＄悊鍛?GUI
+- 绉佹湁 CA / HTTPS / mTLS 绠＄悊
+- frp 鍙鍖栭厤缃笌鍚姩绠＄悊锛堜粎鎻愪緵 `frpc` 瑙ｆ瀽锛?- 鍙鍖栫洰褰曡縼绉?- 瀹屾暣鐨勯偖浠?AI/鎵樼/鏉冮檺璁剧疆 CLI锛堢洰鍓?`config` 浠呮敮鎸?port/host锛?
+闇€瑕?HTTPS 鏃讹紝寤鸿浣跨敤 Nginx/Caddy 鍙嶅悜浠ｇ悊銆?
+## 鑷磋阿涓庡紑婧愬崗璁?
+CloudBox Linux 浣跨敤浜嗕互涓嬪紑婧愰」鐩細
 
-Linux CLI 不包含：
-
-- Electron 管理员 GUI
-- 私有 CA / HTTPS / mTLS 管理
-- frp 可视化配置与启动管理（仅提供 `frpc` 解析）
-- 可视化目录迁移
-- 完整的邮件/AI/托管/权限设置 CLI（目前 `config` 仅支持 port/host）
-
-需要 HTTPS 时，建议使用 Nginx/Caddy 反向代理。
-
-## 致谢与开源协议
-
-CloudBox Linux 使用了以下开源项目：
-
-- **frp**：内网穿透与 HTTP/HTTPS 隧道，Apache-2.0；通过独立 `frpc` 进程调用，未修改源码。
-- **ClamAV**：本地病毒扫描，GPLv2；调用系统 `/usr/bin/clamscan`，未修改源码。
-- **7-Zip / 7za**：压缩包解压，LGPL-2.1+（含 unRAR 限制条款）；通过独立 `7za` 进程调用，未修改源码。
-- Node.js、Express、better-sqlite3、i18next、Node.js 等，详见完整清单。
-
-完整组件与许可证信息见：
+- **frp**锛氬唴缃戠┛閫忎笌 HTTP/HTTPS 闅ч亾锛孉pache-2.0锛涢€氳繃鐙珛 `frpc` 杩涚▼璋冪敤锛屾湭淇敼婧愮爜銆?- **ClamAV**锛氭湰鍦扮梾姣掓壂鎻忥紝GPLv2锛涜皟鐢ㄧ郴缁?`/usr/bin/clamscan`锛屾湭淇敼婧愮爜銆?- **7-Zip / 7za**锛氬帇缂╁寘瑙ｅ帇锛孡GPL-2.1+锛堝惈 unRAR 闄愬埗鏉℃锛夛紱閫氳繃鐙珛 `7za` 杩涚▼璋冪敤锛屾湭淇敼婧愮爜銆?- Node.js銆丒xpress銆乥etter-sqlite3銆乮18next銆丯ode.js 绛夛紝璇﹁瀹屾暣娓呭崟銆?
+瀹屾暣缁勪欢涓庤鍙瘉淇℃伅瑙侊細
 
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 
-Linux 发布包不包含 Electron 与 Chromium；7za 以独立二进制形式分发，未与 CloudBox 源码合并。
-
+Linux 鍙戝竷鍖呬笉鍖呭惈 Electron 涓?Chromium锛?za 浠ョ嫭绔嬩簩杩涘埗褰㈠紡鍒嗗彂锛屾湭涓?CloudBox 婧愮爜鍚堝苟銆?
 ---
 
-## 完整功能与实现机制（补充）
+## 瀹屾暣鍔熻兘涓庡疄鐜版満鍒讹紙琛ュ厖锛?
+### 璐﹀彿銆佷細璇濅笌瀹夊叏
 
-### 账号、会话与安全
+- 瀵嗙爜浣跨敤 **scrypt** 鍝堝笇锛圢=32768锛夛紝鏁版嵁搴撲腑涓嶄繚瀛樻槑鏂囧瘑鐮併€?- 鐧诲綍浼氳瘽浣跨敤闅忔満浼氳瘽浠ょ墝锛涙暟鎹簱鍙繚瀛樹护鐗岀殑 SHA-256 鍝堝笇锛屾祻瑙堝櫒浣跨敤 `HttpOnly`銆乣SameSite=Lax` Cookie銆?- 榛樿浼氳瘽鏈夋晥鏈?`security.sessionTtlHours = 168` 灏忔椂锛沗last_seen` 姣?60 绉掓渶澶氭洿鏂颁竴娆★紝闄嶄綆鏁版嵁搴撳啓鍏ャ€?- 闈?GET/HEAD 璇锋眰瑕佹眰 CSRF Token锛汣SRF Cookie 涓?Session Cookie 鍒嗙銆?- **鐧诲綍澶辫触閿佸畾鎸夎处鍙疯鏁帮紝涓嶆槸鎸?IP**锛氶粯璁よ繛缁け璐?**5 娆?*鍚庨攣瀹氾紱闃堝€笺€侀娆￠攣瀹氬垎閽熴€佹渶闀块攣瀹氬垎閽熴€両P 鐧诲綍璇锋眰涓婇檺鍜岀粺璁＄獥鍙ｅ潎鍙湪绠＄悊绔€滅櫥褰曞け璐ヤ繚鎶も€濅腑閰嶇疆銆傞粯璁ら娆￠攣瀹?1 鍒嗛挓锛屼箣鍚庢寜 `鍩烘暟 脳 2^(澶辫触娆℃暟-闃堝€?` 鎸囨暟澧為暱锛屾渶闀?60 鍒嗛挓銆?- 绠＄悊鍛?GUI 鐨勨€滅敤鎴风鐞嗏€濇彁渚?**蹇€熻В閿?*锛氭竻闄よ璐﹀彿鐨?`failed_attempts` 涓?`locked_until`锛屾棤闇€绛夊緟閿佸畾鍒版湡锛涚敤鎴峰瘑鐮侀噸缃€佺鐢ㄨ处鍙枫€佷細璇濇挙閿€涔熷湪绠＄悊绔畬鎴愩€?- 璐﹀彿涓嶅瓨鍦ㄦ椂浠嶆墽琛屼竴娆?scrypt 鏍￠獙锛岄檷浣庨€氳繃鍝嶅簲鏃堕棿鏋氫妇鐢ㄦ埛鍚嶇殑椋庨櫓銆?- IP 缁村害鍙︽湁鐙珛闄愭祦锛氱櫥褰?30 娆?15 鍒嗛挓/IP锛涘叏閮?API 600 娆?鍒嗛挓/IP锛涗笂浼?120 娆?鍒嗛挓/IP锛涙敞鍐?2 娆?灏忔椂/IP锛涘垎浜垱寤?10 娆?鍒嗛挓/鐢ㄦ埛锛涘垎浜笅杞?60 娆?鍒嗛挓/IP+Token锛涜В鍘?鏌ユ潃 10 娆?鍒嗛挓/鐢ㄦ埛銆?- 闄愭祦瑙﹀彂杩斿洖 429锛屽苟鍙彂閫?`security.alert` 閭欢鍛婅锛涘彲閫変俊浠?`X-Forwarded-For`锛堜粎寤鸿鍦?frp/Nginx 鍙嶅悜浠ｇ悊鍚庡紑鍚級銆?- 瀹夊叏瀹¤璁板綍鐧诲綍鎴愬姛/澶辫触/閿佸畾銆侀€€鍑恒€佷細璇濊疆鎹?鎾ら攢銆佺鐞嗗憳閲嶇疆瀵嗙爜銆佺敤鎴风鐢?瑙ｉ攣銆佹彃浠跺惎鍋溿€佹墭绠″彉鏇淬€侀偖浠惰缃彉鏇寸瓑鎿嶄綔銆?- 鏂囦欢璺緞缁熶竴缁忚繃 `safePath` 鏍￠獙锛涙嫆缁?`..`銆佺粷瀵硅矾寰勩€佺鍙烽摼鎺ラ€冮€革紱涓婁紶涓存椂鐩綍銆侀厤棰濆拰鏂囦欢澶у皬鍧囧彈闄愩€?- 榛樿鍗曟枃浠朵笂闄?2 GB锛涙墍鏈変笂浼犻€氳繃 busboy 娴佸紡澶勭悊锛屼笉鎶婂畬鏁存枃浠惰鍏ュ唴瀛樸€?
+### 鏂囦欢銆侀瑙堜笌鍒嗕韩
 
-- 密码使用 **scrypt** 哈希（N=32768），数据库中不保存明文密码。
-- 登录会话使用随机会话令牌；数据库只保存令牌的 SHA-256 哈希，浏览器使用 `HttpOnly`、`SameSite=Lax` Cookie。
-- 默认会话有效期 `security.sessionTtlHours = 168` 小时；`last_seen` 每 60 秒最多更新一次，降低数据库写入。
-- 非 GET/HEAD 请求要求 CSRF Token；CSRF Cookie 与 Session Cookie 分离。
-- **登录失败锁定按账号计数，不是按 IP**：默认连续失败 **5 次**后锁定；阈值、首次锁定分钟、最长锁定分钟、IP 登录请求上限和统计窗口均可在管理端“登录失败保护”中配置。默认首次锁定 1 分钟，之后按 `基数 × 2^(失败次数-阈值)` 指数增长，最长 60 分钟。
-- 管理员 GUI 的“用户管理”提供 **快速解锁**：清除该账号的 `failed_attempts` 与 `locked_until`，无需等待锁定到期；用户密码重置、禁用账号、会话撤销也在管理端完成。
-- 账号不存在时仍执行一次 scrypt 校验，降低通过响应时间枚举用户名的风险。
-- IP 维度另有独立限流：登录 30 次/15 分钟/IP；全部 API 600 次/分钟/IP；上传 120 次/分钟/IP；注册 2 次/小时/IP；分享创建 10 次/分钟/用户；分享下载 60 次/分钟/IP+Token；解压/查杀 10 次/分钟/用户。
-- 限流触发返回 429，并可发送 `security.alert` 邮件告警；可选信任 `X-Forwarded-For`（仅建议在 frp/Nginx 反向代理后开启）。
-- 安全审计记录登录成功/失败/锁定、退出、会话轮换/撤销、管理员重置密码、用户禁用/解锁、插件启停、托管变更、邮件设置变更等操作。
-- 文件路径统一经过 `safePath` 校验；拒绝 `..`、绝对路径、符号链接逃逸；上传临时目录、配额和文件大小均受限。
-- 默认单文件上限 2 GB；所有上传通过 busboy 流式处理，不把完整文件读入内存。
+- 鏈湴澶氱敤鎴风綉鐩橈細鐩綍銆佷笂浼犮€佷笅杞姐€侀噸鍛藉悕銆佸垹闄ゃ€侀厤棰濄€佺敤閲忕粺璁°€?- 鍥剧墖/瑙嗛/PDF/鏂囨湰棰勮锛涢煶棰戞敮鎸?MP3/WAV/OGG/FLAC/AAC/M4A銆?- 棰勮鎺ュ彛浣跨敤鏈嶅姟绔?MIME 鐧藉悕鍗曚笌鏂囦欢榄旀暟鏍￠獙锛汬TML/SVG 绛変富鍔ㄥ唴瀹逛笉鍐呰仈鎵ц銆?- 涓嬭浇/棰勮鏀寔鍗曟 HTTP Range锛岃繑鍥?206銆乣Content-Range`銆乣Accept-Ranges`锛屽彲鎷栧姩鎾斁杩涘害銆?- 鏂囦欢鍒嗕韩浣跨敤闅忔満 Token锛屽彲璁剧疆鏈夋晥鏈燂紱鍏紑鍒嗕韩鎺ュ彛涓庣櫥褰曟€佸垎浜帴鍙ｅ垎绂汇€?- 7za 瑙ｅ帇 zip / 7z / rar / tar.gz锛涘鍘嬬缉鍖呮潯鐩€愭潯鍋氳矾寰勬牎楠岋紝闃绘 zip-slip锛涜В鍘嬭鍏ラ厤棰濄€?- ClamAV 鏈湴鏌ユ潃涓?VirusTotal API 鏌ユ潃锛沄irusTotal 鏂囦欢涓婇檺 32 MB锛沬nfected 鏂囦欢寮哄埗绂佹涓嬭浇銆佸垎浜拰瑙ｅ帇銆?- 闊抽鎾斁鍣細鍏ㄥ眬 Zustand 鐘舵€併€佸綋鍓嶇洰褰曡嚜鍔ㄦ挱鏀惧垪琛ㄣ€佷笂涓€棣?涓嬩竴棣栥€佽繘搴?闊抽噺銆佸垏鎹㈢洰褰曚笉涓柇锛涘獟浣撴祦鎸?Range 璇诲彇锛屼笉鏁撮杞藉叆鍐呭瓨銆?
+### 鏉冮檺涓庣敤鎴?
+- 绠＄悊鍛樺彲寮€鍏筹細鍥剧墖棰勮銆佽棰戦瑙堛€丳DF 棰勮銆佸湪绾胯В鍘嬨€佸畨鍏ㄦ煡鏉€銆?- 鍏抽棴鏉冮檺鍚?Web 绔殣钘忓叆鍙ｏ紝鍚庣鎺ュ彛鍚屾椂杩斿洖 403锛屼笉鑳介€氳繃鐩存帴璋冪敤缁曡繃銆?- 鐢ㄦ埛瑙掕壊锛氱鐞嗗憳/鏅€氱敤鎴凤紱鐘舵€侊細姝ｅ父/绂佺敤锛涢厤棰濆彲涓?null锛堜笉闄愰噺锛夈€?- 鐢ㄦ埛鍙嚜鍔╂敞鍐岋紙鍙紑鍏筹紝榛樿鍏抽棴锛夛紱娉ㄥ唽闄愭祦 2 娆?灏忔椂/IP锛岄粯璁ゅ垎閰?5 GB 閰嶉銆?- 鐢ㄦ埛鍙湪 Web Header 鐐瑰嚮澶村儚涓婁紶 PNG/JPEG/WebP锛堟渶澶?600 KB锛夛紱澶村儚浠?data URL 淇濆瓨鍒?`users.avatar_data`锛岀鐞嗙鐢ㄦ埛鍒楄〃鏄剧ず缂╃暐鍥俱€?
+### AI 鍔╂墜
 
-### 文件、预览与分享
+- 澶栭儴 MCP/DSH 闆嗘垚宸茬Щ闄わ紱鏂囦欢璇诲啓鍙€氳繃 CloudBox 鍐呯疆 API/Web 浣跨敤銆?
+- 鍘熺敓 AI 鍔╂墜鍏煎 OpenAI 椋庢牸 Chat Completions锛屾敮鎸?Function Calling / ReAct 宸ュ叿寰幆銆?- AI 妯″紡锛氱鐞嗗憳鍏变韩 Key 鎴栫敤鎴疯嚜濉?Key锛汚PI Key 浣跨敤 AES-256-GCM 鍔犲瘑钀界洏锛岀晫闈㈠彧鏄剧ず鑴辨晱鍊笺€?- 姣忔棩璇锋眰涓婇檺榛樿 50锛涘伐浣滆寖鍥村彲閫夆€滀粎鎸囧畾鏂囦欢澶光€濇垨鈥滃叏鐩樷€濓紙楂樺嵄锛夛紝楂樺嵄宸ュ叿璋冪敤闇€瑕佺敤鎴风‘璁ゃ€?- AI 宸ュ叿鐨勬枃浠惰矾寰勫悓鏍风粡杩囩綉鐩樼浉瀵硅矾寰勫拰 safePath 鏍￠獙锛屼笉鑳借闂涓绘満缁濆璺緞銆?- 涓嫳鏂囩晫闈㈠垏鎹㈡椂锛岃嫳鏂囪姹備細鍦?System Prompt 杩藉姞 鈥淧lease reply to the user in English.鈥濄€?
+### 鎻掍欢骞冲彴
 
-- 本地多用户网盘：目录、上传、下载、重命名、删除、配额、用量统计。
-- 图片/视频/PDF/文本预览；音频支持 MP3/WAV/OGG/FLAC/AAC/M4A。
-- 预览接口使用服务端 MIME 白名单与文件魔数校验；HTML/SVG 等主动内容不内联执行。
-- 下载/预览支持单段 HTTP Range，返回 206、`Content-Range`、`Accept-Ranges`，可拖动播放进度。
-- 文件分享使用随机 Token，可设置有效期；公开分享接口与登录态分享接口分离。
-- 7za 解压 zip / 7z / rar / tar.gz；对压缩包条目逐条做路径校验，阻止 zip-slip；解压计入配额。
-- ClamAV 本地查杀与 VirusTotal API 查杀；VirusTotal 文件上限 32 MB；infected 文件强制禁止下载、分享和解压。
-- 音频播放器：全局 Zustand 状态、当前目录自动播放列表、上一首/下一首、进度/音量、切换目录不中断；媒体流按 Range 读取，不整首载入内存。
+- 鎻掍欢鍦?`child_process.fork` 鐙珛瀛愯繘绋嬩腑杩愯锛涗富杩涚▼涓?`require` 鎻掍欢浠ｇ爜銆?- 瀛愯繘绋嬬幆澧冨彉閲忔渶灏忓寲锛涗富杩涚▼涓庢彃浠堕€氳繃 IPC 杞彂 HTTP 璇锋眰銆佷簨浠朵笌鏃ュ織銆?- 鎻掍欢 `manifest.json` 瀹氫箟鍚嶇О/鐗堟湰锛沗index.js` 瀵煎嚭 `activate(ctx)`銆?- `ctx` 鎻愪緵 `createRouter/registerRouter`銆乣on` 浜嬩欢銆乣storage` 绉佹湁瀛樺偍銆乣logger`銆乣manifest`銆?- 鎻掍欢绠＄悊绔?UI 浠?`sandbox="allow-scripts allow-forms"` iframe 鍔犺浇锛涙敮鎸?`web-theme.css` 娉ㄥ叆涓?`web-override/` 鎺ョ Web 棣栭〉銆?- 鎻掍欢瀵煎叆 ZIP 鏃堕€愭潯鏍￠獙璺緞锛屾嫆缁?`../` 鍜岀粷瀵硅矾寰勶紱鍚敤/绂佺敤/鎺ョ/鍗歌浇鍐欏璁℃棩蹇椼€?- 瀵煎叆榛樿绂佺敤锛涙彃浠跺紓甯歌繑鍥?`PLUGIN_ERROR`锛屼笉浼氳涓绘湇鍔″穿婧冦€?
+### 闈欐€佹墭绠°€乀LS 涓?frp
 
-### 权限与用户
+- 闈欐€佺珯鐐规寕杞藉湪 `/host/:username/*`锛屾敮鎸?public/private 鍙鎬э紱private 绔欑偣蹇呴』鐧诲綍銆?- 鎵樼璇诲彇缁忚繃 safePath 鏍￠獙锛孋SP sandbox锛汼PA fallback 鍒?`index.html`銆?- 绉佹湁 CA 閫氳繃 mkcert 鐢熸垚锛涙湇鍔＄璇佷功浣嶄簬 `config/ssl/server/`锛孋A 浣嶄簬 `config/ssl/ca/`锛涙敮鎸?HTTPS 涓?mTLS銆備竴閿鍙戞椂鍙～鍐欓澶栫殑鍩熷悕/IP锛堥€楀彿鍒嗛殧锛夛紝浼氳嚜鍔ㄥ姞鍏?SAN锛屽苟淇濈暀 localhost銆?27.0.0.1銆?:1銆乭ostname 涓庡眬鍩熺綉 IP锛涙牴 CA 涓嶅彉銆?- 鐧诲綍椤靛湪 HTTPS 涓?CA 鍙敤鏃舵樉绀烘牴璇佷功涓嬭浇鍏ュ彛锛涘鎴风鏈俊浠?CA 鏃堕渶鍏堝湪娴忚鍣ㄤ腑缁х画璁块棶鎴栧鍏ユ牴璇佷功銆?- mTLS 寮€鍚悗瀹㈡埛绔繀椤诲厛鏈夊鎴风璇佷功锛屽惁鍒?TLS 鎻℃墜闃舵灏变細澶辫触锛岀櫥褰曢〉鏃犳硶浣滀负棣栨璇佷功寮曞鍏ュ彛銆?- frp 鏀寔 TCP/HTTP/HTTPS 闅ч亾锛涢厤缃寘鍚?`serverAddr/serverPort`銆乣auth.method/auth.token`銆佸畼鏂规牸寮忚姹傜殑椤跺眰 `user`銆乣[transport] protocol=tcp` 涓?`[transport.tls] enable=true`銆?- frp 鏃ュ織淇濆瓨鍦ㄧ鐞嗙鍐呭瓨鐜舰缂撳啿锛孏UI 缃戠粶璁剧疆瀹炴椂鏌ョ湅銆俆CP 鏄犲皠鍙敤浜?Web 涓庨潤鎬佹墭绠★紝浣嗕笉鎼哄甫鐪熷疄瀹㈡埛绔?IP锛汬TTP/HTTPS 闅ч亾鏀寔鍩熷悕銆乴ocations 鍜岀湡瀹?IP銆侾ROXY protocol v2 閫夐」宸茬Щ闄わ紙鏈湴 TLS 鍓嶇鏈€傞厤锛夛紝涓嶈閫氳繃鎵嬪伐閰嶇疆鍚敤銆?
+### 閭欢銆侀€氱煡涓庤繍缁?
+- SMTP 閫氳繃 nodemailer 寮傛鍙戦€侊紝涓嶉樆濉炰富绾跨▼锛涘瘑鐮佷娇鐢?AES-256-GCM 鍔犲瘑锛岀晫闈㈣劚鏁忋€?- 鏀寔鏂扮敤鎴锋敞鍐屻€佸畨鍏ㄥ憡璀︼紙璐﹀彿閿佸畾/IP 闄愭祦锛夈€佺郴缁熼敊璇笁绫讳簨浠讹紱鍚岀被浜嬩欢 60 绉掑喎鍗达紝澶辫触鍙啓鏃ュ織涓嶆姏鍑恒€?- 绠＄悊绔彲鍙戦€佹祴璇曢偖浠躲€?- 鏀寔鏁版嵁搴撳湪绾垮浠姐€佹暟鎹?瀛樺偍/鎻掍欢鐩綍杩佺Щ锛涜縼绉诲墠鏍￠獙鐩爣璺緞骞堕噸鍚簲鐢ㄣ€?- Windows 鍗歌浇宸ュ叿鏀寔榛樿/鑷畾涔夋暟鎹洰褰曘€佺▼搴忔湰浣撱€佸揩鎹锋柟寮忋€佹敞鍐岃〃鍗歌浇椤?杞欢椤?鍚姩椤癸紱鍚姩鐢宠绠＄悊鍛樻潈闄愶紝鏀寔涓枃/English銆?- 涓嫳鏂?i18n锛歚zh-CN` / `en-US`锛岃瑷€鍋忓ソ瀛?`localStorage`锛岄粯璁ゆ寜 `navigator.language` 璇嗗埆銆?
+### 榛樿璺緞
 
-- 管理员可开关：图片预览、视频预览、PDF 预览、在线解压、安全查杀。
-- 关闭权限后 Web 端隐藏入口，后端接口同时返回 403，不能通过直接调用绕过。
-- 用户角色：管理员/普通用户；状态：正常/禁用；配额可为 null（不限量）。
-- 用户可自助注册（可开关，默认关闭）；注册限流 2 次/小时/IP，默认分配 5 GB 配额。
-- 用户可在 Web Header 点击头像上传 PNG/JPEG/WebP（最大 600 KB）；头像以 data URL 保存到 `users.avatar_data`，管理端用户列表显示缩略图。
+- Windows 榛樿鏁版嵁鐩綍锛歚%APPDATA%\cloudbox`
+  - `cloudbox.db`銆乣storage/`銆乣plugins/`銆乣config/`銆乣tmp/`
+  - `config/ssl/`銆乣config/frpc.toml`
+- Windows 榛樿缂撳瓨鐩綍锛歚%LOCALAPPDATA%\cloudbox`
+- Linux 绯荤粺妯″紡锛歚/var/lib/cloudbox`
+- Linux `--portable`锛氬綋鍓嶇洰褰?`./data`
 
-### AI 助手
+## 杩戞湡閲嶈鍙樻洿
 
-- 外部 MCP/DSH 集成已移除；文件读写只通过 CloudBox 内置 API/Web 使用。
-
-- 原生 AI 助手兼容 OpenAI 风格 Chat Completions，支持 Function Calling / ReAct 工具循环。
-- AI 模式：管理员共享 Key 或用户自填 Key；API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
-- 每日请求上限默认 50；工作范围可选“仅指定文件夹”或“全盘”（高危），高危工具调用需要用户确认。
-- AI 工具的文件路径同样经过网盘相对路径和 safePath 校验，不能访问宿主机绝对路径。
-- 中英文界面切换时，英文请求会在 System Prompt 追加 “Please reply to the user in English.”。
-
-### 插件平台
-
-- 插件在 `child_process.fork` 独立子进程中运行；主进程不 `require` 插件代码。
-- 子进程环境变量最小化；主进程与插件通过 IPC 转发 HTTP 请求、事件与日志。
-- 插件 `manifest.json` 定义名称/版本；`index.js` 导出 `activate(ctx)`。
-- `ctx` 提供 `createRouter/registerRouter`、`on` 事件、`storage` 私有存储、`logger`、`manifest`。
-- 插件管理端 UI 以 `sandbox="allow-scripts allow-forms"` iframe 加载；支持 `web-theme.css` 注入与 `web-override/` 接管 Web 首页。
-- 插件导入 ZIP 时逐条校验路径，拒绝 `../` 和绝对路径；启用/禁用/接管/卸载写审计日志。
-- 导入默认禁用；插件异常返回 `PLUGIN_ERROR`，不会让主服务崩溃。
-
-### 静态托管、TLS 与 frp
-
-- 静态站点挂载在 `/host/:username/*`，支持 public/private 可见性；private 站点必须登录。
-- 托管读取经过 safePath 校验，CSP sandbox；SPA fallback 到 `index.html`。
-- 私有 CA 通过 mkcert 生成；服务端证书位于 `config/ssl/server/`，CA 位于 `config/ssl/ca/`；支持 HTTPS 与 mTLS。一键签发时可填写额外的域名/IP（逗号分隔），会自动加入 SAN，并保留 localhost、127.0.0.1、::1、hostname 与局域网 IP；根 CA 不变。
-- 登录页在 HTTPS 且 CA 可用时显示根证书下载入口；客户端未信任 CA 时需先在浏览器中继续访问或导入根证书。
-- mTLS 开启后客户端必须先有客户端证书，否则 TLS 握手阶段就会失败，登录页无法作为首次证书引导入口。
-- frp 支持 TCP/HTTP/HTTPS 隧道；配置包含 `serverAddr/serverPort`、`auth.method/auth.token`、官方格式要求的顶层 `user`、`[transport] protocol=tcp` 与 `[transport.tls] enable=true`。
-- frp 日志保存在管理端内存环形缓冲，GUI 网络设置实时查看。TCP 映射可用于 Web 与静态托管，但不携带真实客户端 IP；HTTP/HTTPS 隧道支持域名、locations 和真实 IP。PROXY protocol v2 选项已移除（本地 TLS 前端未适配），不要通过手工配置启用。
-
-### 邮件、通知与运维
-
-- SMTP 通过 nodemailer 异步发送，不阻塞主线程；密码使用 AES-256-GCM 加密，界面脱敏。
-- 支持新用户注册、安全告警（账号锁定/IP 限流）、系统错误三类事件；同类事件 60 秒冷却，失败只写日志不抛出。
-- 管理端可发送测试邮件。
-- 支持数据库在线备份、数据/存储/插件目录迁移；迁移前校验目标路径并重启应用。
-- Windows 卸载工具支持默认/自定义数据目录、程序本体、快捷方式、注册表卸载项/软件项/启动项；启动申请管理员权限，支持中文/English。
-- 中英文 i18n：`zh-CN` / `en-US`，语言偏好存 `localStorage`，默认按 `navigator.language` 识别。
-
-### 默认路径
-
-- Windows 默认数据目录：`%APPDATA%\cloudbox`
-  - `cloudbox.db`、`storage/`、`plugins/`、`config/`、`tmp/`
-  - `config/ssl/`、`config/frpc.toml`
-- Windows 默认缓存目录：`%LOCALAPPDATA%\cloudbox`
-- Linux 系统模式：`/var/lib/cloudbox`
-- Linux `--portable`：当前目录 `./data`
-
-## 近期重要变更
-
-- 管理端侧边栏不再显示监听端口，改为实时显示上传/下载速率（2 秒采样，基于服务端累计收发字节）。
-- 修复空文件夹部署误报“路径不存在”：现在先校验目录，缺少 `index.html` 时明确提示；部署路径统一为不带前导斜杠的相对路径。
-- 管理端“登录失败保护”新增开关与可配置项：账号失败阈值、首次/最长锁定分钟、IP 登录请求上限与统计窗口；默认值与旧行为一致（5 次、1/60 分钟、30 次/15 分钟），手动解锁保持独立。
-- PROXY protocol v2 选项已移除；原位置改为 frp 同源 IP 风险提示，避免误伤同一 frp 后的其他用户。
-- 静态托管支持 TCP 端口映射：可直接使用 `https://公网IP:映射端口/` 作为公网基础地址；TCP 不携带真实客户端 IP。HTTP/HTTPS 隧道仍推荐用于域名、`locations` 和真实 IP。
-- **PROXY protocol v2 当前未适配**：Express/HTTPS 前端不会解析 PROXY v2 头。开启后 frpc 会把 PROXY 头直接发给 HTTPS 监听器，导致 TLS 握手/请求失败。当前版本已移除该选项并停止生成 `transport.proxyProtocolVersion`；这不是 frps 的问题，而是本地前端未实现 PROXY v2 解析。建议使用 HTTP/HTTPS 隧道，或在未来版本加入 PROXY 前端适配。
-- 私有 CA 一键签发服务端证书时新增“包含的域名或 IP（多个用英文逗号分隔）”。会动态追加到 mkcert SAN，并始终保留 `localhost`、`127.0.0.1`、`::1`、本机 hostname 和本机局域网 IP；根 CA 不变。
-- Web 文件页补齐英文：标题、面包屑、上传/刷新/删除、表头、空状态、操作提示和存储空间等；管理端状态栏保持中英文显示正确。
-
-# CloudBox Linux CLI v1.0.0 — English
+- 绠＄悊绔晶杈规爮涓嶅啀鏄剧ず鐩戝惉绔彛锛屾敼涓哄疄鏃舵樉绀轰笂浼?涓嬭浇閫熺巼锛? 绉掗噰鏍凤紝鍩轰簬鏈嶅姟绔疮璁℃敹鍙戝瓧鑺傦級銆?- 淇绌烘枃浠跺す閮ㄧ讲璇姤鈥滆矾寰勪笉瀛樺湪鈥濓細鐜板湪鍏堟牎楠岀洰褰曪紝缂哄皯 `index.html` 鏃舵槑纭彁绀猴紱閮ㄧ讲璺緞缁熶竴涓轰笉甯﹀墠瀵兼枩鏉犵殑鐩稿璺緞銆?- 绠＄悊绔€滅櫥褰曞け璐ヤ繚鎶も€濇柊澧炲紑鍏充笌鍙厤缃」锛氳处鍙峰け璐ラ槇鍊笺€侀娆?鏈€闀块攣瀹氬垎閽熴€両P 鐧诲綍璇锋眰涓婇檺涓庣粺璁＄獥鍙ｏ紱榛樿鍊间笌鏃ц涓轰竴鑷达紙5 娆°€?/60 鍒嗛挓銆?0 娆?15 鍒嗛挓锛夛紝鎵嬪姩瑙ｉ攣淇濇寔鐙珛銆?- PROXY protocol v2 閫夐」宸茬Щ闄わ紱鍘熶綅缃敼涓?frp 鍚屾簮 IP 椋庨櫓鎻愮ず锛岄伩鍏嶈浼ゅ悓涓€ frp 鍚庣殑鍏朵粬鐢ㄦ埛銆?- 闈欐€佹墭绠℃敮鎸?TCP 绔彛鏄犲皠锛氬彲鐩存帴浣跨敤 `https://鍏綉IP:鏄犲皠绔彛/` 浣滀负鍏綉鍩虹鍦板潃锛汿CP 涓嶆惡甯︾湡瀹炲鎴风 IP銆侶TTP/HTTPS 闅ч亾浠嶆帹鑽愮敤浜庡煙鍚嶃€乣locations` 鍜岀湡瀹?IP銆?- **PROXY protocol v2 褰撳墠鏈€傞厤**锛欵xpress/HTTPS 鍓嶇涓嶄細瑙ｆ瀽 PROXY v2 澶淬€傚紑鍚悗 frpc 浼氭妸 PROXY 澶寸洿鎺ュ彂缁?HTTPS 鐩戝惉鍣紝瀵艰嚧 TLS 鎻℃墜/璇锋眰澶辫触銆傚綋鍓嶇増鏈凡绉婚櫎璇ラ€夐」骞跺仠姝㈢敓鎴?`transport.proxyProtocolVersion`锛涜繖涓嶆槸 frps 鐨勯棶棰橈紝鑰屾槸鏈湴鍓嶇鏈疄鐜?PROXY v2 瑙ｆ瀽銆傚缓璁娇鐢?HTTP/HTTPS 闅ч亾锛屾垨鍦ㄦ湭鏉ョ増鏈姞鍏?PROXY 鍓嶇閫傞厤銆?- 绉佹湁 CA 涓€閿鍙戞湇鍔＄璇佷功鏃舵柊澧炩€滃寘鍚殑鍩熷悕鎴?IP锛堝涓敤鑻辨枃閫楀彿鍒嗛殧锛夆€濄€備細鍔ㄦ€佽拷鍔犲埌 mkcert SAN锛屽苟濮嬬粓淇濈暀 `localhost`銆乣127.0.0.1`銆乣::1`銆佹湰鏈?hostname 鍜屾湰鏈哄眬鍩熺綉 IP锛涙牴 CA 涓嶅彉銆?- Web 鏂囦欢椤佃ˉ榻愯嫳鏂囷細鏍囬銆侀潰鍖呭睉銆佷笂浼?鍒锋柊/鍒犻櫎銆佽〃澶淬€佺┖鐘舵€併€佹搷浣滄彁绀哄拰瀛樺偍绌洪棿绛夛紱绠＄悊绔姸鎬佹爮淇濇寔涓嫳鏂囨樉绀烘纭€?
+# CloudBox Linux CLI v1.0.0 鈥?English
 
 CloudBox Linux is a headless command-line edition. It does not include Electron, Chromium or the administrator GUI; it retains the core drive backend and web client.
 
@@ -310,7 +231,7 @@ The Linux release does not include Electron or Chromium. 7za is distributed as a
 - Login sessions use random tokens; only SHA-256 token hashes are stored. The browser cookie is `HttpOnly` and `SameSite=Lax`.
 - Default session TTL is `security.sessionTtlHours = 168` hours. `last_seen` is updated at most once every 60 seconds.
 - Non-GET/HEAD requests require a CSRF token; the CSRF cookie is separate from the session cookie.
-- **Login failure locking is account-based, not IP-based**: after **5 consecutive failures**, the account is locked by default. The threshold, initial/max lock minutes, IP login request limit and window are configurable under “Login failure protection”. The first lock is 1 minute; subsequent locks grow as `base × 2^(failures-threshold)` up to 60 minutes.
+- **Login failure locking is account-based, not IP-based**: after **5 consecutive failures**, the account is locked by default. The threshold, initial/max lock minutes, IP login request limit and window are configurable under 鈥淟ogin failure protection鈥? The first lock is 1 minute; subsequent locks grow as `base 脳 2^(failures-threshold)` up to 60 minutes.
 - The administrator GUI provides **quick unlock** in Users: it clears `failed_attempts` and `locked_until` immediately. Password reset, disable and session revocation are also available there.
 - A dummy scrypt verification runs for unknown usernames to reduce timing-based account enumeration.
 - Independent IP rate limits: login 30/15 min/IP; all APIs 600/min/IP; uploads 120/min/IP; registration 2/hour/IP; share creation 10/min/user; share download 60/min/IP+token; extraction/scan 10/min/user.
@@ -346,8 +267,7 @@ The Linux release does not include Electron or Chromium. 7za is distributed as a
 - AI modes: administrator-shared key or user-supplied key. API keys are AES-256-GCM encrypted and masked in the UI.
 - Default daily limit is 50. Work scope can be a specific folder or the entire drive (high risk); high-risk tool calls require confirmation.
 - AI tool paths use the same relative-path and safePath checks; host absolute paths are rejected.
-- When the UI is English, the system prompt appends “Please reply to the user in English.”
-
+- When the UI is English, the system prompt appends 鈥淧lease reply to the user in English.鈥?
 ### Plugin Platform
 
 - Plugins run in isolated `child_process.fork` processes; the main process never `require`s plugin code.
@@ -389,10 +309,10 @@ The Linux release does not include Electron or Chromium. 7za is distributed as a
 ## Recent Changes
 
 - The admin sidebar no longer displays the listening port; it now shows real-time upload/download rates (sampled every 2 seconds from server byte counters).
-- Fixed the misleading “path does not exist” error for empty folders: the directory is validated first and a missing `index.html` is reported explicitly; deploy paths are normalized to relative paths without a leading slash.
-- Added a “Login failure protection” switch with configurable account threshold, initial/max lock minutes, IP login request limit and window; defaults preserve the old behavior (5 failures, 1/60 minutes, 30 requests/15 minutes). Manual unlock remains independent.
+- Fixed the misleading 鈥減ath does not exist鈥?error for empty folders: the directory is validated first and a missing `index.html` is reported explicitly; deploy paths are normalized to relative paths without a leading slash.
+- Added a 鈥淟ogin failure protection鈥?switch with configurable account threshold, initial/max lock minutes, IP login request limit and window; defaults preserve the old behavior (5 failures, 1/60 minutes, 30 requests/15 minutes). Manual unlock remains independent.
 - Removed the PROXY protocol v2 option; its position now explains the frp shared-IP risk to avoid blocking other users behind the same frp endpoint.
 - Static hosting supports TCP port mapping: use `https://public-ip:mapped-port/` as the public base URL. TCP does not carry the real client IP. HTTP/HTTPS tunnels remain recommended for domains, `locations` and real client IPs.
 - **PROXY protocol v2 is not adapted yet**: the Express/HTTPS frontend does not parse PROXY v2 headers. Enabling it sends the PROXY header directly to the HTTPS listener and breaks the TLS handshake/request. The option has been removed and `transport.proxyProtocolVersion` is no longer generated. This is a local frontend limitation, not an frps problem. Use HTTP/HTTPS tunnels, or add a PROXY-aware frontend in a future release.
-- One-click private CA server-certificate issuance now accepts “Included domains or IPs (comma-separated)”. Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.
+- One-click private CA server-certificate issuance now accepts 鈥淚ncluded domains or IPs (comma-separated)鈥? Values are appended to the mkcert SAN; `localhost`, `127.0.0.1`, `::1`, the hostname and LAN IPs are always included. The root CA is unchanged.
 - The web file page now has complete English labels for title, breadcrumbs, upload/refresh/delete, table headers, empty state, action titles and storage. Admin status text remains correct in both languages.

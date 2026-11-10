@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir, stat } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { MainContext } from './context.ts';
 import { saveAppPaths } from './pathConfig.ts';
@@ -11,6 +11,7 @@ export interface ChangeDirectoryInput {
   kind: DirectoryKind;
   targetPath: string;
   migrate: boolean;
+  deleteOld: boolean;
 }
 
 function normalize(value: string): string {
@@ -61,12 +62,20 @@ async function initializeStorage(
   }
 }
 
-function scheduleRelaunch(context: MainContext): void {
-  const timer = setTimeout(() => {
+function scheduleRelaunch(context: MainContext, cleanupPath: string | null): void {
+  const timer = setTimeout(async () => {
     try {
       context.services.db.close();
     } catch {
       // 忽略关闭错误，应用即将退出
+    }
+    if (cleanupPath !== null) {
+      await rm(cleanupPath, { recursive: true, force: true }).catch((error: unknown) => {
+        console.warn('[migration] 删除旧目录失败', {
+          path: cleanupPath,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
     app.relaunch();
     app.exit(0);
@@ -122,6 +131,15 @@ export async function changeDirectory(
         if (existsSync(configSource)) {
           await cp(configSource, path.join(target, 'config'), {
             recursive: true,
+            force: false,
+            errorOnExist: true,
+          });
+        }
+
+        // AI API Key / SMTP 密码等密文由这个本机密钥解密，必须与数据库一起迁移。
+        const secretSource = path.join(context.dataDir, 'ai-secret.key');
+        if (existsSync(secretSource)) {
+          await cp(secretSource, path.join(target, 'ai-secret.key'), {
             force: false,
             errorOnExist: true,
           });
@@ -188,6 +206,6 @@ export async function changeDirectory(
     detail: { migrate: input.migrate, previous: current },
   });
 
-  scheduleRelaunch(context);
+  scheduleRelaunch(context, input.migrate && input.deleteOld ? current : null);
   return { restarting: true };
 }

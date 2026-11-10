@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { AdminStatus } from '../../src/shared/ipcTypes.ts';
 import { api, bridgeAvailable, call, errorMessage } from './api/ipc.ts';
+import { autoT as t } from './i18n.ts';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { SetupScreen } from './components/SetupScreen.tsx';
 import { Shell } from './components/Shell.tsx';
 import { Toast, type ToastState } from './components/Dialog.tsx';
 import { AlertIcon, CloudIcon, Spinner } from './components/Icons.tsx';
-import { installAdminTranslations } from './i18nDom.ts';
 
 export type PageKey = 'dashboard' | 'users' | 'files' | 'network' | 'plugins' | 'settings';
 
@@ -28,12 +28,11 @@ export default function App() {
 
   useEffect(() => {
     if (!bridgeAvailable) {
-      setFatal('未检测到 Electron 预加载桥接，请通过桌面程序启动 CloudBox。');
+      setFatal(t('未检测到 Electron 预加载桥接，请通过桌面程序启动 CloudBox。'));
       setBooting(false);
       return;
     }
 
-    const cleanup = installAdminTranslations();
     void (async () => {
       try {
         await refreshStatus();
@@ -43,7 +42,7 @@ export default function App() {
         setBooting(false);
       }
     })();
-    return cleanup;
+    return undefined;
   }, []);
 
   useEffect(() => {

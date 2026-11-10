@@ -8,6 +8,12 @@ const PRIORITY: Record<LogLevel, number> = {
 };
 
 let minLevel: LogLevel = 'info';
+const recentLines: string[] = [];
+const MAX_RECENT_LINES = 500;
+
+export function getRecentLogs(limit = 500): string[] {
+  return recentLines.slice(-Math.max(1, Math.min(limit, MAX_RECENT_LINES)));
+}
 
 export function setLogLevel(level: LogLevel): void {
   minLevel = level;
@@ -24,6 +30,8 @@ function emit(level: LogLevel, message: string, meta?: Meta): void {
 
   const line = `${new Date().toISOString()} ${level.toUpperCase().padEnd(5)} ${message}`;
   const suffix = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
+  recentLines.push(line + suffix);
+  if (recentLines.length > MAX_RECENT_LINES) recentLines.splice(0, recentLines.length - MAX_RECENT_LINES);
 
   if (level === 'error') {
     console.error(line + suffix);

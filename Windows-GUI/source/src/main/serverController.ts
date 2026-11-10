@@ -40,6 +40,7 @@ export interface ServerStatus {
   uploadedBytes: number;
   downloadedBytes: number;
   error: string | null;
+  autoStart: boolean;
 }
 
 export function listLanIps(): string[] {
@@ -142,6 +143,7 @@ export class ServerController {
       uploadedBytes: traffic.uploadedBytes,
       downloadedBytes: traffic.downloadedBytes,
       error: this.lastError,
+      autoStart: this.services.settings.get('server.autoStart'),
     };
   }
 

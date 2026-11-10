@@ -7,6 +7,14 @@ interface SettingDefinitions {
   'server.mtlsEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'server.port': { schema: z.ZodType<number>; fallback: number };
   'server.bind': { schema: z.ZodType<string>; fallback: string };
+  'server.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
+  'system.updateRepo': { schema: z.ZodType<string>; fallback: string };
+  'startup.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
+  'startup.startInTray': { schema: z.ZodType<boolean>; fallback: boolean };
+  'server.scheduleEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'server.scheduleStart': { schema: z.ZodType<string>; fallback: string };
+  'server.scheduleEnd': { schema: z.ZodType<string>; fallback: string };
+  'frp.syncWithServer': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.sessionTtlHours': { schema: z.ZodType<number>; fallback: number };
   'security.lockEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.maxLoginFailures': { schema: z.ZodType<number>; fallback: number };
@@ -14,6 +22,9 @@ interface SettingDefinitions {
   'security.lockMaxMinutes': { schema: z.ZodType<number>; fallback: number };
   'security.ipLoginLimit': { schema: z.ZodType<number>; fallback: number };
   'security.ipWindowMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.renameEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'security.renameLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.renameWindowHours': { schema: z.ZodType<number>; fallback: number };
   'upload.maxFileBytes': { schema: z.ZodType<number>; fallback: number };
   'frp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'frp.serverAddr': { schema: z.ZodType<string>; fallback: string };
@@ -31,6 +42,7 @@ interface SettingDefinitions {
   allow_user_preview_image: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_preview_video: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_preview_pdf: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_user_preview_office: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_extract: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_scan: { schema: z.ZodType<boolean>; fallback: boolean };
   'scan.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -64,6 +76,14 @@ const DEFINITIONS: SettingDefinitions = {
   'server.mtlsEnabled': { schema: z.boolean(), fallback: false },
   'server.port': { schema: z.number().int().min(1024).max(65_535), fallback: 8686 },
   'server.bind': { schema: z.string().min(1), fallback: '0.0.0.0' },
+  'server.autoStart': { schema: z.boolean(), fallback: false },
+  'system.updateRepo': { schema: z.string().min(3).max(200), fallback: 'xiaoxiaoship/CloudBox' },
+  'startup.autoStart': { schema: z.boolean(), fallback: false },
+  'startup.startInTray': { schema: z.boolean(), fallback: false },
+  'server.scheduleEnabled': { schema: z.boolean(), fallback: false },
+  'server.scheduleStart': { schema: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), fallback: '08:00' },
+  'server.scheduleEnd': { schema: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), fallback: '22:00' },
+  'frp.syncWithServer': { schema: z.boolean(), fallback: false },
   'security.sessionTtlHours': { schema: z.number().int().min(1).max(8760), fallback: 168 },
   'security.lockEnabled': { schema: z.boolean(), fallback: true },
   'security.maxLoginFailures': { schema: z.number().int().min(3).max(50), fallback: 5 },
@@ -71,6 +91,9 @@ const DEFINITIONS: SettingDefinitions = {
   'security.lockMaxMinutes': { schema: z.number().int().min(1).max(10080), fallback: 60 },
   'security.ipLoginLimit': { schema: z.number().int().min(1).max(10000), fallback: 30 },
   'security.ipWindowMinutes': { schema: z.number().int().min(1).max(1440), fallback: 15 },
+  'security.renameEnabled': { schema: z.boolean(), fallback: true },
+  'security.renameLimit': { schema: z.number().int().min(1).max(100), fallback: 1 },
+  'security.renameWindowHours': { schema: z.number().int().min(1).max(8760), fallback: 24 },
   'upload.maxFileBytes': { schema: z.number().int().min(1), fallback: 2 * 1024 ** 3 },
   'frp.enabled': { schema: z.boolean(), fallback: false },
   'frp.serverAddr': { schema: z.string().max(255), fallback: '' },
@@ -88,6 +111,7 @@ const DEFINITIONS: SettingDefinitions = {
   allow_user_preview_image: { schema: z.boolean(), fallback: true },
   allow_user_preview_video: { schema: z.boolean(), fallback: true },
   allow_user_preview_pdf: { schema: z.boolean(), fallback: true },
+  allow_user_preview_office: { schema: z.boolean(), fallback: true },
   allow_user_extract: { schema: z.boolean(), fallback: true },
   allow_user_scan: { schema: z.boolean(), fallback: true },
   'scan.enabled': { schema: z.boolean(), fallback: false },

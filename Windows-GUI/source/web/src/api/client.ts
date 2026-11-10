@@ -32,7 +32,7 @@ export interface FileListing {
 }
 
 export interface PreviewInfo {
-  kind: 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'none';
+  kind: 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'office' | 'none';
   mime: string | null;
   size: number;
   name: string;
@@ -53,6 +53,7 @@ export interface PublicSettings {
     allow_user_preview_image: boolean;
     allow_user_preview_video: boolean;
     allow_user_preview_pdf: boolean;
+    allow_user_preview_office: boolean;
     allow_user_extract: boolean;
     allow_user_scan: boolean;
   };
@@ -245,6 +246,13 @@ export const api = {
     setCsrfToken('');
   },
 
+  renameAccount(username: string): Promise<{ user: PublicUser }> {
+    return request<{ user: PublicUser }>('/api/auth/username', {
+      method: 'PATCH',
+      body: { username },
+    });
+  },
+
   uploadAvatar(avatar: string): Promise<{ avatarDataUrl: string }> {
     return request<{ avatarDataUrl: string }>('/api/auth/avatar', {
       method: 'POST',
@@ -279,6 +287,24 @@ export const api = {
       method: 'DELETE',
       body: { paths },
     });
+  },
+
+  copy(paths: string[], destination: string): Promise<{ entries: FileEntry[] }> {
+    return request<{ entries: FileEntry[] }>('/api/files/copy', {
+      method: 'POST',
+      body: { paths, destination },
+    });
+  },
+
+  move(paths: string[], destination: string): Promise<{ entries: FileEntry[] }> {
+    return request<{ entries: FileEntry[] }>('/api/files/move', {
+      method: 'POST',
+      body: { paths, destination },
+    });
+  },
+
+  pluginPreviewers(): Promise<Record<string, string>> {
+    return request<Record<string, string>>('/api/plugins/previewers');
   },
 
   previewInfo(path: string): Promise<PreviewInfo> {

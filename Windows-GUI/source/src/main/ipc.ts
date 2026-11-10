@@ -20,7 +20,6 @@ import {
   IPC,
   type AdminStatus,
   type AdminSettings,
-  type FrpConfig,
   type FrpStatus,
   type Result,
   type ServerStatus,
@@ -31,6 +30,8 @@ import { changeDirectory } from './directoryMigration.ts';
 import { FRP_ERROR, FrpError } from './frpService.ts';
 import { SERVER_ERROR, ServerError, isPortAvailable } from './serverController.ts';
 import { TLS_ERROR, TlsError } from './tlsManager.ts';
+import { getRecentLogs } from '../shared/logger.ts';
+import { applyLoginItem, isInstalledBuild } from './loginItem.ts';
 
 export interface IpcContext extends MainContext {
   getWindow: () => BrowserWindow | null;
@@ -102,12 +103,14 @@ const changeDirectorySchema = z.object({
   kind: z.enum(['data', 'storage', 'plugins']),
   targetPath: z.string().min(1),
   migrate: z.boolean(),
+  deleteOld: z.boolean().default(false),
 });
 const publicRegistrationSchema = z.object({ enabled: z.boolean() });
 const featurePermissionsSchema = z.object({
   allowUserPreviewImage: z.boolean(),
   allowUserPreviewVideo: z.boolean(),
   allowUserPreviewPdf: z.boolean(),
+  allowUserPreviewOffice: z.boolean(),
   allowUserExtract: z.boolean(),
   allowUserScan: z.boolean(),
 });
@@ -376,6 +379,10 @@ export function registerIpc(context: IpcContext): void {
     return null;
   });
 
+  register(IPC.adminRenameSelf, z.object({ username: z.string().min(1).max(64) }), (input) => {
+    return context.adminUsers.renameSelf(actor(), input.username);
+  });
+
   register(IPC.serverStatus, z.undefined(), (): ServerStatus => serverStatus(context));
 
   register(IPC.serverSetOnline, onlineSchema, async (input): Promise<ServerStatus> => {
@@ -427,6 +434,38 @@ export function registerIpc(context: IpcContext): void {
 
     return serverStatus(context);
   });
+
+  register(IPC.serverSetAutoStart, z.object({ enabled: z.boolean() }), (input): ServerStatus => {
+    const admin = actor();
+    context.services.settings.set('server.autoStart', input.enabled, admin.id);
+    return serverStatus(context);
+  });
+
+  register(IPC.serverGetSchedule, z.undefined(), () => context.automation.getSchedule());
+
+  register(
+    IPC.serverSetSchedule,
+    z.object({
+      enabled: z.boolean(),
+      start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }),
+    (input) => {
+      const admin = actor();
+      context.services.settings.set('server.scheduleEnabled', input.enabled, admin.id);
+      context.services.settings.set('server.scheduleStart', input.start, admin.id);
+      context.services.settings.set('server.scheduleEnd', input.end, admin.id);
+      context.services.audit.record({
+        actorType: 'admin',
+        actorId: admin.id,
+        action: 'server.schedule.update',
+        result: 'success',
+        targetType: 'server',
+        detail: input,
+      });
+      return context.automation.getSchedule();
+    },
+  );
 
   register(IPC.serverSetPort, portSchema, async (input): Promise<ServerStatus> => {
     const admin = actor();
@@ -651,11 +690,15 @@ export function registerIpc(context: IpcContext): void {
         lockMaxMinutes: context.services.settings.get('security.lockMaxMinutes'),
         ipLoginLimit: context.services.settings.get('security.ipLoginLimit'),
         ipWindowMinutes: context.services.settings.get('security.ipWindowMinutes'),
+        renameEnabled: context.services.settings.get('security.renameEnabled'),
+        renameLimit: context.services.settings.get('security.renameLimit'),
+        renameWindowHours: context.services.settings.get('security.renameWindowHours'),
       },
       permissions: {
         allowUserPreviewImage: context.services.settings.get('allow_user_preview_image'),
         allowUserPreviewVideo: context.services.settings.get('allow_user_preview_video'),
         allowUserPreviewPdf: context.services.settings.get('allow_user_preview_pdf'),
+        allowUserPreviewOffice: context.services.settings.get('allow_user_preview_office'),
         allowUserExtract: context.services.settings.get('allow_user_extract'),
         allowUserScan: context.services.settings.get('allow_user_scan'),
       },
@@ -744,6 +787,9 @@ export function registerIpc(context: IpcContext): void {
     lockMaxMinutes: z.number().int().min(1).max(10080),
     ipLoginLimit: z.number().int().min(1).max(10000),
     ipWindowMinutes: z.number().int().min(1).max(1440),
+    renameEnabled: z.boolean(),
+    renameLimit: z.number().int().min(1).max(100),
+    renameWindowHours: z.number().int().min(1).max(8760),
   }), (input) => {
     const admin = actor();
     const settings = context.services.settings;
@@ -753,6 +799,9 @@ export function registerIpc(context: IpcContext): void {
     settings.set('security.lockMaxMinutes', input.lockMaxMinutes, admin.id);
     settings.set('security.ipLoginLimit', input.ipLoginLimit, admin.id);
     settings.set('security.ipWindowMinutes', input.ipWindowMinutes, admin.id);
+    settings.set('security.renameEnabled', input.renameEnabled, admin.id);
+    settings.set('security.renameLimit', input.renameLimit, admin.id);
+    settings.set('security.renameWindowHours', input.renameWindowHours, admin.id);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
@@ -770,6 +819,7 @@ export function registerIpc(context: IpcContext): void {
     settings.set('allow_user_preview_image', input.allowUserPreviewImage, admin.id);
     settings.set('allow_user_preview_video', input.allowUserPreviewVideo, admin.id);
     settings.set('allow_user_preview_pdf', input.allowUserPreviewPdf, admin.id);
+    settings.set('allow_user_preview_office', input.allowUserPreviewOffice, admin.id);
     settings.set('allow_user_extract', input.allowUserExtract, admin.id);
     settings.set('allow_user_scan', input.allowUserScan, admin.id);
     context.services.audit.record({
@@ -863,6 +913,18 @@ export function registerIpc(context: IpcContext): void {
 
   register(IPC.settingsTestMail, z.undefined(), () => context.services.mail.sendTest());
 
+  register(
+    IPC.logsGet,
+    z.object({ limit: z.number().int().min(1).max(500).optional() }).optional(),
+    (input) => {
+      const limit = input?.limit ?? 200;
+      return {
+        runtime: getRecentLogs(limit),
+        audit: context.services.audit.list({ limit }),
+      };
+    },
+  );
+
   register(IPC.caInfo, z.undefined(), () => context.ca.getCAInfo());
   register(IPC.caCreate, z.undefined(), async () => {
     const admin = actor();
@@ -954,6 +1016,14 @@ export function registerIpc(context: IpcContext): void {
       detail: { fileName: result.fileName },
     });
     return result;
+  });
+
+  register(IPC.frpGetSync, z.undefined(), () => ({ enabled: context.services.settings.get('frp.syncWithServer') }));
+
+  register(IPC.frpSetSync, z.object({ enabled: z.boolean() }), (input) => {
+    const admin = actor();
+    context.services.settings.set('frp.syncWithServer', input.enabled, admin.id);
+    return { enabled: input.enabled };
   });
 
   register(IPC.frpStatus, z.undefined(), () => context.frp.getStatus());
@@ -1084,11 +1154,24 @@ export function registerIpc(context: IpcContext): void {
     return { saved: true, fileName: path.basename(selection.filePath) };
   });
 
+  register(IPC.systemCheckUpdate, z.undefined(), () => context.services.update.check(context.version));
+
+  register(IPC.systemOpenExternal, z.object({ url: z.string().url() }), async (input) => {
+    const url = new URL(input.url);
+    if (url.protocol !== 'https:' || !['github.com', 'www.github.com'].includes(url.hostname)) {
+      throw new Error('只允许打开 GitHub 下载页面');
+    }
+    await shell.openExternal(url.toString());
+    return null;
+  });
+
   register(IPC.appInfo, z.undefined(), () => ({
     version: context.version,
     dataDir: context.dataDir,
     storageDir: context.storageRoot,
     pluginsDir: context.pluginsDir,
+    isPackaged: app.isPackaged,
+    isPortable: Boolean(process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE),
   }));
 
   register(IPC.appOpenDataDir, z.undefined(), async () => {
@@ -1141,6 +1224,26 @@ export function registerIpc(context: IpcContext): void {
     await changeDirectory(context, input);
     return { restarting: true };
   });
+
+  register(IPC.appGetStartup, z.undefined(), () => ({
+    autoStart: context.services.settings.get('startup.autoStart'),
+    startInTray: context.services.settings.get('startup.startInTray'),
+  }));
+
+  register(
+    IPC.appSetStartup,
+    z.object({ autoStart: z.boolean(), startInTray: z.boolean() }),
+    (input) => {
+      const admin = actor();
+      if (input.autoStart && !isInstalledBuild()) {
+        throw new Error('开机自启仅支持安装版，当前开发版或便携版不会注册系统启动项');
+      }
+      context.services.settings.set('startup.autoStart', input.autoStart, admin.id);
+      context.services.settings.set('startup.startInTray', input.startInTray, admin.id);
+      applyLoginItem(input.autoStart, input.startInTray);
+      return input;
+    },
+  );
 
   register(IPC.appBackupDatabase, z.undefined(), async () => {
     const window = context.getWindow();

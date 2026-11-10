@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useEscapeKey, useLockBodyScroll } from '../lib/useModal.ts';
 import { Spinner, XIcon } from './Icons.tsx';
 
@@ -14,7 +15,7 @@ export function DialogShell({ title, description, onClose, children, footer }: D
   useLockBodyScroll();
   useEscapeKey(onClose);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-[2px] sm:items-center sm:p-4 dark:bg-slate-950/70"
       onMouseDown={(event) => {
@@ -47,7 +48,8 @@ export function DialogShell({ title, description, onClose, children, footer }: D
         <div>{children}</div>
         <div className="mt-6 flex justify-end gap-2">{footer}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -130,6 +132,7 @@ interface PromptDialogProps {
   initialValue?: string;
   placeholder?: string;
   confirmLabel?: string;
+  allowEmpty?: boolean;
   onClose: () => void;
   onSubmit: (value: string) => Promise<void>;
 }
@@ -141,6 +144,7 @@ export function PromptDialog({
   initialValue = '',
   placeholder,
   confirmLabel = '确定',
+  allowEmpty = false,
   onClose,
   onSubmit,
 }: PromptDialogProps) {
@@ -157,7 +161,7 @@ export function PromptDialog({
   const handleSubmit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const trimmed = value.trim();
-    if (!trimmed) {
+    if (!trimmed && !allowEmpty) {
       setError('名称不能为空');
       return;
     }

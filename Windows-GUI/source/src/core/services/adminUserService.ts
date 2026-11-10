@@ -165,6 +165,29 @@ export class AdminUserService {
     });
   }
 
+  renameSelf(actor: AdminActor, username: string): { username: string } {
+    const next = normalizeUsername(username);
+    const user = this.requireUser(actor.id);
+    const existing = this.users.findByUsername(next);
+    if (existing !== null && existing.id !== user.id) {
+      throw new AdminError(ADMIN_ERROR.USERNAME_TAKEN, '用户名已被占用');
+    }
+    if (next === user.username) return { username: user.username };
+    if (!this.users.updateUsername(user.id, next, this.now())) {
+      throw new AdminError(ADMIN_ERROR.USERNAME_TAKEN, '用户名已被占用');
+    }
+    this.audit.record({
+      actorType: 'admin',
+      actorId: actor.id,
+      action: 'admin.rename',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(user.id),
+      detail: { before: user.username, after: next },
+    });
+    return { username: next };
+  }
+
   setQuota(userId: number, quotaBytes: number | null, actor: AdminActor): void {
     assertQuota(quotaBytes);
     const user = this.requireUser(userId);

@@ -19,7 +19,8 @@ import {
   createSharesRouter,
 } from './routes/shares.routes.ts';
 import { createTasksRouter } from './routes/tasks.routes.ts';
-import { recordDownloadBytes, recordUploadBytes } from './traffic.ts';
+import { createSystemRouter } from './routes/system.routes.ts';
+import { recordDownloadBytes } from './traffic.ts';
 
 /** 默认构建产物目录；Electron 主进程会传入 app.getAppPath() 下的绝对路径 */
 const DEFAULT_WEB_DIST = path.resolve(process.cwd(), 'dist', 'web');
@@ -66,12 +67,23 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(requestId);
   app.use(express.json({ limit: '1mb' }));
   app.use((req, res, next) => {
-    const uploadLength = Number(req.headers['content-length']);
-    if (Number.isFinite(uploadLength)) recordUploadBytes(uploadLength);
-    res.on('finish', () => {
-      const length = Number(res.getHeader('content-length'));
-      if (Number.isFinite(length)) recordDownloadBytes(length);
-    });
+    const countBody = (chunk: unknown): void => {
+      if (typeof chunk === 'string') {
+        recordDownloadBytes(Buffer.byteLength(chunk));
+      } else if (chunk instanceof Uint8Array) {
+        recordDownloadBytes(chunk.byteLength);
+      }
+    };
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+    res.write = ((chunk: any, encoding?: any, callback?: any) => {
+      countBody(chunk);
+      return originalWrite(chunk, encoding, callback);
+    }) as typeof res.write;
+    res.end = ((chunk?: any, encoding?: any, callback?: any) => {
+      if (typeof chunk !== 'function') countBody(chunk);
+      return originalEnd(chunk, encoding, callback);
+    }) as typeof res.end;
     next();
   });
 
@@ -111,6 +123,7 @@ export function createApp(options: CreateAppOptions): Express {
         allow_user_preview_image: services.settings.get('allow_user_preview_image'),
         allow_user_preview_video: services.settings.get('allow_user_preview_video'),
         allow_user_preview_pdf: services.settings.get('allow_user_preview_pdf'),
+        allow_user_preview_office: services.settings.get('allow_user_preview_office'),
         allow_user_extract: services.settings.get('allow_user_extract'),
         allow_user_scan: services.settings.get('allow_user_scan'),
       },
@@ -126,6 +139,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.use('/host', createHostingSiteRouter(services));
 
   app.use('/api/ai', requireUser, createAiRouter(services, { csrf }));
+  app.use('/api/system', requireUser, createSystemRouter(services, { version: options.version }));
 
   app.get('/api/public/plugin-theme.css', (_req, res) => {
     res.type('text/css').send(services.plugins.getThemeCss());

@@ -2,6 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { HostingRecord, HostingRepository } from '../db/repositories/hostingRepo.ts';
 import type { UserRepository } from '../db/repositories/userRepo.ts';
+import { FILE_ERROR, FileServiceError } from './fileService.ts';
 import type { SessionUser } from '../types/models.ts';
 import { toSessionUser } from '../types/models.ts';
 import { normalizeRelativePath, resolveUserPath } from '../security/safePath.ts';
@@ -75,7 +76,11 @@ export class HostingService {
     // 目录必须真实存在，必须是目录
     await this.files.list(user, normalized, ctx);
     if (input.enabled && !existsSync(path.join(this.storageRoot, user.storageKey, ...normalized.split('/'), 'index.html'))) {
-      throw new Error('站点根目录缺少 index.html，请先上传 index.html 再部署');
+      throw new FileServiceError(
+        FILE_ERROR.INVALID_OPERATION,
+        '站点根目录缺少 index.html，请先上传 index.html 再部署',
+        400,
+      );
     }
 
     const record: HostingRecord = {

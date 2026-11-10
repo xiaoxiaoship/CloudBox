@@ -10,6 +10,8 @@ import { CaManager } from './caManager.ts';
 import { FrpService } from './frpService.ts';
 import { loadAppPaths } from './pathConfig.ts';
 import { ServerController } from './serverController.ts';
+import { ServiceAutomation } from './serviceAutomation.ts';
+import { logger } from '../shared/logger.ts';
 import { TlsManager } from './tlsManager.ts';
 
 export interface MainContext {
@@ -20,6 +22,7 @@ export interface MainContext {
   tls: TlsManager;
   ca: CaManager;
   frp: FrpService;
+  automation: ServiceAutomation;
   version: string;
   dataDir: string;
   storageRoot: string;
@@ -114,6 +117,20 @@ export function createMainContext(): MainContext {
     getProtocol: () => serverRef?.getStatus().protocol ?? (httpsEnabled ? 'https' : 'http'),
   });
 
+  const automation = new ServiceAutomation({
+    server,
+    frp,
+    settings: services.settings,
+  });
+
+  if (services.settings.get('server.autoStart')) {
+    void server.start(configuredPort).catch((error: unknown) => {
+      logger.warn('[startup] Web 服务自动启动失败', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
   return {
     services,
     adminUsers,
@@ -122,6 +139,7 @@ export function createMainContext(): MainContext {
     tls,
     ca,
     frp,
+    automation,
     version: app.getVersion(),
     dataDir,
     storageRoot,
@@ -133,5 +151,6 @@ export function createMainContext(): MainContext {
 }
 
 export function disposeMainContext(context: MainContext): void {
+  context.automation.dispose();
   closeDatabase(context.services.db);
 }

@@ -22,6 +22,14 @@ export interface UserSummary extends AdminUser {
   lockedUntil: number | null;
 }
 
+export interface UpdateCheckResult {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes: string;
+  downloadUrl: string;
+}
+
 export interface AdminStatus {
   needsSetup: boolean;
   authenticated: boolean;
@@ -88,11 +96,15 @@ export interface AdminSettings {
     lockMaxMinutes: number;
     ipLoginLimit: number;
     ipWindowMinutes: number;
+    renameEnabled: boolean;
+    renameLimit: number;
+    renameWindowHours: number;
   };
   permissions: {
     allowUserPreviewImage: boolean;
     allowUserPreviewVideo: boolean;
     allowUserPreviewPdf: boolean;
+    allowUserPreviewOffice: boolean;
     allowUserExtract: boolean;
     allowUserScan: boolean;
   };
@@ -137,6 +149,7 @@ export interface FeaturePermissions {
   allowUserPreviewImage: boolean;
   allowUserPreviewVideo: boolean;
   allowUserPreviewPdf: boolean;
+  allowUserPreviewOffice: boolean;
   allowUserExtract: boolean;
   allowUserScan: boolean;
 }
@@ -146,6 +159,12 @@ export interface ScanConfig {
   mode: 'api' | 'local';
   apiKey: string;
   localPath: string;
+}
+
+export interface ServerScheduleConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
 }
 
 export interface ServerStatus {
@@ -162,6 +181,7 @@ export interface ServerStatus {
   uploadedBytes: number;
   downloadedBytes: number;
   error: string | null;
+  autoStart: boolean;
 }
 
 export interface FrpConfig {
@@ -230,10 +250,14 @@ export interface CloudboxApi {
       status: UserStatus;
     }) => Promise<Result<null>>;
     remove: (input: { userId: number; deleteFiles: boolean }) => Promise<Result<null>>;
+    renameSelf: (input: { username: string }) => Promise<Result<{ username: string }>>;
   };
   server: {
     status: () => Promise<Result<ServerStatus>>;
     setOnline: (input: { enabled: boolean }) => Promise<Result<ServerStatus>>;
+    setAutoStart: (input: { enabled: boolean }) => Promise<Result<ServerStatus>>;
+    getSchedule: () => Promise<Result<ServerScheduleConfig>>;
+    setSchedule: (input: ServerScheduleConfig) => Promise<Result<ServerScheduleConfig>>;
     setPort: (input: { port: number }) => Promise<Result<ServerStatus>>;
     applyNetwork: (input: {
       protocol: 'http' | 'https';
@@ -286,12 +310,21 @@ export interface CloudboxApi {
     }) => Promise<Result<AdminSettings>>;
     testMail: () => Promise<Result<{ ok: boolean; message: string }>>;
   };
+  logs: {
+    get: (input?: { limit?: number }) => Promise<Result<{ runtime: string[]; audit: unknown[] }>>;
+  };
+  system: {
+    checkUpdate: () => Promise<Result<UpdateCheckResult>>;
+    openExternal: (input: { url: string }) => Promise<Result<null>>;
+  };
   frp: {
     status: () => Promise<Result<FrpStatus>>;
     saveConfig: (input: FrpConfig) => Promise<Result<FrpStatus>>;
     start: () => Promise<Result<FrpStatus>>;
     stop: () => Promise<Result<FrpStatus>>;
     restart: () => Promise<Result<FrpStatus>>;
+    getSync: () => Promise<Result<{ enabled: boolean }>>;
+    setSync: (input: { enabled: boolean }) => Promise<Result<{ enabled: boolean }>>;
   };
   files: {
     list: (input: { userId: number; path: string }) => Promise<Result<FileListingDto>>;
@@ -301,7 +334,7 @@ export interface CloudboxApi {
     }) => Promise<Result<{ saved: boolean; fileName?: string }>>;
   };
   app: {
-    info: () => Promise<Result<{ version: string; dataDir: string; storageDir: string; pluginsDir: string }>>;
+    info: () => Promise<Result<{ version: string; dataDir: string; storageDir: string; pluginsDir: string; isPackaged: boolean; isPortable: boolean }>>;
     openDataDir: () => Promise<Result<null>>;
     openStorageDir: () => Promise<Result<null>>;
     openPluginsDir: () => Promise<Result<null>>;
@@ -313,7 +346,10 @@ export interface CloudboxApi {
       kind: 'data' | 'storage' | 'plugins';
       targetPath: string;
       migrate: boolean;
+      deleteOld: boolean;
     }) => Promise<Result<{ restarting: boolean }>>;
+    getStartup: () => Promise<Result<{ autoStart: boolean; startInTray: boolean }>>;
+    setStartup: (input: { autoStart: boolean; startInTray: boolean }) => Promise<Result<{ autoStart: boolean; startInTray: boolean }>>;
   };
   plugins: {
     list: () => Promise<Result<PluginInfo[]>>;
@@ -341,9 +377,13 @@ export const IPC = {
   usersUnlock: 'users:unlock',
   usersSetStatus: 'users:set-status',
   usersRemove: 'users:remove',
+  adminRenameSelf: 'admin:rename-self',
 
   serverStatus: 'server:status',
   serverSetOnline: 'server:set-online',
+  serverSetAutoStart: 'server:set-auto-start',
+  serverGetSchedule: 'server:get-schedule',
+  serverSetSchedule: 'server:set-schedule',
   serverSetPort: 'server:set-port',
   serverApplyNetwork: 'server:apply-network',
   serverCertificate: 'server:certificate',
@@ -366,12 +406,17 @@ export const IPC = {
   settingsSetHosting: 'settings:set-hosting',
   settingsSetMail: 'settings:set-mail',
   settingsTestMail: 'settings:test-mail',
+  logsGet: 'logs:get',
+  systemCheckUpdate: 'system:check-update',
+  systemOpenExternal: 'system:open-external',
 
   frpStatus: 'frp:status',
   frpSaveConfig: 'frp:save-config',
   frpStart: 'frp:start',
   frpStop: 'frp:stop',
   frpRestart: 'frp:restart',
+  frpGetSync: 'frp:get-sync',
+  frpSetSync: 'frp:set-sync',
 
   filesList: 'files:list',
   filesDownload: 'files:download',
@@ -383,6 +428,8 @@ export const IPC = {
   appBackupDatabase: 'app:backup-database',
   appChooseDirectory: 'app:choose-directory',
   appChangeDirectory: 'app:change-directory',
+  appGetStartup: 'app:get-startup',
+  appSetStartup: 'app:set-startup',
   pluginsList: 'plugins:list',
   pluginsImport: 'plugins:import',
   pluginsSetEnabled: 'plugins:set-enabled',

@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, call, errorMessage } from '../api/ipc.ts';
 import { CloudIcon, EyeIcon, EyeOffIcon, Spinner } from './Icons.tsx';
 
@@ -8,6 +9,7 @@ const INPUT_CLASS =
 const LABEL_CLASS = 'block text-sm font-medium text-slate-300';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,7 +19,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     if (!username.trim() || !password) {
-      setError('请输入管理员用户名和密码');
+      setError(t('auth.enterAdmin'));
       return;
     }
 
@@ -39,13 +41,13 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
         onSubmit={(event) => void submit(event)}
         className="rounded-2xl border border-slate-800 bg-slate-900/80 p-7 shadow-2xl shadow-black/40 backdrop-blur"
       >
-        <h1 className="text-lg font-semibold text-slate-100">管理员登录</h1>
-        <p className="mt-1 text-sm text-slate-500">管理账户、配额与局域网服务</p>
+        <h1 className="text-lg font-semibold text-slate-100">{t('auth.adminTitle')}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t('auth.adminSubtitle')}</p>
 
         <div className="mt-5 space-y-4">
           <div>
             <label htmlFor="admin-username" className={LABEL_CLASS}>
-              用户名
+              {t('auth.username')}
             </label>
             <input
               id="admin-username"
@@ -54,13 +56,13 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               className={INPUT_CLASS}
-              placeholder="管理员用户名"
+              placeholder={t('auth.adminUsernamePlaceholder')}
             />
           </div>
 
           <div>
             <label htmlFor="admin-password" className={LABEL_CLASS}>
-              密码
+              {t('auth.password')}
             </label>
             <div className="relative">
               <input
@@ -70,13 +72,13 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className={`${INPUT_CLASS} pr-11`}
-                placeholder="管理员密码"
+                placeholder={t('auth.adminPasswordPlaceholder')}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
                 className="absolute inset-y-0 right-0 mt-1.5 flex w-10 items-center justify-center text-slate-500 transition hover:text-slate-300"
-                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
               </button>
@@ -94,7 +96,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
           className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-950/50 transition hover:bg-indigo-500 disabled:opacity-60"
         >
           {pending ? <Spinner className="h-4 w-4" /> : null}
-          {pending ? '登录中…' : '登录'}
+          {pending ? t('auth.loggingIn') : t('auth.login')}
         </button>
       </form>
     </AuthLayout>
@@ -102,6 +104,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
 }
 
 function AuthLayout({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div className="relative flex h-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-slate-950 to-indigo-950 p-6">
       <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl" />
@@ -113,13 +116,13 @@ function AuthLayout({ children }: { children: ReactNode }) {
             <CloudIcon className="h-7 w-7" />
           </div>
           <p className="mt-3 text-sm font-semibold tracking-tight text-slate-200">CloudBox</p>
-          <p className="text-[11px] text-slate-500">本地多用户网盘 · 管理控制台</p>
+          <p className="text-[11px] text-slate-500">{t('auth.adminFooter')}</p>
         </div>
 
         {children}
 
         <p className="mt-5 text-center text-[11px] text-slate-600">
-          管理密码使用 scrypt 哈希存储，会话仅保存在本机内存
+          {t('auth.scryptHint')}
         </p>
       </div>
     </div>

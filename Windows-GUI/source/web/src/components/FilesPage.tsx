@@ -16,8 +16,10 @@ import { FileTable } from './FileTable.tsx';
 import { Header } from './Header.tsx';
 import {
   AlertIcon,
+  CopyIcon,
   DownloadIcon,
   FolderIcon,
+  MoveIcon,
   PencilIcon,
   PlusIcon,
   RefreshIcon,
@@ -26,7 +28,7 @@ import {
   UploadIcon,
   XIcon,
 } from './Icons.tsx';
-import { isAudioName, isImageName, isPdfName, isVideoName } from '../lib/format.ts';
+import { isAudioName, isImageName, isOfficeName, isPdfName, isVideoName } from '../lib/format.ts';
 import { PreviewModal } from './PreviewModal.tsx';
 import { QuotaBar } from './QuotaBar.tsx';
 import { ShareDialog } from './ShareDialog.tsx';
@@ -37,6 +39,7 @@ type DialogState =
   | { kind: 'rename'; entry: FileEntry }
   | { kind: 'delete'; entries: FileEntry[] }
   | { kind: 'share'; entry: FileEntry }
+  | { kind: 'transfer'; mode: 'copy' | 'move'; entries: FileEntry[] }
   | null;
 
 const PRIMARY_BUTTON =
@@ -104,6 +107,7 @@ export function FilesPage() {
   const allowImagePreview = permissions?.allow_user_preview_image ?? true;
   const allowVideoPreview = permissions?.allow_user_preview_video ?? true;
   const allowPdfPreview = permissions?.allow_user_preview_pdf ?? true;
+  const allowOfficePreview = permissions?.allow_user_preview_office ?? true;
   const allowExtract = permissions?.allow_user_extract ?? false;
   const allowScan = Boolean(permissions?.allow_user_scan && publicSettings?.scan_enabled);
 
@@ -112,6 +116,7 @@ export function FilesPage() {
     if (isImageName(entry.name)) return allowImagePreview;
     if (isVideoName(entry.name)) return allowVideoPreview;
     if (isPdfName(entry.name)) return allowPdfPreview;
+    if (isOfficeName(entry.name)) return allowOfficePreview;
     if (isAudioName(entry.name)) return true;
     return true;
   };
@@ -439,6 +444,28 @@ export function FilesPage() {
               <button
                 type="button"
                 disabled={selectedEntries.length === 0}
+                onClick={() => setDialog({ kind: 'transfer', mode: 'copy', entries: selectedEntries })}
+                className={SECONDARY_BUTTON}
+                title={t('files.copySelected')}
+              >
+                <CopyIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('files.copy')}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedEntries.length === 0}
+                onClick={() => setDialog({ kind: 'transfer', mode: 'move', entries: selectedEntries })}
+                className={SECONDARY_BUTTON}
+                title={t('files.moveSelected')}
+              >
+                <MoveIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('files.move')}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedEntries.length === 0}
                 onClick={() => setDialog({ kind: 'delete', entries: selectedEntries })}
                 className={DANGER_BUTTON}
                 title={t('files.deleteSelected')}
@@ -528,6 +555,35 @@ export function FilesPage() {
           onSubmit={async (newName) => {
             await rename(dialog.entry.path, newName);
             setDialog(null);
+          }}
+        />
+      ) : null}
+
+      {dialog?.kind === 'transfer' ? (
+        <PromptDialog
+          title={dialog.mode === 'copy' ? '复制到' : '移动到'}
+          description={
+            dialog.mode === 'copy'
+              ? `将选中的 ${dialog.entries.length} 个项目复制到目标文件夹；留空表示网盘根目录。`
+              : `将选中的 ${dialog.entries.length} 个项目移动到目标文件夹；留空表示网盘根目录。`
+          }
+          label="目标文件夹路径"
+          initialValue={currentPath}
+          placeholder="例如：归档/2026；留空表示根目录"
+          allowEmpty
+          confirmLabel={dialog.mode === 'copy' ? '开始复制' : '开始移动'}
+          onClose={() => setDialog(null)}
+          onSubmit={async (destination) => {
+            const paths = dialog.entries.map((entry) => entry.path);
+            if (dialog.mode === 'copy') await api.copy(paths, destination);
+            else await api.move(paths, destination);
+            await refresh();
+            setSelected([]);
+            setDialog(null);
+            setActionNotice({
+              kind: 'success',
+              text: dialog.mode === 'copy' ? '复制完成' : '移动完成',
+            });
           }}
         />
       ) : null}

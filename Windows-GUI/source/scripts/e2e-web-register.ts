@@ -47,7 +47,7 @@ async function main(): Promise<void> {
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await page.getByRole('heading', { name: '我的文件' }).waitFor();
 
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'registered-upload.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('registered user can upload'),

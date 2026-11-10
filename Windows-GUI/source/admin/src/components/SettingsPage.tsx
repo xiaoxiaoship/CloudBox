@@ -3,7 +3,7 @@ import type { FeaturePermissions, ScanConfig } from '../../../src/shared/ipcType
 import { api, call, errorMessage } from '../api/ipc.ts';
 import { Modal, type ToastState } from './Dialog.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
-import { DatabaseIcon, HardDriveIcon, KeyIcon, Spinner, UsersIcon } from './Icons.tsx';
+import { DatabaseIcon, HardDriveIcon, KeyIcon, RefreshIcon, Spinner, UsersIcon } from './Icons.tsx';
 
 interface SettingsPageProps {
   dataDir: string;
@@ -34,6 +34,7 @@ export function SettingsPage({
     targetPath: string;
   } | null>(null);
   const [migrate, setMigrate] = useState(true);
+  const [deleteOld, setDeleteOld] = useState(false);
   const [directoryPending, setDirectoryPending] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [allowRegistration, setAllowRegistration] = useState(false);
@@ -43,6 +44,7 @@ export function SettingsPage({
     allowUserPreviewImage: true,
     allowUserPreviewVideo: true,
     allowUserPreviewPdf: true,
+    allowUserPreviewOffice: true,
     allowUserExtract: true,
     allowUserScan: true,
   });
@@ -54,8 +56,18 @@ export function SettingsPage({
     lockMaxMinutes: 60,
     ipLoginLimit: 30,
     ipWindowMinutes: 15,
+    renameEnabled: true,
+    renameLimit: 1,
+    renameWindowHours: 24,
   });
   const [securityPending, setSecurityPending] = useState(false);
+  const [logs, setLogs] = useState<{ runtime: string[]; audit: unknown[] } | null>(null);
+  const [logsKind, setLogsKind] = useState<'runtime' | 'audit'>('runtime');
+  const [logsPending, setLogsPending] = useState(false);
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminRenamePending, setAdminRenamePending] = useState(false);
+  const [startup, setStartup] = useState({ autoStart: false, startInTray: false });
+  const [startupPending, setStartupPending] = useState(false);
   const [scan, setScan] = useState<ScanConfig>({
     enabled: false,
     mode: 'local',
@@ -90,6 +102,25 @@ export function SettingsPage({
   });
   const [mailPass, setMailPass] = useState('');
   const [mailPending, setMailPending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void call(api.app.getStartup())
+      .then((value) => {
+        if (active) setStartup(value);
+      })
+      .catch(() => {});
+    void call(api.users.list())
+      .then((users) => {
+        if (!active) return;
+        const admin = users.find((user) => user.role === 'admin');
+        if (admin) setAdminUsername(admin.username);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -143,6 +174,42 @@ export function SettingsPage({
       notify('error', errorMessage(cause));
     } finally {
       setPermissionsPending(false);
+    }
+  };
+
+  const loadLogs = async (): Promise<void> => {
+    setLogsPending(true);
+    try {
+      setLogs(await call(api.logs.get({ limit: 200 })));
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setLogsPending(false);
+    }
+  };
+
+  const saveStartup = async (): Promise<void> => {
+    setStartupPending(true);
+    try {
+      setStartup(await call(api.app.setStartup(startup)));
+      notify('success', '启动与托盘设置已保存');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setStartupPending(false);
+    }
+  };
+
+  const saveAdminUsername = async (): Promise<void> => {
+    setAdminRenamePending(true);
+    try {
+      const result = await call(api.users.renameSelf({ username: adminUsername }));
+      setAdminUsername(result.username);
+      notify('success', '管理员用户名已更新');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setAdminRenamePending(false);
     }
   };
 
@@ -286,6 +353,7 @@ export function SettingsPage({
       if (!result.selected || !result.path) return;
       setDirectoryError(null);
       setMigrate(true);
+      setDeleteOld(false);
       setDirectoryChange({ kind, targetPath: result.path });
     } catch (cause) {
       notify('error', errorMessage(cause));
@@ -302,6 +370,7 @@ export function SettingsPage({
           kind: directoryChange.kind,
           targetPath: directoryChange.targetPath,
           migrate,
+          deleteOld,
         }),
       );
       notify('success', '目录配置已更新，应用即将重启…');
@@ -389,6 +458,23 @@ export function SettingsPage({
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="flex items-center gap-2">
+          <KeyIcon className="h-4 w-4 text-sky-400" />
+          <h2 className="text-sm font-semibold text-slate-100">管理员账户</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">管理员可在系统设置中修改自己的用户名；密码和已有文件不受影响。</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-[11px] text-slate-500">管理员用户名
+            <input value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} className={`${'mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500'} min-w-64`} />
+          </label>
+          <button type="button" onClick={() => void saveAdminUsername()} disabled={adminRenamePending || !adminUsername.trim()} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {adminRenamePending ? <Spinner className="h-4 w-4" /> : null}
+            保存用户名
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -418,6 +504,16 @@ export function SettingsPage({
           </label>
           <label className="text-[11px] text-slate-500">IP 统计窗口（分钟）
             <input type="number" min={1} max={1440} value={security.ipWindowMinutes} onChange={(event) => setSecurity((current) => ({ ...current, ipWindowMinutes: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">用户改名次数上限
+            <input type="number" min={1} max={100} value={security.renameLimit} onChange={(event) => setSecurity((current) => ({ ...current, renameLimit: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="text-[11px] text-slate-500">改名统计窗口（小时）
+            <input type="number" min={1} max={8760} value={security.renameWindowHours} onChange={(event) => setSecurity((current) => ({ ...current, renameWindowHours: Number(event.target.value) }))} className={INPUT_CLASS} />
+          </label>
+          <label className="flex items-center gap-2 text-[11px] text-slate-500">
+            <input type="checkbox" checked={security.renameEnabled} onChange={(event) => setSecurity((current) => ({ ...current, renameEnabled: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
+            启用普通用户改名频率限制
           </label>
         </div>
         <button type="button" onClick={() => void saveSecurity()} disabled={securityPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
@@ -489,6 +585,7 @@ export function SettingsPage({
               ['allowUserPreviewImage', '图片在线预览', '允许用户在浏览器中查看 PNG/JPG/WebP 等图片'],
               ['allowUserPreviewVideo', '视频在线播放', '允许播放 MP4/WebM/Ogg 视频'],
               ['allowUserPreviewPdf', 'PDF 在线预览', '允许在浏览器中渲染 PDF'],
+              ['allowUserPreviewOffice', 'Word / Excel / PPT 预览', '允许在线预览 .docx / .xlsx / .pptx 文件'],
               ['allowUserExtract', '在线解压', '允许把 zip/7z/rar/tar.gz 解压到当前目录'],
               ['allowUserScan', '安全查杀', '允许用户对文件发起 ClamAV / VirusTotal 查杀'],
             ] as const
@@ -751,6 +848,35 @@ export function SettingsPage({
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <RefreshIcon className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-slate-100">运行与审计日志</h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">查看当前进程最近日志，或数据库中的审计记录。</p>
+          </div>
+          <button type="button" onClick={() => void loadLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+            {logsPending ? '加载中…' : '刷新日志'}
+          </button>
+        </div>
+        <div className="mt-3 flex gap-2">
+          {(['runtime', 'audit'] as const).map((kind) => (
+            <button key={kind} type="button" onClick={() => setLogsKind(kind)} className={`rounded-lg px-3 py-1 text-xs ${logsKind === kind ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400'}`}>
+              {kind === 'runtime' ? '运行日志' : '审计日志'}
+            </button>
+          ))}
+        </div>
+        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-400">
+          {logs
+            ? logsKind === 'runtime'
+              ? logs.runtime.join('\n') || '暂无运行日志'
+              : JSON.stringify(logs.audit, null, 2)
+            : '点击“刷新日志”加载'}
+        </pre>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex items-center gap-2">
           <DatabaseIcon className="h-4 w-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-slate-100">数据库备份</h2>
@@ -768,6 +894,28 @@ export function SettingsPage({
           {backupPending ? <Spinner className="h-4 w-4" /> : <DatabaseIcon className="h-4 w-4" />}
           选择位置并备份
         </button>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="flex items-center gap-2">
+          <HardDriveIcon className="h-4 w-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold text-slate-100">启动与托盘</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">控制登录 Windows 后是否自动启动 CloudBox，以及启动后是否隐藏在系统托盘。</p>
+        <div className="mt-4 space-y-3">
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
+            <span>开机自动启动 CloudBox<br /><span className="text-[11px] text-slate-500">打包安装版生效；开发版不会注册系统启动项。</span></span>
+            <input type="checkbox" checked={startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, autoStart: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
+          </label>
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
+            <span>自启动后收起到系统托盘<br /><span className="text-[11px] text-slate-500">需同时开启上一项；手动启动仍显示主窗口。</span></span>
+            <input type="checkbox" checked={startup.startInTray} disabled={!startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, startInTray: event.target.checked }))} className="h-4 w-4 accent-indigo-500 disabled:opacity-40" />
+          </label>
+          <button type="button" onClick={() => void saveStartup()} disabled={startupPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {startupPending ? <Spinner className="h-4 w-4" /> : null}
+            保存启动设置
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
@@ -965,6 +1113,23 @@ export function SettingsPage({
                 </span>
               </span>
             </label>
+
+            {migrate ? (
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-rose-900/50 bg-rose-950/20 p-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={deleteOld}
+                  onChange={(event) => setDeleteOld(event.target.checked)}
+                  disabled={directoryPending}
+                  className="mt-1 h-4 w-4 accent-rose-500"
+                />
+                <span>
+                  <strong className="text-slate-100">迁移完成后删除旧文件</strong>
+                  <br />
+                  应用重启前会删除原目录。请确认新目录已完整复制；此操作不可撤销。
+                </span>
+              </label>
+            ) : null}
 
             {directoryError ? (
               <div className="rounded-lg bg-rose-950/40 px-3 py-2 text-sm text-rose-300">

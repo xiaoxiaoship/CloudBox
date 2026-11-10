@@ -6,6 +6,7 @@ import { FILE_ERROR, FileServiceError } from '../../core/services/fileService.ts
 import { sendDownload, sendInline } from '../http/download.ts';
 import { requestContext } from '../http/context.ts';
 import { receiveUpload, UploadError } from '../upload/receiveUpload.ts';
+import { recordUploadBytes } from '../traffic.ts';
 
 const listQuery = z.object({
   path: z.string().max(900).optional().default(''),
@@ -23,6 +24,11 @@ const renameBody = z.object({
 
 const deleteBody = z.object({
   paths: z.array(z.string().min(1).max(900)).min(1).max(100),
+});
+
+const transferBody = z.object({
+  paths: z.array(z.string().min(1).max(900)).min(1).max(100),
+  destination: z.string().max(900).optional().default(''),
 });
 
 const downloadQuery = z.object({
@@ -168,6 +174,28 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
     res.json({ ...result, usage: services.files.getUsage(req.user!) });
   });
 
+  router.post('/copy', deps.csrf, async (req, res) => {
+    const body = transferBody.parse(req.body);
+    const result = await services.files.copy(
+      req.user!,
+      body.paths,
+      body.destination,
+      requestContext(req, res),
+    );
+    res.json({ ...result, usage: services.files.getUsage(req.user!) });
+  });
+
+  router.post('/move', deps.csrf, async (req, res) => {
+    const body = transferBody.parse(req.body);
+    const result = await services.files.move(
+      req.user!,
+      body.paths,
+      body.destination,
+      requestContext(req, res),
+    );
+    res.json({ ...result, usage: services.files.getUsage(req.user!) });
+  });
+
   router.post('/upload', deps.uploadLimiter, deps.csrf, async (req, res) => {
     const user = req.user!;
     const query = uploadQuery.parse(req.query);
@@ -180,6 +208,7 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
       const result = await services.files.runExclusive(user.id, async () => {
         const received = await receiveUpload(req, {
           tempDir: services.files.getTempDir(),
+          onProgress: recordUploadBytes,
           prepare: (filename) => {
             const prepared = services.files.prepareUpload(
               user,

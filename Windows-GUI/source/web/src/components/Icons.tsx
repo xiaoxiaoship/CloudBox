@@ -31,6 +31,24 @@ export function FolderIcon({ className }: IconProps) {
   );
 }
 
+export function CopyIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={cls(className)} aria-hidden="true">
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  );
+}
+
+export function MoveIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={cls(className)} aria-hidden="true">
+      <path d="M12 3v18M3 12h18" />
+      <path d="m8 7 4-4 4 4M8 17l4 4 4-4M7 8l-4 4 4 4M17 8l4 4-4 4" />
+    </svg>
+  );
+}
+
 export function FileIcon({ className }: IconProps) {
   return (
     <svg
@@ -483,6 +501,47 @@ export function SparklesIcon({ className }: IconProps) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={cls(className)} aria-hidden="true">
       <path d="m12 3 1.4 4.1L17.5 8.5l-4.1 1.4L12 14l-1.4-4.1-4.1-1.4 4.1-1.4L12 3Z" />
       <path d="m18.5 14 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" />
+    </svg>
+  );
+}
+
+
+export function TextIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className={cls(className)} aria-hidden="true">
+      <path d="M6 3h8l4 4v14H6z" />
+      <path d="M14 3v5h5M9 12h6M9 15h6M9 18h4" />
+    </svg>
+  );
+}
+
+export function WordIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cls(className)} aria-hidden="true">
+      <rect x="3" y="2" width="18" height="20" rx="2" fill="currentColor" opacity="0.16" />
+      <path d="M7 4h10v16H7z" fill="currentColor" opacity="0.25" />
+      <text x="12" y="16" textAnchor="middle" fontSize="7" fontWeight="700" fill="currentColor">W</text>
+    </svg>
+  );
+}
+
+export function ExcelIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cls(className)} aria-hidden="true">
+      <rect x="3" y="2" width="18" height="20" rx="2" fill="currentColor" opacity="0.16" />
+      <path d="M5 9h14M5 13h14M5 17h14M9 6v14M15 6v14" stroke="currentColor" strokeWidth="1.2" />
+      <text x="12" y="16" textAnchor="middle" fontSize="6" fontWeight="700" fill="currentColor">X</text>
+    </svg>
+  );
+}
+
+export function PptIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={cls(className)} aria-hidden="true">
+      <rect x="3" y="3" width="18" height="12" rx="2" fill="currentColor" opacity="0.16" />
+      <rect x="5" y="5" width="14" height="8" rx="1" fill="currentColor" opacity="0.25" />
+      <path d="M12 15v5M9 20h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <text x="12" y="12" textAnchor="middle" fontSize="6" fontWeight="700" fill="currentColor">P</text>
     </svg>
   );
 }

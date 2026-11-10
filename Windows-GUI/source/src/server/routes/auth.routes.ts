@@ -15,6 +15,10 @@ const loginSchema = z.object({
   password: z.string().min(1).max(1_024),
 });
 
+const renameSchema = z.object({
+  username: z.string().min(1).max(64),
+});
+
 const registerSchema = z.object({
   username: z.string().min(3).max(20).regex(/^[A-Za-z0-9]+$/),
   password: z.string().min(8).max(128),
@@ -88,6 +92,16 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
       usage: services.files.getUsage(user),
       csrfToken: typeof csrfToken === 'string' ? csrfToken : null,
     });
+  });
+
+  router.patch('/username', deps.requireUser, deps.csrf, async (req, res) => {
+    const body = renameSchema.parse(req.body);
+    const user = await services.auth.rename(
+      req.user!,
+      body.username,
+      requestContext(req, res),
+    );
+    res.json({ user });
   });
 
   router.post('/avatar', deps.requireUser, deps.csrf, (req, res) => {

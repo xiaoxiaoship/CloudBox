@@ -25,10 +25,14 @@ const api: CloudboxApi = {
     unlock: (input) => invoke(IPC.usersUnlock, input),
     setStatus: (input) => invoke(IPC.usersSetStatus, input),
     remove: (input) => invoke(IPC.usersRemove, input),
+    renameSelf: (input) => invoke(IPC.adminRenameSelf, input),
   },
   server: {
     status: () => invoke(IPC.serverStatus),
     setOnline: (input) => invoke(IPC.serverSetOnline, input),
+    setAutoStart: (input) => invoke(IPC.serverSetAutoStart, input),
+    getSchedule: () => invoke(IPC.serverGetSchedule),
+    setSchedule: (input) => invoke(IPC.serverSetSchedule, input),
     setPort: (input) => invoke(IPC.serverSetPort, input),
     applyNetwork: (input) => invoke(IPC.serverApplyNetwork, input),
     certificate: () => invoke(IPC.serverCertificate),
@@ -54,12 +58,21 @@ const api: CloudboxApi = {
     setMail: (input) => invoke(IPC.settingsSetMail, input),
     testMail: () => invoke(IPC.settingsTestMail),
   },
+  logs: {
+    get: (input) => invoke(IPC.logsGet, input),
+  },
+  system: {
+    checkUpdate: () => invoke(IPC.systemCheckUpdate),
+    openExternal: (input) => invoke(IPC.systemOpenExternal, input),
+  },
   frp: {
     status: () => invoke(IPC.frpStatus),
     saveConfig: (input) => invoke(IPC.frpSaveConfig, input),
     start: () => invoke(IPC.frpStart),
     stop: () => invoke(IPC.frpStop),
     restart: () => invoke(IPC.frpRestart),
+    getSync: () => invoke(IPC.frpGetSync),
+    setSync: (input) => invoke(IPC.frpSetSync, input),
   },
   files: {
     list: (input) => invoke(IPC.filesList, input),
@@ -73,6 +86,8 @@ const api: CloudboxApi = {
     backupDatabase: () => invoke(IPC.appBackupDatabase),
     chooseDirectory: (input) => invoke(IPC.appChooseDirectory, input),
     changeDirectory: (input) => invoke(IPC.appChangeDirectory, input),
+    getStartup: () => invoke(IPC.appGetStartup),
+    setStartup: (input) => invoke(IPC.appSetStartup, input),
   },
   plugins: {
     list: () => invoke(IPC.pluginsList),

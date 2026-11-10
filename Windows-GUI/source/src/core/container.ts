@@ -28,6 +28,7 @@ import {
 import { ShareService } from './services/shareService.ts';
 import { SettingsService } from './services/settingsService.ts';
 import { TaskService } from './services/taskService.ts';
+import { UpdateService } from './services/updateService.ts';
 import { SecretBox } from './security/secretBox.ts';
 
 export interface CoreServices {
@@ -50,6 +51,7 @@ export interface CoreServices {
   ai: AiService;
   hosting: HostingService;
   mail: MailService;
+  update: UpdateService;
 }
 
 export interface CreateCoreServicesOptions {
@@ -163,6 +165,7 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     storageRoot,
     now,
   });
+  const update = new UpdateService({ settings, now });
   const mail = new MailService({
     settings,
     secrets,
@@ -191,5 +194,6 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     ai,
     hosting,
     mail,
+    update,
   };
 }

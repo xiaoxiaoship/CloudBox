@@ -30,6 +30,8 @@ export const AUTH_ERROR = {
   WEAK_PASSWORD: 'AUTH_WEAK_PASSWORD',
   PASSWORD_MISMATCH: 'AUTH_PASSWORD_MISMATCH',
   USER_NOT_FOUND: 'AUTH_USER_NOT_FOUND',
+  USERNAME_TAKEN: 'AUTH_USERNAME_TAKEN',
+  RENAME_LIMITED: 'AUTH_RENAME_LIMITED',
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR)[keyof typeof AUTH_ERROR];
@@ -427,6 +429,62 @@ export class AuthService {
   }
 
   /** 管理员重置 / 本机 CLI 重置；会解锁账户并强制下线所有设备 */
+  async rename(user: SessionUser, username: string, context: AuthContext = {}): Promise<PublicUser> {
+    const next = normalizeUsername(username);
+    const current = this.users.findById(user.id);
+    if (current === null) {
+      throw new AuthError(AUTH_ERROR.USER_NOT_FOUND, '用户不存在', 404);
+    }
+    if (next === current.username) return toPublicUser(current);
+
+    const existing = this.users.findByUsername(next);
+    if (existing !== null && existing.id !== current.id) {
+      throw new AuthError(AUTH_ERROR.USERNAME_TAKEN, '用户名已被占用', 409);
+    }
+
+    if (current.role !== 'admin' && this.settings.get('security.renameEnabled')) {
+      const windowMs = this.settings.get('security.renameWindowHours') * 3_600_000;
+      const since = this.now() - windowMs;
+      const recent = this.audit
+        .list({ limit: 500 })
+        .filter((entry) => entry.action === 'user.rename' && entry.actorId === current.id && entry.ts >= since);
+      if (recent.length >= this.settings.get('security.renameLimit')) {
+        const retryAfterMs = Math.max(1_000, (recent.at(-1)?.ts ?? this.now()) + windowMs - this.now());
+        this.recordAudit({
+          actorType: 'user',
+          actorId: current.id,
+          action: 'user.rename',
+          result: 'denied',
+          targetType: 'user',
+          targetId: String(current.id),
+          context,
+          detail: { reason: 'rate_limited', next },
+        });
+        throw new AuthError(
+          AUTH_ERROR.RENAME_LIMITED,
+          '改名次数已达上限，请稍后再试',
+          429,
+          retryAfterMs,
+        );
+      }
+    }
+
+    if (!this.users.updateUsername(current.id, next, this.now())) {
+      throw new AuthError(AUTH_ERROR.USERNAME_TAKEN, '用户名已被占用', 409);
+    }
+    this.recordAudit({
+      actorType: current.role === 'admin' ? 'admin' : 'user',
+      actorId: current.id,
+      action: 'user.rename',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(current.id),
+      context,
+      detail: { before: current.username, after: next },
+    });
+    return toPublicUser(this.users.findById(current.id)!);
+  }
+
   async resetPassword(input: ResetPasswordInput): Promise<void> {
     const now = this.now();
     const user = this.users.findById(input.userId);

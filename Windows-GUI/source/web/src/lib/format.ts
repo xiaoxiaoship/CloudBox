@@ -19,7 +19,7 @@ export function formatDate(timestamp: number): string {
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
 
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(document.documentElement.lang.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN', {
     year: sameYear ? undefined : 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -39,6 +39,10 @@ export function isImageName(name: string): boolean {
 
 export function isPdfName(name: string): boolean {
   return fileExtension(name) === 'pdf';
+}
+
+export function isOfficeName(name: string): boolean {
+  return ['docx', 'xlsx', 'pptx'].includes(fileExtension(name));
 }
 
 export function isVideoName(name: string): boolean {

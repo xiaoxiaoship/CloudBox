@@ -125,6 +125,28 @@ export class UserRepository {
     );
   }
 
+  updateUsername(id: number, username: string, now: number): boolean {
+    try {
+      return (
+        this.db
+          .prepare(
+            `UPDATE users
+                SET username = ?,
+                    display_name = CASE WHEN display_name = '' THEN ? ELSE display_name END,
+                    updated_at = ?
+              WHERE id = ?`,
+          )
+          .run(username, username, now, id).changes > 0
+      );
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   updatePasswordHash(id: number, passwordHash: string, now: number): boolean {    return (
       this.db
         .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')

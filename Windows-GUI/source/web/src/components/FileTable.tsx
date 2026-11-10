@@ -14,16 +14,20 @@ import {
   AlertIcon,
   ArchiveIcon,
   DownloadIcon,
+  ExcelIcon,
   FileIcon,
   FolderIcon,
   ImageIcon,
   PdfIcon,
   PencilIcon,
+  PptIcon,
   ScanIcon,
   ShareIcon,
   TrashIcon,
+  TextIcon,
   UploadIcon,
   VideoIcon,
+  WordIcon,
 } from './Icons.tsx';
 
 interface FileTableProps {
@@ -47,7 +51,7 @@ interface FileTableProps {
   onSelectAll: (paths: string[]) => void;
 }
 
-function EntryIcon({ entry }: { entry: FileEntry }) {
+function EntryIcon({ entry, previewable }: { entry: FileEntry; previewable: boolean }) {
   if (entry.type === 'dir') {
     return (
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-500 dark:bg-amber-950/30 dark:text-amber-400">
@@ -68,6 +72,39 @@ function EntryIcon({ entry }: { entry: FileEntry }) {
     return (
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-500 dark:bg-rose-950/30 dark:text-rose-400">
         <PdfIcon className="h-4.5 w-4.5" />
+      </span>
+    );
+  }
+
+  const extension = fileExtension(entry.name);
+  if (extension === 'docx') {
+    return (
+      <span title={previewable ? '可在线预览' : undefined} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
+        <WordIcon className="h-4.5 w-4.5" />
+      </span>
+    );
+  }
+
+  if (extension === 'xlsx') {
+    return (
+      <span title={previewable ? '可在线预览' : undefined} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400">
+        <ExcelIcon className="h-4.5 w-4.5" />
+      </span>
+    );
+  }
+
+  if (extension === 'pptx') {
+    return (
+      <span title={previewable ? '可在线预览' : undefined} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400">
+        <PptIcon className="h-4.5 w-4.5" />
+      </span>
+    );
+  }
+
+  if (extension === 'txt') {
+    return (
+      <span title={previewable ? '可在线预览' : undefined} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        <TextIcon className="h-4.5 w-4.5" />
       </span>
     );
   }
@@ -198,7 +235,7 @@ export function FileTable({
               />
 
               <div className="flex min-w-0 items-center gap-2.5">
-                <EntryIcon entry={entry} />
+                <EntryIcon entry={entry} previewable={canPreview(entry)} />
                 <div className="min-w-0">
                   <button
                     type="button"

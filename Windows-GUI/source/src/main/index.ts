@@ -14,6 +14,7 @@ import {
 import { disposeMainContext, createMainContext, type MainContext } from './context.ts';
 import { registerIpc } from './ipc.ts';
 import { createAppTray } from './tray.ts';
+import { applyLoginItem } from './loginItem.ts';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -65,6 +66,7 @@ function bootstrap(): void {
   Menu.setApplicationMenu(null);
 
   context = createMainContext();
+  applyLoginItemSettings(context);
 
   const adminIndex = path.join(context.adminDist, 'index.html');
   if (!existsSync(adminIndex)) {
@@ -199,7 +201,11 @@ function createMainWindow(mainContext: MainContext, adminIndex: string): Browser
   window.setMenuBarVisibility(false);
 
   window.once('ready-to-show', () => {
-    window.show();
+    const startHidden =
+      process.argv.includes('--hidden') &&
+      mainContext.services.settings.get('startup.startInTray');
+    if (startHidden) window.hide();
+    else window.show();
   });
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -225,4 +231,11 @@ function createMainWindow(mainContext: MainContext, adminIndex: string): Browser
   });
 
   return window;
+}
+
+function applyLoginItemSettings(mainContext: MainContext): void {
+  applyLoginItem(
+    mainContext.services.settings.get('startup.autoStart'),
+    mainContext.services.settings.get('startup.startInTray'),
+  );
 }

@@ -1,5 +1,5 @@
 import { lstatSync } from 'node:fs';
-import { appendFile, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, cp, lstat, mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileTypeFromBuffer } from 'file-type';
 import { detect as detectEncoding } from 'chardet';
@@ -29,6 +29,7 @@ export const FILE_ERROR = {
   QUOTA_EXCEEDED: 'FILE_QUOTA_EXCEEDED',
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   RENAME_FAILED: 'FILE_RENAME_FAILED',
+  COPY_FAILED: 'FILE_COPY_FAILED',
   PREVIEW_UNSUPPORTED: 'PREVIEW_UNSUPPORTED',
   FEATURE_DISABLED: 'FEATURE_DISABLED',
   FILE_INFECTED: 'FILE_INFECTED',
@@ -43,6 +44,7 @@ export function assertFeature(
     | 'allow_user_preview_image'
     | 'allow_user_preview_video'
     | 'allow_user_preview_pdf'
+    | 'allow_user_preview_office'
     | 'allow_user_extract'
     | 'allow_user_scan',
   message: string,
@@ -108,7 +110,7 @@ export interface DownloadTarget {
   modifiedAt: number;
 }
 
-export type PreviewKind = 'image' | 'video' | 'audio' | 'text' | 'pdf';
+export type PreviewKind = 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'office';
 
 export interface PreviewInfo {
   kind: PreviewKind | 'none';
@@ -127,7 +129,7 @@ export interface PreviewTextResult {
 }
 
 export interface PreviewBinaryResult {
-  kind: 'image' | 'pdf' | 'video' | 'audio';
+  kind: 'image' | 'pdf' | 'video' | 'audio' | 'office';
   target: DownloadTarget;
   mime: string;
 }
@@ -182,6 +184,13 @@ const VIDEO_MIME_BY_EXT: Record<string, string> = {
   mp4: 'video/mp4',
   webm: 'video/webm',
   ogg: 'video/ogg',
+};
+
+/** OOXML 文件：客户端用 docx-preview / xlsx / pptx-preview 渲染。 */
+const OFFICE_MIME_BY_EXT: Record<string, string> = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 
 const AUDIO_MIME_BY_EXT: Record<string, string> = {
@@ -452,6 +461,160 @@ export class FileService {
     });
   }
 
+  async copy(
+    user: SessionUser,
+    relativePaths: string[],
+    destinationPath: string,
+    ctx: RequestContext,
+  ): Promise<{ entries: FileEntry[]; copiedBytes: number }> {
+    return this.transfer(user, relativePaths, destinationPath, ctx, false);
+  }
+
+  async move(
+    user: SessionUser,
+    relativePaths: string[],
+    destinationPath: string,
+    ctx: RequestContext,
+  ): Promise<{ entries: FileEntry[] }> {
+    const result = await this.transfer(user, relativePaths, destinationPath, ctx, true);
+    return { entries: result.entries };
+  }
+
+  private async transfer(
+    user: SessionUser,
+    relativePaths: string[],
+    destinationPath: string,
+    ctx: RequestContext,
+    move: boolean,
+  ): Promise<{ entries: FileEntry[]; copiedBytes: number }> {
+    if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
+      throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, '请至少选择一个文件或文件夹', 400);
+    }
+    if (relativePaths.length > MAX_DELETE_PATHS) {
+      throw new FileServiceError(
+        FILE_ERROR.TOO_MANY_PATHS,
+        `一次最多操作 ${MAX_DELETE_PATHS} 个路径`,
+        400,
+      );
+    }
+
+    return this.mutex.runExclusive(user.id, async () => {
+      const destination = this.resolve(
+        user,
+        destinationPath,
+        { expect: 'dir' },
+        move ? 'file.move' : 'file.copy',
+        ctx,
+      );
+      const entries: FileEntry[] = [];
+      let copiedBytes = 0;
+
+      for (const relativePath of relativePaths) {
+        if (relativePath === '') {
+          throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, '不能移动或复制根目录', 400);
+        }
+
+        const source = this.resolve(
+          user,
+          relativePath,
+          { expect: 'any' },
+          move ? 'file.move' : 'file.copy',
+          ctx,
+        );
+        if (destination.relativePath === source.relativePath) {
+          throw new FileServiceError(FILE_ERROR.EXISTS, '目标位置与源位置相同', 409);
+        }
+        if (
+          destination.relativePath === source.relativePath ||
+          destination.relativePath.startsWith(`${source.relativePath}/`)
+        ) {
+          throw new FileServiceError(
+            FILE_ERROR.INVALID_OPERATION,
+            '不能把文件夹移动或复制到自身内部',
+            400,
+          );
+        }
+
+        const name = path.basename(source.relativePath);
+        const targetRelative =
+          destination.relativePath === '' ? name : `${destination.relativePath}/${name}`;
+        if (targetRelative === source.relativePath) {
+          throw new FileServiceError(FILE_ERROR.EXISTS, '目标位置已存在同名文件或文件夹', 409);
+        }
+
+        const target = this.resolve(
+          user,
+          targetRelative,
+          { mustExist: false },
+          move ? 'file.move' : 'file.copy',
+          ctx,
+        );
+
+        try {
+          await lstat(target.absolutePath);
+          throw new FileServiceError(FILE_ERROR.EXISTS, '目标位置已存在同名文件或文件夹', 409);
+        } catch (error) {
+          if (error instanceof FileServiceError) throw error;
+          if (!isErrno(error, 'ENOENT')) throw error;
+        }
+
+        const sourceInfo = await lstat(source.absolutePath);
+        const sourceBytes = sourceInfo.isDirectory()
+          ? await measureDirectorySize(source.absolutePath)
+          : sourceInfo.size;
+
+        if (move) {
+          try {
+            await renameWithRetry(source.absolutePath, target.absolutePath);
+          } catch (error) {
+            throw new FileServiceError(
+              FILE_ERROR.RENAME_FAILED,
+              '移动失败，目标文件系统可能不支持跨盘移动',
+              500,
+              { cause: error instanceof Error ? error.message : String(error) },
+            );
+          }
+          this.scans.clear(user.id, source.relativePath);
+          this.scans.clear(user.id, targetRelative);
+          this.auditSuccess(user, 'file.move', source.relativePath, ctx, {
+            newPath: targetRelative,
+            size: sourceBytes,
+          });
+        } else {
+          try {
+            this.assertQuota(user, sourceBytes);
+            await cp(source.absolutePath, target.absolutePath, {
+              recursive: sourceInfo.isDirectory(),
+              force: false,
+              errorOnExist: true,
+            });
+            if (sourceBytes > 0) this.quotas.addUsed(user.id, sourceBytes, this.now());
+            this.scans.clear(user.id, targetRelative);
+            this.auditSuccess(user, 'file.copy', source.relativePath, ctx, {
+              newPath: targetRelative,
+              size: sourceBytes,
+            });
+            copiedBytes += sourceBytes;
+          } catch (error) {
+            await rm(target.absolutePath, { recursive: true, force: true }).catch(() => {});
+            if (error instanceof FileServiceError) throw error;
+            throw new FileServiceError(
+              FILE_ERROR.COPY_FAILED,
+              '复制失败，请检查配额、目标路径或文件占用情况',
+              500,
+              { cause: error instanceof Error ? error.message : String(error) },
+            );
+          }
+        }
+
+        const targetInfo = await lstat(target.absolutePath);
+        entries.push(entryOf(targetRelative, name, targetInfo));
+      }
+
+      return { entries, copiedBytes };
+    });
+  }
+
   async remove(
     user: SessionUser,
     relativePaths: string[],
@@ -661,7 +824,9 @@ export class FileService {
           ? 'allow_user_preview_video'
           : kind === 'pdf'
             ? 'allow_user_preview_pdf'
-            : null;
+            : kind === 'office'
+              ? 'allow_user_preview_office'
+              : null;
 
     if (permission !== null && !this.settings.get(permission)) {
       throw new FileServiceError(
@@ -780,6 +945,12 @@ export class FileService {
   ): Promise<{ kind: PreviewKind; mime: string } | null> {
     const extension = path.extname(absolutePath).slice(1).toLowerCase();
     const header = await readPrefix(absolutePath, Math.min(size, SNIFF_BYTES));
+
+    const officeMime = OFFICE_MIME_BY_EXT[extension];
+    if (officeMime !== undefined) {
+      const isZip = header.subarray(0, 4).toString('latin1') === 'PK\u0003\u0004';
+      return isZip ? { kind: 'office', mime: officeMime } : null;
+    }
 
     let sniffedMime: string | undefined;
     try {

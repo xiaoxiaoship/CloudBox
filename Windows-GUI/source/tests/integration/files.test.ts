@@ -107,6 +107,46 @@ describe('files API', () => {
     }
   });
 
+  it('复制与移动文件到目标文件夹', async () => {
+    const target = await t.client.request('/api/files/folder', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'target' }),
+    });
+    assert.equal(target.status, 201);
+    const upload = await t.client.upload('copy-source.txt', Buffer.from('copy me'));
+    assert.equal(upload.status, 201);
+
+    const copied = await t.client.request('/api/files/copy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths: ['copy-source.txt'], destination: 'target' }),
+    });
+    assert.equal(copied.status, 200);
+    assert.equal((await readJson<{ entries: Array<{ path: string }> }>(copied)).entries[0]?.path, 'target/copy-source.txt');
+    assert.equal((await t.services.files.readText(t.user, 'target/copy-source.txt', { ip: null, userAgent: null, requestId: null })).content, 'copy me');
+
+    await t.client.request('/api/files', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths: ['copy-source.txt'] }),
+    });
+
+    const moved = await t.client.request('/api/files/move', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths: ['target/copy-source.txt'], destination: '' }),
+    });
+    assert.equal(moved.status, 200);
+    assert.equal((await readJson<{ entries: Array<{ path: string }> }>(moved)).entries[0]?.path, 'copy-source.txt');
+
+    await t.client.request('/api/files', {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paths: ['copy-source.txt', 'target'] }),
+    });
+  });
+
   it('下载支持 Range、强制 attachment，并返回正确字节', async () => {
     const content = Buffer.from('0123456789');
     const upload = await t.client.upload('data.bin', content);
