@@ -1,14 +1,18 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import express, { type Express } from 'express';
+import express, { type Express, type RequestHandler } from 'express';
 import helmet from 'helmet';
 import type { CoreServices } from '../core/container.ts';
 import { createCsrfProtection } from './middleware/csrf.ts';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.ts';
 import { createRateLimiters } from './middleware/rateLimit.ts';
 import { createRequireUser } from './middleware/requireUser.ts';
+import { createIpsMiddleware } from './middleware/ips.ts';
+import { createApiFloodMiddleware } from './middleware/apiFlood.ts';
 import { requestId } from './middleware/requestId.ts';
 import { createAuthRouter } from './routes/auth.routes.ts';
+import { createCapRouter } from './routes/cap.routes.ts';
+import { createCapService } from './cap/capService.ts';
 import { createAiRouter } from './routes/ai.routes.ts';
 import { createFilesRouter } from './routes/files.routes.ts';
 import { createHealthRouter } from './routes/health.routes.ts';
@@ -19,7 +23,8 @@ import {
   createSharesRouter,
 } from './routes/shares.routes.ts';
 import { createTasksRouter } from './routes/tasks.routes.ts';
-import { createMcpRouter } from './routes/mcp.routes.ts';
+import { createSystemRouter } from './routes/system.routes.ts';
+import { recordDownloadBytes } from './traffic.ts';
 
 /** 默认构建产物目录；Electron 主进程会传入 app.getAppPath() 下的绝对路径 */
 const DEFAULT_WEB_DIST = path.resolve(process.cwd(), 'dist', 'web');
@@ -31,7 +36,7 @@ const WEB_CSP = [
   "img-src 'self' data: blob:",
   "connect-src 'self'",
   "font-src 'self'",
-  "worker-src 'self'",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
@@ -53,8 +58,25 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions): Express {
   const { services } = options;
   const app = express();
+  const cap = createCapService(services.settings);
 
   app.disable('x-powered-by');
+
+  // The local TCP front door attaches the verified PROXY v2 source address.
+  // It takes precedence over Express's proxy-derived req.ip.
+  app.use((req, _res, next) => {
+    const socket = req.socket as unknown as { realIp?: string; _parent?: { realIp?: string } };
+    const realIp = socket.realIp ?? socket._parent?.realIp;
+    if (realIp) {
+      Object.defineProperty(req, 'ip', { value: realIp, configurable: true, enumerable: true, writable: true });
+      if (app.get('trust proxy')) {
+        req.headers['x-forwarded-for'] = realIp;
+      } else {
+        delete req.headers['x-forwarded-for'];
+      }
+    }
+    next();
+  });
   app.set('trust proxy', services.settings.get('network.trustProxy') ? 1 : false);
 
   app.use(
@@ -65,16 +87,58 @@ export function createApp(options: CreateAppOptions): Express {
   );
   app.use(requestId);
   app.use(express.json({ limit: '1mb' }));
+  app.use((req, res, next) => {
+    const countBody = (chunk: unknown): void => {
+      if (typeof chunk === 'string') {
+        recordDownloadBytes(Buffer.byteLength(chunk));
+      } else if (chunk instanceof Uint8Array) {
+        recordDownloadBytes(chunk.byteLength);
+      }
+    };
+    const originalWrite = res.write.bind(res);
+    const originalEnd = res.end.bind(res);
+    res.write = ((chunk: any, encoding?: any, callback?: any) => {
+      countBody(chunk);
+      return originalWrite(chunk, encoding, callback);
+    }) as typeof res.write;
+    res.end = ((chunk?: any, encoding?: any, callback?: any) => {
+      if (typeof chunk !== 'function') countBody(chunk);
+      return originalEnd(chunk, encoding, callback);
+    }) as typeof res.end;
+    next();
+  });
 
   const limiters = createRateLimiters({
     onAlert: (info) => services.events.emit('security.alert', info),
+    securityEnabled: services.settings.get('security.lockEnabled'),
+    loginLimit: () => services.settings.get('security.ipLoginLimit'),
+    loginWindowMs: () => services.settings.get('security.ipWindowMinutes') * 60_000,
+    loginLockMs: () => services.settings.get('security.ipLockMinutes') * 60_000,
+    registerLimit: () => services.settings.get('security.simpleRegisterLimit'),
   });
-  const requireUser = createRequireUser(services.auth);
+  const requireUser = createRequireUser(services.auth, services.securityPolicy, () => services.settings.get('security.mode') === 'advanced');
   const csrf = createCsrfProtection(services.audit);
+
+  app.use(createIpsMiddleware(services));
 
   app.use('/health', createHealthRouter({ db: services.db, version: options.version }));
 
+  app.use('/api', (req, res, next) => {
+    if (services.settings.get('security.mode') !== 'advanced') { next(); return; }
+    const ip = req.ip ?? 'unknown';
+    if (services.securityPolicy.isDenied('ip', ip)) {
+      res.status(403).json({ code: 'SECURITY_BANNED', action: 'security_banned', message: 'IP 在黑名单中' });
+      return;
+    }
+    if (!services.securityPolicy.isAllowed('ip', ip) && services.securityPolicy.activeBan('ip', ip)?.feature === 'global') {
+      res.status(403).json({ code: 'SECURITY_BANNED', action: 'security_banned', message: 'IP 已被全局封禁' });
+      return;
+    }
+    next();
+  });
   app.use('/api', limiters.api);
+  app.use(createApiFloodMiddleware(services));
+  app.use('/api/cap', createCapRouter(cap));
 
   app.get('/api/public/root-ca.crt', (req, res, next) => {
     const rootCa = options.getPublicRootCa?.();
@@ -99,13 +163,13 @@ export function createApp(options: CreateAppOptions): Express {
         allow_user_preview_image: services.settings.get('allow_user_preview_image'),
         allow_user_preview_video: services.settings.get('allow_user_preview_video'),
         allow_user_preview_pdf: services.settings.get('allow_user_preview_pdf'),
+        allow_user_preview_office: services.settings.get('allow_user_preview_office'),
         allow_user_extract: services.settings.get('allow_user_extract'),
         allow_user_scan: services.settings.get('allow_user_scan'),
       },
       scan_enabled: services.settings.get('scan.enabled'),
       ai_enabled: services.settings.get('ai.enabled'),
       ai_mode: services.settings.get('ai.mode'),
-      mcp_enabled: services.settings.get('mcp.enabled'),
       hosting_enabled: services.settings.get('hosting.enabled'),
       hosting_base_url: services.settings.get('hosting.base_url'),
     });
@@ -114,9 +178,8 @@ export function createApp(options: CreateAppOptions): Express {
   app.use('/api/hosting', requireUser, createHostingApiRouter(services, { csrf }));
   app.use('/host', createHostingSiteRouter(services));
 
-  app.all('/api/mcp', createMcpRouter(services));
-
   app.use('/api/ai', requireUser, createAiRouter(services, { csrf }));
+  app.use('/api/system', requireUser, createSystemRouter(services, { version: options.version }));
 
   app.get('/api/public/plugin-theme.css', (_req, res) => {
     res.type('text/css').send(services.plugins.getThemeCss());
@@ -153,16 +216,26 @@ export function createApp(options: CreateAppOptions): Express {
     createSharesRouter(services, {
       csrf,
       shareLimiter: limiters.shares,
+      cap,
+      policy: services.securityPolicy,
     }),
   );
+
+  const registerLimiter: RequestHandler = (req, res, next) => {
+    if (services.settings.get('security.mode') === 'simple') limiters.register(req, res, next);
+    else next();
+  };
 
   app.use(
     '/api/auth',
     createAuthRouter(services, {
       requireUser,
       csrf,
+      loginGuard: limiters.loginGuard,
       loginLimiter: limiters.login,
-      registerLimiter: limiters.register,
+      registerLimiter,
+      cap,
+      policy: services.securityPolicy,
     }),
   );
   app.use(

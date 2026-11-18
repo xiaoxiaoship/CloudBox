@@ -26,12 +26,16 @@ export interface MailSettingsInput {
   to: string;
   eventUserRegistered: boolean;
   eventSecurityAlert: boolean;
+  eventSecurityLimit: boolean;
+  eventResourceAlert: boolean;
   eventSystemError: boolean;
 }
 
 const SUBJECTS: Record<string, string> = {
   'user.registered': 'CloudBox：新用户注册',
   'security.alert': 'CloudBox：安全告警',
+  'security.limit': 'CloudBox：安全限制已触发',
+  'resource.alert': 'CloudBox：本地资源告警',
   'system.error': 'CloudBox：系统严重错误',
 };
 
@@ -59,6 +63,8 @@ export class MailService {
 
     this.events.on('user.registered', (payload) => this.notify('user.registered', payload));
     this.events.on('security.alert', (payload) => this.notify('security.alert', payload));
+    this.events.on('security.limit', (payload) => this.notify('security.limit', payload));
+    this.events.on('resource.alert', (payload) => this.notify('resource.alert', payload));
     this.events.on('system.error', (payload) => this.notify('system.error', payload));
   }
 
@@ -74,6 +80,7 @@ export class MailService {
     if (this.transport !== null) return this.transport;
     const pass = this.secrets.decrypt(this.settings.get('mail.pass'));
     const user = this.settings.get('mail.user');
+    if (user && !pass) throw new Error('SMTP 密码未配置或无法解密，请在“功能控制 → 邮件通知”中重新填写授权码');
     const transport = nodemailer.createTransport({
       host: this.settings.get('mail.host'),
       port: this.settings.get('mail.port'),
@@ -105,6 +112,8 @@ export class MailService {
       events: {
         userRegistered: this.settings.get('mail.eventUserRegistered'),
         securityAlert: this.settings.get('mail.eventSecurityAlert'),
+        securityLimit: this.settings.get('mail.eventSecurityLimit'),
+        resourceAlert: this.settings.get('mail.eventResourceAlert'),
         systemError: this.settings.get('mail.eventSystemError'),
       },
     };
@@ -123,6 +132,8 @@ export class MailService {
     this.settings.set('mail.to', input.to.trim(), null);
     this.settings.set('mail.eventUserRegistered', input.eventUserRegistered, null);
     this.settings.set('mail.eventSecurityAlert', input.eventSecurityAlert, null);
+    this.settings.set('mail.eventSecurityLimit', input.eventSecurityLimit, null);
+    this.settings.set('mail.eventResourceAlert', input.eventResourceAlert, null);
     this.settings.set('mail.eventSystemError', input.eventSystemError, null);
     return this.adminSettings();
   }
@@ -131,14 +142,17 @@ export class MailService {
     if (!this.settings.get('mail.enabled')) return false;
     if (event === 'user.registered') return this.settings.get('mail.eventUserRegistered');
     if (event === 'security.alert') return this.settings.get('mail.eventSecurityAlert');
+    if (event === 'security.limit') return this.settings.get('mail.eventSecurityLimit');
+    if (event === 'resource.alert') return this.settings.get('mail.eventResourceAlert');
     if (event === 'system.error') return this.settings.get('mail.eventSystemError');
     return false;
   }
 
   private cooldownKey(event: string, payload: Record<string, unknown>): string {
-    if (event === 'security.alert') {
-      return `${event}:${String(payload.ip ?? '')}:${String(payload.endpoint ?? '')}`;
+    if (event === 'security.alert' || event === 'security.limit') {
+      return `${event}:${String(payload.scope ?? '')}:${String(payload.target ?? payload.ip ?? '')}:${String(payload.feature ?? payload.endpoint ?? '')}`;
     }
+    if (event === 'resource.alert') return `${event}:${String(payload.resource ?? '')}:${String(payload.message ?? '')}`;
     if (event === 'user.registered') return `${event}:${String(payload.username ?? '')}`;
     return `${event}:${String(payload.message ?? '')}`;
   }
@@ -166,11 +180,23 @@ export class MailService {
     if (!to) return;
     const from = this.settings.get('mail.from').trim() || this.settings.get('mail.user').trim();
     if (!from) return;
-    const text = [
-      `事件：${event}`,
-      `时间：${new Date(this.now()).toISOString()}`,
-      ...Object.entries(payload).map(([key, value]) => `${key}: ${String(value)}`),
-    ].join('\n');
+    const detail = event === 'security.limit' || event === 'security.alert'
+      ? [
+          `事件：${event}`,
+          `时间：${new Date(this.now()).toISOString()}`,
+          `类型：${String(payload.category ?? '安全事件')}`,
+          `作用域：${String(payload.scope ?? 'IP / 账户')}`,
+          `目标：${String(payload.target ?? payload.ip ?? '未知')}`,
+          `功能：${String(payload.featureName ?? payload.feature ?? '未知')}`,
+          `剩余：${String(payload.remainingMinutes ?? '未知')} 分钟`,
+          `详情：${String(payload.message ?? payload.ruleName ?? '')}`,
+        ].join('\n')
+      : [
+          `事件：${event}`,
+          `时间：${new Date(this.now()).toISOString()}`,
+          ...Object.entries(payload).map(([key, value]) => `${key}: ${String(value)}`),
+        ].join('\n');
+    const text = detail;
     await this.transportForConfig().send({
       to,
       from,

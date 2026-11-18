@@ -1,7 +1,9 @@
 import type { UsageInfo } from '../api/client.ts';
 import { formatBytes, quotaPercent } from '../lib/format.ts';
+import { useTranslation } from 'react-i18next';
 
 export function QuotaBar({ usage }: { usage: UsageInfo | null }) {
+  const { t } = useTranslation();
   if (!usage) {
     return (
       <div className="w-full animate-pulse sm:w-64">
@@ -19,7 +21,7 @@ export function QuotaBar({ usage }: { usage: UsageInfo | null }) {
   return (
     <div className="w-full sm:w-64">
       <div className="flex items-baseline justify-between gap-2 text-xs">
-        <span className="font-medium text-slate-600 dark:text-slate-300">存储空间</span>
+        <span className="font-medium text-slate-600 dark:text-slate-300">{t('files.storage')}</span>
         <span className="tabular-nums text-slate-500 dark:text-slate-400">
           {formatBytes(usage.usedBytes)}
           {unlimited ? ' · 不限量' : ` / ${formatBytes(usage.quotaBytes)}`}
@@ -31,7 +33,7 @@ export function QuotaBar({ usage }: { usage: UsageInfo | null }) {
         aria-valuemin={0}
         aria-valuemax={unlimited ? undefined : usage.quotaBytes ?? 0}
         aria-valuenow={usage.usedBytes}
-        aria-label="存储空间使用情况"
+        aria-label={t('files.storage')}
       >
         {unlimited ? (
           <div className="h-full w-full bg-gradient-to-r from-indigo-200 to-sky-200 dark:from-indigo-500/40 dark:to-sky-500/40" />

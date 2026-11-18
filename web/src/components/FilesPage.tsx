@@ -16,8 +16,10 @@ import { FileTable } from './FileTable.tsx';
 import { Header } from './Header.tsx';
 import {
   AlertIcon,
+  CopyIcon,
   DownloadIcon,
   FolderIcon,
+  MoveIcon,
   PencilIcon,
   PlusIcon,
   RefreshIcon,
@@ -26,7 +28,7 @@ import {
   UploadIcon,
   XIcon,
 } from './Icons.tsx';
-import { isAudioName, isImageName, isPdfName, isVideoName } from '../lib/format.ts';
+import { isAudioName, isImageName, isOfficeName, isPdfName, isVideoName } from '../lib/format.ts';
 import { PreviewModal } from './PreviewModal.tsx';
 import { QuotaBar } from './QuotaBar.tsx';
 import { ShareDialog } from './ShareDialog.tsx';
@@ -37,6 +39,7 @@ type DialogState =
   | { kind: 'rename'; entry: FileEntry }
   | { kind: 'delete'; entries: FileEntry[] }
   | { kind: 'share'; entry: FileEntry }
+  | { kind: 'transfer'; mode: 'copy' | 'move'; entries: FileEntry[] }
   | null;
 
 const PRIMARY_BUTTON =
@@ -60,6 +63,7 @@ export function FilesPage() {
   const navigate = useAppStore((state) => state.navigate);
   const refresh = useAppStore((state) => state.refresh);
   const createFolder = useAppStore((state) => state.createFolder);
+  const readOnly = user?.securityMode === true;
   const rename = useAppStore((state) => state.rename);
   const remove = useAppStore((state) => state.remove);
   const playAudio = useAppStore((state) => state.playAudio);
@@ -104,6 +108,7 @@ export function FilesPage() {
   const allowImagePreview = permissions?.allow_user_preview_image ?? true;
   const allowVideoPreview = permissions?.allow_user_preview_video ?? true;
   const allowPdfPreview = permissions?.allow_user_preview_pdf ?? true;
+  const allowOfficePreview = permissions?.allow_user_preview_office ?? true;
   const allowExtract = permissions?.allow_user_extract ?? false;
   const allowScan = Boolean(permissions?.allow_user_scan && publicSettings?.scan_enabled);
 
@@ -112,6 +117,7 @@ export function FilesPage() {
     if (isImageName(entry.name)) return allowImagePreview;
     if (isVideoName(entry.name)) return allowVideoPreview;
     if (isPdfName(entry.name)) return allowPdfPreview;
+    if (isOfficeName(entry.name)) return allowOfficePreview;
     if (isAudioName(entry.name)) return true;
     return true;
   };
@@ -211,7 +217,7 @@ export function FilesPage() {
     try {
       const current = hosting ?? (await api.hostingSettings());
       const result = await api.saveHosting({
-        rootPath: singleSelected.path,
+        rootPath: singleSelected.path.replace(/^\/+/, ''),
         enabled: true,
         visibility: current.visibility,
       });
@@ -275,7 +281,7 @@ export function FilesPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-              我的文件
+              {t('files.title')}
             </h1>
             <div className="mt-1.5">
               <Breadcrumbs path={currentPath} disabled={listingLoading} onNavigate={(path) => void navigate(path)} />
@@ -301,9 +307,9 @@ export function FilesPage() {
 
         {hosting?.enabled && hosting.rootPath === currentPath ? (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200">
-            <span>该目录正在托管中：{hosting.url}</span>
+            <span>{t('files.currentHosting', { url: hosting.url })}</span>
             <button type="button" onClick={() => void api.disableHosting().then(setHosting).catch(() => {})} className="rounded-lg border border-indigo-300 px-3 py-1 text-xs hover:bg-indigo-100 dark:border-indigo-800 dark:hover:bg-indigo-950">
-              取消部署
+              {t('common.cancelDeploy')}
             </button>
           </div>
         ) : null}
@@ -357,13 +363,15 @@ export function FilesPage() {
         >
           <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
+              {!readOnly ? (
+                <>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className={PRIMARY_BUTTON}
               >
                 <UploadIcon className="h-4 w-4" />
-                上传文件
+                {t('common.upload')}
               </button>
               <button
                 type="button"
@@ -373,22 +381,24 @@ export function FilesPage() {
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.newFolder')}</span>
               </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void refresh()}
                 disabled={listingLoading}
                 className={SECONDARY_BUTTON}
-                title="刷新"
+                title={t('common.refresh')}
               >
                 <RefreshIcon className={`h-4 w-4 ${listingLoading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">刷新</span>
+                <span className="hidden sm:inline">{t('common.refresh')}</span>
               </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {selected.length > 0 ? (
                 <span className="mr-1 text-xs text-slate-500 dark:text-slate-400">
-                  已选 {selected.length} 项
+                   {t('files.selected', { count: selected.length })}
                 </span>
               ) : null}
 
@@ -397,29 +407,33 @@ export function FilesPage() {
                 disabled={!canDownload}
                 onClick={() => singleSelected && download(singleSelected)}
                 className={SECONDARY_BUTTON}
-                title="下载选中文件"
+                title={t('files.downloadSelected')}
               >
                 <DownloadIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.download')}</span>
               </button>
 
+              {!readOnly ? (
+                <>
+              {publicSettings?.hosting_enabled ? (
               <button
                 type="button"
-                disabled={!publicSettings?.hosting_enabled || singleSelected?.type !== 'dir'}
+                disabled={singleSelected?.type !== 'dir'}
                 onClick={() => void deploySelectedFolder()}
                 className={SECONDARY_BUTTON}
-                title="将选中的文件夹部署为静态网站"
+                title={t('files.deploySite')}
               >
                 <FolderIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('files.deploySite')}</span>
               </button>
+              ) : null}
 
               <button
                 type="button"
                 disabled={!canDownload}
                 onClick={() => singleSelected && setDialog({ kind: 'share', entry: singleSelected })}
                 className={SECONDARY_BUTTON}
-                title="分享选中文件"
+                title={t('common.share')}
               >
                 <ShareIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.share')}</span>
@@ -430,7 +444,7 @@ export function FilesPage() {
                 disabled={!singleSelected}
                 onClick={() => singleSelected && setDialog({ kind: 'rename', entry: singleSelected })}
                 className={SECONDARY_BUTTON}
-                title="重命名选中项"
+                title={t('common.rename')}
               >
                 <PencilIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.rename')}</span>
@@ -439,13 +453,37 @@ export function FilesPage() {
               <button
                 type="button"
                 disabled={selectedEntries.length === 0}
+                onClick={() => setDialog({ kind: 'transfer', mode: 'copy', entries: selectedEntries })}
+                className={SECONDARY_BUTTON}
+                title={t('files.copySelected')}
+              >
+                <CopyIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('files.copy')}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedEntries.length === 0}
+                onClick={() => setDialog({ kind: 'transfer', mode: 'move', entries: selectedEntries })}
+                className={SECONDARY_BUTTON}
+                title={t('files.moveSelected')}
+              >
+                <MoveIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('files.move')}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={selectedEntries.length === 0}
                 onClick={() => setDialog({ kind: 'delete', entries: selectedEntries })}
                 className={DANGER_BUTTON}
-                title="删除选中项"
+                title={t('files.deleteSelected')}
               >
                 <TrashIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">删除</span>
+                <span className="hidden sm:inline">{t('common.delete')}</span>
               </button>
+                </>
+              ) : null}
             </div>
           </div>
 
@@ -461,8 +499,9 @@ export function FilesPage() {
             onExtract={(entry) => void extractEntry(entry)}
             onScan={(entry) => void scanEntry(entry)}
             canPreview={canPreview}
-            allowExtract={allowExtract}
-            allowScan={allowScan}
+            allowExtract={!readOnly && allowExtract}
+            allowScan={!readOnly && allowScan}
+            readOnly={readOnly}
             busyPaths={busyPaths}
             onRename={(entry) => setDialog({ kind: 'rename', entry })}
             onDelete={(entry) => setDialog({ kind: 'delete', entries: [entry] })}
@@ -472,9 +511,7 @@ export function FilesPage() {
         </section>
 
         <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
-          已登录为 {user?.displayName || user?.username}
-          {' · '}
-          文件保存在本机 CloudBox 服务中
+          {t('files.footer', { username: user?.displayName || user?.username })}
         </p>
       </main>
 
@@ -534,6 +571,35 @@ export function FilesPage() {
         />
       ) : null}
 
+      {dialog?.kind === 'transfer' ? (
+        <PromptDialog
+          title={dialog.mode === 'copy' ? '复制到' : '移动到'}
+          description={
+            dialog.mode === 'copy'
+              ? `将选中的 ${dialog.entries.length} 个项目复制到目标文件夹；留空表示网盘根目录。`
+              : `将选中的 ${dialog.entries.length} 个项目移动到目标文件夹；留空表示网盘根目录。`
+          }
+          label="目标文件夹路径"
+          initialValue={currentPath}
+          placeholder="例如：归档/2026；留空表示根目录"
+          allowEmpty
+          confirmLabel={dialog.mode === 'copy' ? '开始复制' : '开始移动'}
+          onClose={() => setDialog(null)}
+          onSubmit={async (destination) => {
+            const paths = dialog.entries.map((entry) => entry.path);
+            if (dialog.mode === 'copy') await api.copy(paths, destination);
+            else await api.move(paths, destination);
+            await refresh();
+            setSelected([]);
+            setDialog(null);
+            setActionNotice({
+              kind: 'success',
+              text: dialog.mode === 'copy' ? '复制完成' : '移动完成',
+            });
+          }}
+        />
+      ) : null}
+
       {dialog?.kind === 'delete' ? (
         <ConfirmDialog
           title="确认删除"
@@ -574,8 +640,8 @@ export function FilesPage() {
         <PreviewModal entry={previewEntry} onClose={() => setPreviewEntry(null)} />
       ) : null}
 
-      <UploadPanel />
-      <AiAssistant enabled={publicSettings?.ai_enabled ?? false} />
+      {!readOnly ? <UploadPanel /> : null}
+      {!readOnly ? <AiAssistant enabled={publicSettings?.ai_enabled ?? false} /> : null}
     </div>
   );
 }

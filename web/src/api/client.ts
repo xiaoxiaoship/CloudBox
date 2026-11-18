@@ -4,6 +4,7 @@ export interface PublicUser {
   displayName: string;
   role: 'admin' | 'user';
   status: 'active' | 'disabled';
+  securityMode?: boolean;
   mustChangePassword: boolean;
   lastLoginAt: number | null;
   avatarDataUrl?: string | null;
@@ -32,7 +33,7 @@ export interface FileListing {
 }
 
 export interface PreviewInfo {
-  kind: 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'none';
+  kind: 'image' | 'video' | 'audio' | 'text' | 'pdf' | 'office' | 'none';
   mime: string | null;
   size: number;
   name: string;
@@ -53,13 +54,13 @@ export interface PublicSettings {
     allow_user_preview_image: boolean;
     allow_user_preview_video: boolean;
     allow_user_preview_pdf: boolean;
+    allow_user_preview_office: boolean;
     allow_user_extract: boolean;
     allow_user_scan: boolean;
   };
   scan_enabled: boolean;
   ai_enabled: boolean;
   ai_mode: 'admin' | 'user';
-  mcp_enabled: boolean;
   hosting_enabled: boolean;
   hosting_base_url: string;
 }
@@ -160,49 +161,75 @@ interface RequestOptions {
   body?: unknown;
 }
 
+let capSolvePromise: Promise<string> | null = null;
+
+async function solveCap(): Promise<string> {
+  if (capSolvePromise !== null) return capSolvePromise;
+  capSolvePromise = (async () => {
+    const { default: Cap } = await import('@cap.js/widget');
+    const host = document.createElement('cap-widget') as unknown as import('@cap.js/widget').CapWidget;
+    host.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;';
+    document.body.appendChild(host);
+    try {
+      const cap = new Cap({ apiEndpoint: '/api/cap/' }, host);
+      const result = await cap.solve();
+      if (!result.token) throw new Error('Cap returned no token');
+      return result.token;
+    } finally {
+      host.remove();
+    }
+  })().finally(() => {
+    capSolvePromise = null;
+  });
+  return capSolvePromise;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const method = options.method ?? 'GET';
-  const headers: Record<string, string> = {};
+  let capToken = '';
 
-  if (options.body !== undefined) {
-    headers['content-type'] = 'application/json';
-  }
-  if (csrfToken && method !== 'GET') {
-    headers['x-csrf-token'] = csrfToken;
-  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const headers: Record<string, string> = {};
+    if (options.body !== undefined) headers['content-type'] = 'application/json';
+    if (csrfToken && method !== 'GET') headers['x-csrf-token'] = csrfToken;
+    if (capToken) headers['x-cap-token'] = capToken;
 
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      credentials: 'same-origin',
-    });
-  } catch {
-    throw new ApiError('无法连接服务器，请确认 CloudBox 服务已启动', 0, 'NETWORK_ERROR');
-  }
-
-  if (!response.ok) {
-    let payload: { code?: string; message?: string; details?: unknown } = {};
+    let response: Response;
     try {
-      payload = (await response.json()) as typeof payload;
+      response = await fetch(path, {
+        method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        credentials: 'same-origin',
+      });
     } catch {
-      // 非 JSON 错误体（例如网关错误页）
+      throw new ApiError('Unable to connect to CloudBox service', 0, 'NETWORK_ERROR');
     }
-    throw new ApiError(
-      payload.message ?? `请求失败（HTTP ${response.status}）`,
-      response.status,
-      payload.code ?? 'REQUEST_FAILED',
-      payload.details,
-    );
+
+    if (!response.ok) {
+      let payload: { code?: string; message?: string; details?: unknown; action?: string } = {};
+      try {
+        payload = (await response.json()) as typeof payload;
+      } catch {
+        // 闈?JSON 閿欒浣擄紙渚嬪缃戝叧閿欒椤碉級
+      }
+      if (response.status === 403 && payload.action === 'cap_required' && !capToken) {
+        capToken = await solveCap();
+        continue;
+      }
+      throw new ApiError(
+        payload.message ?? `Request failed (HTTP ${response.status})`,
+        response.status,
+        payload.code ?? 'REQUEST_FAILED',
+        payload.details,
+      );
+    }
+
+    if (response.status === 204) return undefined as T;
+    return (await response.json()) as T;
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
+  throw new ApiError('CAP_FAILED', 403, 'CAP_FAILED');
 }
 
 export function downloadUrl(path: string): string {
@@ -246,6 +273,13 @@ export const api = {
     setCsrfToken('');
   },
 
+  renameAccount(username: string): Promise<{ user: PublicUser }> {
+    return request<{ user: PublicUser }>('/api/auth/username', {
+      method: 'PATCH',
+      body: { username },
+    });
+  },
+
   uploadAvatar(avatar: string): Promise<{ avatarDataUrl: string }> {
     return request<{ avatarDataUrl: string }>('/api/auth/avatar', {
       method: 'POST',
@@ -280,6 +314,24 @@ export const api = {
       method: 'DELETE',
       body: { paths },
     });
+  },
+
+  copy(paths: string[], destination: string): Promise<{ entries: FileEntry[] }> {
+    return request<{ entries: FileEntry[] }>('/api/files/copy', {
+      method: 'POST',
+      body: { paths, destination },
+    });
+  },
+
+  move(paths: string[], destination: string): Promise<{ entries: FileEntry[] }> {
+    return request<{ entries: FileEntry[] }>('/api/files/move', {
+      method: 'POST',
+      body: { paths, destination },
+    });
+  },
+
+  pluginPreviewers(): Promise<Record<string, string>> {
+    return request<Record<string, string>>('/api/plugins/previewers');
   },
 
   previewInfo(path: string): Promise<PreviewInfo> {

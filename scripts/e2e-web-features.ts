@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await page.getByRole('heading', { name: '我的文件' }).waitFor();
 
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'clip.mp4',
       mimeType: 'video/mp4',
       buffer: MP4,

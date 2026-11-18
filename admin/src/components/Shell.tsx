@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdminStatus, AdminUser, ServerStatus } from '../../../src/shared/ipcTypes.ts';
 import { api, call, errorMessage } from '../api/ipc.ts';
 import type { PageKey } from '../App.tsx';
+import { applyAdminTheme, readAdminTheme, saveAdminTheme, type AdminTheme } from '../lib/theme.ts';
 import type { ToastState } from './Dialog.tsx';
 import {
   CloudIcon,
@@ -21,6 +22,7 @@ import { FilesPage } from './FilesPage.tsx';
 import { NetworkPage } from './NetworkPage.tsx';
 import { PluginsPage } from './PluginsPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
+import { UpdateDialog } from './UpdateDialog.tsx';
 import { UsersPage } from './UsersPage.tsx';
 
 const NAV_ITEMS: Array<{ key: PageKey; label: string; icon: typeof DashboardIcon }> = [
@@ -53,21 +55,46 @@ interface ShellProps {
 export function Shell({ status, user, page, onNavigate, onLogout, notify }: ShellProps) {
   const { t } = useTranslation();
   const [server, setServer] = useState<ServerStatus | null>(null);
+  const [speed, setSpeed] = useState({ up: 0, down: 0 });
+  const lastTraffic = useRef<{ time: number; up: number; down: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [theme, setTheme] = useState<AdminTheme>(() => readAdminTheme());
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
 
   const refreshServer = useCallback(async (): Promise<void> => {
     try {
-      setServer(await call(api.server.status()));
+      const next = await call(api.server.status());
+      const now = Date.now();
+      if (lastTraffic.current !== null && next.running) {
+        const elapsed = Math.max(0.001, (now - lastTraffic.current.time) / 1000);
+        setSpeed({
+          up: Math.max(0, (next.uploadedBytes - lastTraffic.current.up) / elapsed),
+          down: Math.max(0, (next.downloadedBytes - lastTraffic.current.down) / elapsed),
+        });
+      } else {
+        setSpeed({ up: 0, down: 0 });
+      }
+      lastTraffic.current = next.running
+        ? { time: now, up: next.uploadedBytes, down: next.downloadedBytes }
+        : null;
+      setServer(next);
     } catch {
       // 后台轮询失败不打扰用户
     }
   }, []);
 
   useEffect(() => {
+    void call(api.system.checkUpdate())
+      .then((result) => setUpdateAvailable(result.hasUpdate))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     void refreshServer();
     const timer = window.setInterval(() => {
       void refreshServer();
-    }, 5_000);
+    }, 1_000);
     return () => window.clearInterval(timer);
   }, [refreshServer]);
 
@@ -81,6 +108,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
   };
 
   return (
+    <>
     <div className="flex h-full bg-slate-950 text-slate-100">
       <aside className="flex w-56 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
         <div className="flex items-center gap-2 px-4 py-4">
@@ -89,7 +117,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
           </div>
           <div>
             <p className="text-sm font-semibold tracking-tight">CloudBox</p>
-            <p className="text-[10px] text-slate-500">管理控制台</p>
+            <p className="text-[10px] text-slate-500">{t('admin.shell.brandSubtitle')}</p>
           </div>
         </div>
 
@@ -109,7 +137,8 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                {t(item.label)}
+                <span className="flex-1 text-left">{t(item.label)}</span>
+                {item.key === 'settings' && updateAvailable ? <span className="h-2 w-2 rounded-full bg-rose-500" aria-label={t('admin.shell.newVersion')} /> : null}
               </button>
             );
           })}
@@ -123,7 +152,9 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
               }`}
             />
             <span className="text-[11px] text-slate-400">
-              {server?.running ? `在线 · ${server.port}` : '离线模式'}
+              {server?.running
+                ? t('admin.shell.onlineRate', { up: formatRate(speed.up), down: formatRate(speed.down) })
+                : t('admin.shell.offline')}
             </span>
           </div>
 
@@ -137,10 +168,15 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
             className="w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[11px] text-slate-500 transition hover:bg-slate-900 hover:text-slate-300"
             title={status.dataDir}
           >
-            数据目录
+            {t('admin.shell.dataDirectory')}
           </button>
 
-          <p className="px-2 text-[10px] text-slate-600">v{status.version}</p>
+          <div className="flex items-center justify-between px-2 text-[10px] text-slate-600">
+            <span>v{status.version}</span>
+            <button type="button" onClick={() => setUpdateOpen(true)} className="text-[10px] text-indigo-400 hover:text-indigo-300">
+              {t('admin.shell.updateAbout')}
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -149,14 +185,15 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
           <div>
             <h1 className="text-sm font-semibold text-slate-100">{t(PAGE_TITLES[page])}</h1>
             <p className="text-[11px] text-slate-500">
-              {server?.running ? `服务运行中 · 0.0.0.0:${server.port}` : '服务未启动，仅本机管理'}
+              {server?.running ? t('admin.shell.serviceRunning') : t('admin.shell.serviceStopped')}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
+            <button type="button" onClick={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); saveAdminTheme(next); }} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800">{theme === 'dark' ? t('浅色') : t('深色')}</button>
             <div className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-400">
               <ServerIcon className="h-3.5 w-3.5" />
-              {server?.running ? '在线' : '离线'}
+              {server?.running ? t('admin.shell.online') : t('admin.shell.offline')}
             </div>
 
             <div className="flex items-center gap-2">
@@ -205,5 +242,19 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
         </main>
       </div>
     </div>
+    {updateOpen ? (
+      <UpdateDialog
+        currentVersion={status.version}
+        onClose={() => setUpdateOpen(false)}
+        onFoundUpdate={() => setUpdateAvailable(true)}
+      />
+    ) : null}
+    </>
   );
+}
+
+function formatRate(bytesPerSecond: number): string {
+  if (bytesPerSecond >= 1024 * 1024) return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+  if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${Math.round(bytesPerSecond)} B/s`;
 }

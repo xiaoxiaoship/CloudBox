@@ -4,6 +4,8 @@ import { createServer as createHttpsServer } from 'node:https';
 import os from 'node:os';
 import type { CoreServices } from '../core/container.ts';
 import { createApp } from '../server/app.ts';
+import { getTrafficSnapshot, resetTraffic } from '../server/traffic.ts';
+import { ProxyProtocolServer } from './proxyProtocolServer.ts';
 
 export const SERVER_ERROR = {
   PORT_IN_USE: 'PORT_IN_USE',
@@ -36,7 +38,10 @@ export interface ServerStatus {
   urls: string[];
   lanIps: string[];
   startedAt: number | null;
+  uploadedBytes: number;
+  downloadedBytes: number;
   error: string | null;
+  autoStart: boolean;
 }
 
 export function listLanIps(): string[] {
@@ -82,6 +87,7 @@ export class ServerController {
   private readonly bind: string;
 
   private server: Server | null = null;
+  private proxyFront: ProxyProtocolServer | null = null;
   private activePort: number | null = null;
   private activeProtocol: ServerProtocol | null = null;
   private configuredPort: number;
@@ -92,6 +98,7 @@ export class ServerController {
   private readonly getTlsOptions: (() => { cert: Buffer; key: Buffer }) | null;
   private readonly getMtlsCa: (() => Buffer | null) | null;
   private readonly getRootCaPath: (() => string | null) | null;
+  private readonly isProxyProtocolEnabled: () => boolean;
 
   constructor(options: {
     services: CoreServices;
@@ -104,6 +111,7 @@ export class ServerController {
     getTlsOptions?: () => { cert: Buffer; key: Buffer };
     getMtlsCa?: () => Buffer | null;
     getRootCaPath?: () => string | null;
+    isProxyProtocolEnabled?: () => boolean;
   }) {
     this.services = options.services;
     this.version = options.version;
@@ -115,15 +123,17 @@ export class ServerController {
     this.getTlsOptions = options.getTlsOptions ?? null;
     this.getMtlsCa = options.getMtlsCa ?? null;
     this.getRootCaPath = options.getRootCaPath ?? null;
+    this.isProxyProtocolEnabled = options.isProxyProtocolEnabled ?? (() => false);
   }
 
   getStatus(): ServerStatus {
-    const running = this.server !== null;
+    const running = this.proxyFront !== null;
     const port = running && this.activePort !== null ? this.activePort : this.configuredPort;
     const protocol: ServerProtocol =
       this.activeProtocol ?? (this.httpsEnabled ? 'https' : 'http');
     const lanIps = listLanIps();
     const urls = lanIps.map((ip) => `${protocol}://${ip}:${port}`);
+    const traffic = getTrafficSnapshot();
 
     return {
       running,
@@ -135,7 +145,10 @@ export class ServerController {
       urls,
       lanIps,
       startedAt: this.startedAt,
+      uploadedBytes: traffic.uploadedBytes,
+      downloadedBytes: traffic.downloadedBytes,
       error: this.lastError,
+      autoStart: this.services.settings.get('server.autoStart'),
     };
   }
 
@@ -152,13 +165,13 @@ export class ServerController {
   }
 
   async start(port: number): Promise<void> {
-    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
-      throw new ServerError(SERVER_ERROR.INVALID_PORT, '端口必须在 1024-65535 之间');
+    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {      throw new ServerError(SERVER_ERROR.INVALID_PORT, '端口必须在 1024-65535 之间');
     }
 
     if (this.server !== null) {
       await this.stop();
     }
+    resetTraffic();
 
     const protocol: ServerProtocol = this.httpsEnabled ? 'https' : 'http';
 
@@ -219,14 +232,7 @@ export class ServerController {
             reject(
               new ServerError(
                 SERVER_ERROR.PORT_IN_USE,
-                `端口 ${port} 已被占用，请换一个端口或先关闭占用程序`,
-              ),
-            );
-          } else if (error.code === 'EACCES') {
-            reject(
-              new ServerError(
-                SERVER_ERROR.START_FAILED,
-                `没有权限监听端口 ${port}，请使用 1024 以上的端口`,
+                `内部端口已被占用，请重试`,
               ),
             );
           } else {
@@ -234,20 +240,48 @@ export class ServerController {
           }
         });
 
-        instance.listen(port, this.bind);
+        // Express listens only on loopback; the public front door owns the
+        // configured port and forwards both LAN and frpc sockets.
+        instance.listen(0, '127.0.0.1');
       });
+
+      const proxyFront = new ProxyProtocolServer({
+        expressServer: instance,
+        port,
+        bind: this.bind,
+        enabled: this.isProxyProtocolEnabled,
+      });
+      try {
+        await proxyFront.start();
+      } catch (error) {
+        instance.close();
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EADDRINUSE') {
+          throw new ServerError(
+            SERVER_ERROR.PORT_IN_USE,
+            `端口 ${port} 已被占用，请换一个端口或先关闭占用程序`,
+          );
+        }
+        throw new ServerError(
+          SERVER_ERROR.START_FAILED,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
       server.on('error', (error) => {
         this.lastError = error.message;
       });
 
       this.server = server;
+      this.proxyFront = proxyFront;
       this.activePort = port;
       this.activeProtocol = protocol;
       this.configuredPort = port;
       this.startedAt = Date.now();
       this.lastError = null;
     } catch (error) {
+      await this.proxyFront?.stop().catch(() => {});
+      this.proxyFront = null;
       this.server = null;
       this.activePort = null;
       this.activeProtocol = null;
@@ -259,11 +293,14 @@ export class ServerController {
 
   async stop(): Promise<void> {
     const server = this.server;
+    const front = this.proxyFront;
     this.server = null;
+    this.proxyFront = null;
     this.activePort = null;
     this.activeProtocol = null;
     this.startedAt = null;
 
+    if (front !== null) await front.stop();
     if (server === null) return;
 
     server.closeAllConnections?.();

@@ -1,9 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import type { FeaturePermissions, ScanConfig } from '../../../src/shared/ipcTypes.ts';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { autoT as t } from '../i18n.ts';
+import { CollapsibleSection } from './CollapsibleSection.tsx';
+import type { FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
 import { api, call, errorMessage } from '../api/ipc.ts';
-import { Modal, type ToastState } from './Dialog.tsx';
+import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
+import { SecurityPolicyPanel } from './SecurityPolicyPanel.tsx';
+import { SimpleSecurityPanel } from './SimpleSecurityPanel.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
-import { DatabaseIcon, HardDriveIcon, KeyIcon, Spinner, UsersIcon } from './Icons.tsx';
+import { DatabaseIcon, HardDriveIcon, KeyIcon, RefreshIcon, ServerIcon, Spinner, UsersIcon } from './Icons.tsx';
 
 interface SettingsPageProps {
   dataDir: string;
@@ -34,6 +38,7 @@ export function SettingsPage({
     targetPath: string;
   } | null>(null);
   const [migrate, setMigrate] = useState(true);
+  const [deleteOld, setDeleteOld] = useState(false);
   const [directoryPending, setDirectoryPending] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [allowRegistration, setAllowRegistration] = useState(false);
@@ -43,10 +48,48 @@ export function SettingsPage({
     allowUserPreviewImage: true,
     allowUserPreviewVideo: true,
     allowUserPreviewPdf: true,
+    allowUserPreviewOffice: true,
     allowUserExtract: true,
     allowUserScan: true,
   });
   const [permissionsPending, setPermissionsPending] = useState(false);
+  const [security, setSecurity] = useState({
+    mode: 'simple' as 'simple' | 'advanced',
+    enabled: true,
+    maxLoginFailures: 5,
+    lockBaseMinutes: 1,
+    lockMaxMinutes: 60,
+    ipLoginLimit: 30,
+    ipWindowMinutes: 15,
+    ipLockMinutes: 15,
+    simpleRegisterLimit: 2,
+    renameEnabled: true,
+    renameLimit: 1,
+    renameWindowHours: 24,
+    renameLockHours: 24,
+    capEnabled: true,
+    capLoginFailures: 3,
+    capRegistrationLimit: 2,
+    capShareLimit: 10,
+    policy: '',
+  });
+  const [securityPending, setSecurityPending] = useState(false);
+  const [securityModeSnapshot, setSecurityModeSnapshot] = useState<'simple' | 'advanced'>('simple');
+  const [modeChangeConfirm, setModeChangeConfirm] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [resources, setResources] = useState({ maxConcurrentExtractions: 10, maxConcurrentScans: 10, maxConcurrentHeavyPreviews: 10, maxConcurrentPreviewsPerUser: 10, maxLogSizeMB: 100 });
+  const [resourcesPending, setResourcesPending] = useState(false);
+  const [securityUsers, setSecurityUsers] = useState<Array<{ id: number; username: string; status: string; lockedUntil: number | null; renameLimitedUntil: number | null }>>([]);
+  const [rateLimits, setRateLimits] = useState<Array<{ ip: string; until: number; endpoint: string }>>([]);
+  const [securityBans, setSecurityBans] = useState<SecurityBanEntry[]>([]);
+  const [logs, setLogs] = useState<{ runtime: string[]; audit: unknown[] } | null>(null);
+  const [logsKind, setLogsKind] = useState<'runtime' | 'audit'>('runtime');
+  const [logsPending, setLogsPending] = useState(false);
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminRenamePending, setAdminRenamePending] = useState(false);
+  const [startup, setStartup] = useState({ autoStart: false, startInTray: false });
+  const [startupPending, setStartupPending] = useState(false);
   const [scan, setScan] = useState<ScanConfig>({
     enabled: false,
     mode: 'local',
@@ -63,12 +106,6 @@ export function SettingsPage({
     apiKeyMasked: '',
     dailyLimit: 50,
   });
-  const [mcp, setMcp] = useState({
-    enabled: false,
-    token: '',
-    boundUserId: 0,
-    configTemplate: {} as unknown,
-  });
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [aiPending, setAiPending] = useState(false);
   const [hosting, setHosting] = useState({ enabled: false, baseUrl: '' });
@@ -83,10 +120,39 @@ export function SettingsPage({
     to: '',
     hasPass: false,
     passMasked: '',
-    events: { userRegistered: true, securityAlert: true, systemError: true },
+    events: { userRegistered: true, securityAlert: true, securityLimit: true, resourceAlert: true, systemError: true },
   });
   const [mailPass, setMailPass] = useState('');
   const [mailPending, setMailPending] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void call(api.app.getStartup())
+      .then((value) => {
+        if (active) setStartup(value);
+      })
+      .catch(() => {});
+    const loadUsers = async (): Promise<void> => {
+      try {
+        const users = await call(api.users.list());
+        if (!active) return;
+        const admin = users.find((user) => user.role === 'admin');
+        if (admin) setAdminUsername(admin.username);
+        setSecurityUsers(users);
+        setRateLimits(await call(api.system.rateLimits()));
+      setSecurityBans(await call(api.system.securityBans()));
+        setSecurityBans(await call(api.system.securityBans()));
+      } catch {
+        // non-fatal
+      }
+    };
+    void loadUsers();
+    const usersTimer = window.setInterval(() => { void loadUsers(); }, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(usersTimer);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -95,11 +161,13 @@ export function SettingsPage({
         if (!active) return;
         setAllowRegistration(settings.allowPublicRegistration);
         setPermissions(settings.permissions);
+        setSecurity(settings.security);
+        setSecurityModeSnapshot(settings.security.mode);
         setScan(settings.scan);
         setAi(settings.ai);
-        setMcp(settings.mcp);
         setHosting(settings.hosting);
         setMail(settings.mail);
+        setResources(settings.resources);
       })
       .catch(() => {})
       .finally(() => {
@@ -143,6 +211,145 @@ export function SettingsPage({
     }
   };
 
+  const loadLogs = async (): Promise<void> => {
+    setLogsPending(true);
+    try {
+      setLogs(await call(api.logs.get({ limit: 200 })));
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setLogsPending(false);
+    }
+  };
+
+  const saveStartup = async (): Promise<void> => {
+    setStartupPending(true);
+    try {
+      setStartup(await call(api.app.setStartup(startup)));
+      notify('success', '启动与托盘设置已保存');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setStartupPending(false);
+    }
+  };
+
+  const saveAdminUsername = async (): Promise<void> => {
+    setAdminRenamePending(true);
+    try {
+      const result = await call(api.users.renameSelf({ username: adminUsername }));
+      setAdminUsername(result.username);
+      notify('success', '管理员用户名已更新');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setAdminRenamePending(false);
+    }
+  };
+
+  const refreshSecurityUsers = async (): Promise<void> => {
+    try {
+      setSecurityUsers(await call(api.users.list()));
+      setRateLimits(await call(api.system.rateLimits()));
+      setSecurityBans(await call(api.system.securityBans()));
+    } catch { /* non-fatal */ }
+  };
+
+  const unlockSecurityUser = async (userId: number): Promise<void> => {
+    try {
+      await call(api.users.unlock({ userId }));
+      notify('success', '账户已解锁');
+      await refreshSecurityUsers();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const clearRateLimit = async (ip: string): Promise<void> => {
+    try {
+      await call(api.system.clearRateLimit({ ip }));
+      notify('success', 'IP 限流已解除');
+      await refreshSecurityUsers();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const clearRenameLimit = async (userId: number): Promise<void> => {
+    try {
+      await call(api.users.clearRenameLimit({ userId }));
+      notify('success', '改名限制已解除');
+      await refreshSecurityUsers();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const clearAccountRestriction = async (userId: number): Promise<void> => {
+    const user = securityUsers.find((entry) => entry.id === userId);
+    if (!user) return;
+    try {
+      if (user.renameLimitedUntil !== null && user.renameLimitedUntil > Date.now()) {
+        await call(api.users.clearRenameLimit({ userId }));
+      }
+      if (user.status === 'disabled') {
+        await call(api.users.setStatus({ userId, status: 'active' }));
+      } else if (user.lockedUntil !== null && user.lockedUntil > Date.now()) {
+        await call(api.users.unlock({ userId }));
+      }
+      notify('success', '账户限制已解除');
+      await refreshSecurityUsers();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const enableSecurityUser = async (userId: number): Promise<void> => {
+    try {
+      await call(api.users.setStatus({ userId, status: 'active' }));
+      notify('success', '账户已启用');
+      await refreshSecurityUsers();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const saveSecurity = async (force = false): Promise<void> => {
+    if (!force && security.mode !== securityModeSnapshot) {
+      setModeChangeConfirm(true);
+      return;
+    }
+    setSecurityPending(true);
+    try {
+      const settings = await call(api.settings.setSecurity({ ...security, renameEnabled: security.enabled }));
+      setSecurity(settings.security);
+      notify('success', '网络安全设置已保存');
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setSecurityPending(false);
+    }
+  };
+
+  const exportConfig = async (): Promise<void> => {
+    try {
+      const current = await call(api.settings.get());
+      const blob = new Blob([JSON.stringify(current, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'cloudbox-settings.json';
+      anchor.click();
+      URL.revokeObjectURL(url);
+      notify('success', '配置已导出；跨版本导入可能存在兼容性问题');
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const importConfig = async (file: File): Promise<void> => {
+    try {
+      const raw = JSON.parse(await file.text()) as Partial<ReturnType<typeof api.settings.get>>;
+      const current = await call(api.settings.get());
+      const next = { ...current, ...raw };
+      await call(api.settings.setSecurity(next.security));
+      await call(api.settings.setPermissions(next.permissions));
+      await call(api.settings.setScan({ ...next.scan, apiKey: next.scan.apiKey.includes('***') ? '' : next.scan.apiKey }));
+      await call(api.settings.setHosting(next.hosting));
+      await call(api.settings.setResources(next.resources));
+      notify('success', '配置已导入；跨版本配置可能不完全兼容');
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
   const saveScan = async (): Promise<void> => {
     setScanPending(true);
     try {
@@ -167,31 +374,11 @@ export function SettingsPage({
           apiKey: apiKeyInput,
           model: ai.model,
           dailyLimit: ai.dailyLimit,
-          mcpEnabled: mcp.enabled,
-          mcpToken: mcp.token,
         }),
       );
       setAi(settings.ai);
-      setMcp(settings.mcp);
       setApiKeyInput('');
-      notify('success', 'AI 与 MCP 设置已保存');
-    } catch (cause) {
-      notify('error', errorMessage(cause));
-    } finally {
-      setAiPending(false);
-    }
-  };
-
-  const generateMcpToken = async (): Promise<void> => {
-    setAiPending(true);
-    try {
-      const settings = (await call(api.settings.generateMcpToken())) as {
-        ai: typeof ai;
-        mcp: typeof mcp;
-      };
-      setAi(settings.ai);
-      setMcp(settings.mcp);
-      notify('success', 'MCP Token 已重新生成');
+      notify('success', 'AI 设置已保存');
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -227,6 +414,8 @@ export function SettingsPage({
           to: mail.to,
           eventUserRegistered: mail.events.userRegistered,
           eventSecurityAlert: mail.events.securityAlert,
+          eventSecurityLimit: mail.events.securityLimit,
+          eventResourceAlert: mail.events.resourceAlert,
           eventSystemError: mail.events.systemError,
         }),
       );
@@ -290,6 +479,7 @@ export function SettingsPage({
       if (!result.selected || !result.path) return;
       setDirectoryError(null);
       setMigrate(true);
+      setDeleteOld(false);
       setDirectoryChange({ kind, targetPath: result.path });
     } catch (cause) {
       notify('error', errorMessage(cause));
@@ -306,6 +496,7 @@ export function SettingsPage({
           kind: directoryChange.kind,
           targetPath: directoryChange.targetPath,
           migrate,
+          deleteOld,
         }),
       );
       notify('success', '目录配置已更新，应用即将重启…');
@@ -319,10 +510,21 @@ export function SettingsPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setResetConfirm(true)} className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40">{t('一键恢复默认设置')}</button>
+          <button type="button" onClick={() => void exportConfig()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('导出配置')}</button>
+          <button type="button" onClick={() => importInputRef.current?.click()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('导入配置')}</button>
+          <input ref={importInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importConfig(file); event.target.value = ''; }} />
+        </div>
         <LanguageSwitcher />
       </div>
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+            <div className="pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('管理员账户')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('管理员密码、账户信息与登录安全。')}</p>
+      </div>
+
+<CollapsibleSection>
         <div className="flex items-center gap-2">
           <KeyIcon className="h-4 w-4 text-amber-400" />
           <h2 className="text-sm font-semibold text-slate-100">管理员密码</h2>
@@ -390,9 +592,176 @@ export function SettingsPage({
             </button>
           </div>
         </form>
+      </CollapsibleSection>
+
+      <CollapsibleSection>
+        <div className="flex items-center gap-2">
+          <KeyIcon className="h-4 w-4 text-sky-400" />
+          <h2 className="text-sm font-semibold text-slate-100">管理员账户</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">管理员可在系统设置中修改自己的用户名；密码和已有文件不受影响。</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-[11px] text-slate-500">管理员用户名
+            <input value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} className={`${'mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500'} min-w-64`} />
+          </label>
+          <button type="button" onClick={() => void saveAdminUsername()} disabled={adminRenamePending || !adminUsername.trim()} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {adminRenamePending ? <Spinner className="h-4 w-4" /> : null}
+            保存用户名
+          </button>
+        </div>
+      </CollapsibleSection>
+
+            <div className="pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('安全与运行')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('网络安全与访问保护。')}</p>
+      </div>
+
+<CollapsibleSection>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <KeyIcon className="h-4 w-4 text-rose-400" />
+              <h2 className="text-sm font-semibold text-slate-100">网络安全</h2>
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">Beta</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] ${security.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{security.enabled ? '已开启' : '已关闭'}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {security.mode === 'simple'
+                ? t('使用旧版账号锁定、IP 限流和改名限制；修改后点击保存生效。')
+                : t('使用拖拽策略、全局封禁、IPS 与黑白名单；拖动下方功能到对应区域，松开即启用。')}
+            </p>
+          </div>
+          <button type="button" role="switch" aria-checked={security.enabled} onClick={() => setSecurity((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${security.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${security.enabled ? 'left-6' : 'left-1'}`} />
+          </button>
+        </div>
+        <div className="mt-4 flex gap-2 border-b border-slate-800 pb-2">
+          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'simple' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'simple' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>简洁模式</button>
+          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'advanced' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'advanced' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>高级模式</button>
+        </div>
+
+        <div className="mt-4">
+          {security.mode === 'simple' ? (
+            <SimpleSecurityPanel
+              value={security}
+              onChange={(patch) => setSecurity((current) => ({ ...current, ...patch }))}
+              accounts={securityUsers}
+              rateLimits={rateLimits}
+              onUnlock={(userId) => void unlockSecurityUser(userId)}
+              onClearRename={(userId) => void clearRenameLimit(userId)}
+              onEnable={(userId) => void enableSecurityUser(userId)}
+              onClearIp={(ip) => void clearRateLimit(ip)}
+            />
+          ) : null}
+          {security.mode === 'advanced' ? (
+          <SecurityPolicyPanel
+            rawPolicy={security.policy}
+            onChange={(policy) => setSecurity((current) => ({ ...current, policy }))}
+            notify={notify}
+            accounts={securityUsers}
+            rateLimits={rateLimits}
+            bans={securityBans}
+            onClearBan={async (id) => {
+              try {
+                const ban = securityBans.find((entry) => entry.id === id);
+                await call(api.system.clearSecurityBan({ id }));
+                if (ban?.scope === 'account') {
+                  const userId = Number(ban.target);
+                  const account = securityUsers.find((entry) => entry.id === userId);
+                  if (ban.feature === 'renameLimit' || ban.feature === 'global') {
+                    if (account?.renameLimitedUntil !== null && account?.renameLimitedUntil !== undefined) {
+                      await call(api.users.clearRenameLimit({ userId }));
+                    }
+                    if (ban.feature === 'global') {
+                      await clearAccountRestriction(userId);
+                    }
+                  } else if (ban.feature === 'loginFailure') {
+                    await call(api.users.unlock({ userId }));
+                  }
+                } else if (ban?.scope === 'ip' && ban.feature === 'global') {
+                  await call(api.system.clearRateLimit({ ip: ban.target }));
+                }
+                setSecurityBans(await call(api.system.securityBans()));
+                await refreshSecurityUsers();
+                notify('success', '封禁已解除');
+              } catch (cause) { notify('error', errorMessage(cause)); }
+            }}
+            onClearAccount={(userId) => void clearAccountRestriction(userId)}
+            onClearIp={(ip) => void clearRateLimit(ip)}
+            onRefresh={refreshSecurityUsers}
+            onClearAll={async () => {
+              try {
+                const result = await call(api.system.clearAllSecurityBans());
+                await refreshSecurityUsers();
+                notify('success', `已解封并清零 ${result.removed} 条封禁`);
+              } catch (cause) { notify('error', errorMessage(cause)); }
+            }}
+            capSettings={{ enabled: security.capEnabled, loginFailures: security.capLoginFailures, registrationLimit: security.capRegistrationLimit, shareLimit: security.capShareLimit }}
+            onCapSettingsChange={(value) => setSecurity((current) => ({ ...current, capEnabled: value.enabled, capLoginFailures: value.loginFailures, capRegistrationLimit: value.registrationLimit, capShareLimit: value.shareLimit }))}
+          />
+          ) : null}
+        </div>
+
+        <button type="button" onClick={() => void saveSecurity()} disabled={securityPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+          {securityPending ? <Spinner className="h-4 w-4" /> : null}
+          保存网络安全设置
+        </button>
+      </CollapsibleSection>
+
+      <CollapsibleSection>
+  <div className="flex items-center gap-2">
+    <ServerIcon className="h-4 w-4 text-sky-400" />
+    <h2 className="text-sm font-semibold text-slate-100">本地资源配布</h2>
+  </div>
+  <p className="mt-1 text-xs text-slate-500">限制解压、查杀和预览的并发量，避免单机资源被瞬时打满。</p>
+  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+    {([['maxConcurrentExtractions','最大同时解压任务数'],['maxConcurrentScans','最大同时查杀任务数'],['maxConcurrentHeavyPreviews','重度预览全局并发'],['maxConcurrentPreviewsPerUser','单用户预览并发'],['maxLogSizeMB','日志保存上限（MB）']] as const).map(([key,label]) => (
+      <label key={key} className="text-[11px] text-slate-500">{label}
+        <input type="number" min={1} max={key === 'maxLogSizeMB' ? 100000 : 1000} value={resources[key]} onChange={(event) => setResources((current) => ({ ...current, [key]: Number(event.target.value) }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+      </label>
+    ))}
+  </div>
+  <div className="mt-4 flex flex-wrap gap-2">
+    <button type="button" onClick={async () => { setResourcesPending(true); try { const next = await call(api.settings.setResources(resources)); setResources(next.resources); notify('success','资源配布已保存'); } catch (cause) { notify('error', errorMessage(cause)); } finally { setResourcesPending(false); } }} disabled={resourcesPending} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-60">{t('保存资源配布')}</button>
+    <button type="button" onClick={async () => { try { const result = await call(api.settings.clearResourceCache()); notify('success', '已清理缓存，清理过期审计 ' + result.removedLogs + ' 条'); } catch (cause) { notify('error', errorMessage(cause)); } }} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">{t('清理缓存')}</button>
+  </div>
+</CollapsibleSection>
+<section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <RefreshIcon className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-slate-100">运行与审计日志</h2>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">查看当前进程最近日志，或数据库中的审计记录。</p>
+          </div>
+          <button type="button" onClick={() => void loadLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+            {logsPending ? '加载中…' : '刷新日志'}
+          </button>
+        </div>
+        <div className="mt-3 flex gap-2">
+          {(['runtime', 'audit'] as const).map((kind) => (
+            <button key={kind} type="button" onClick={() => setLogsKind(kind)} className={`rounded-lg px-3 py-1 text-xs ${logsKind === kind ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400'}`}>
+              {kind === 'runtime' ? '运行日志' : '审计日志'}
+            </button>
+          ))}
+        </div>
+        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-400">
+          {logs
+            ? logsKind === 'runtime'
+              ? logs.runtime.join('\n') || '暂无运行日志'
+              : JSON.stringify(logs.audit, null, 2)
+            : '点击“刷新日志”加载'}
+        </pre>
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+
+            <div className="pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('功能控制')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('自助注册、用户功能权限、安全查杀、AI、静态托管与邮件通知。')}</p>
+      </div>
+
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <UsersIcon className="h-4 w-4 text-indigo-400" />
@@ -430,7 +799,7 @@ export function SettingsPage({
           默认关闭。开启后普通用户登录页会显示“没有账号？点击注册”，注册成功后立即生效，无需重启服务。
         </p>
         <p className="mt-2 text-[11px] text-slate-500">
-          新注册用户角色为普通用户，状态正常，默认分配 5 GB 配额；每 IP 每小时最多成功注册 2 次。
+          新注册用户角色为普通用户，状态正常，默认分配 5 GB 配额；高级模式的注册频率由注册量策略卡控制。
         </p>
         {registrationPending ? (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-400">
@@ -438,9 +807,9 @@ export function SettingsPage({
             正在更新设置…
           </p>
         ) : null}
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+<CollapsibleSection>
         <div className="flex items-center gap-2">
           <UsersIcon className="h-4 w-4 text-sky-400" />
           <h2 className="text-sm font-semibold text-slate-100">用户功能权限</h2>
@@ -455,6 +824,7 @@ export function SettingsPage({
               ['allowUserPreviewImage', '图片在线预览', '允许用户在浏览器中查看 PNG/JPG/WebP 等图片'],
               ['allowUserPreviewVideo', '视频在线播放', '允许播放 MP4/WebM/Ogg 视频'],
               ['allowUserPreviewPdf', 'PDF 在线预览', '允许在浏览器中渲染 PDF'],
+              ['allowUserPreviewOffice', 'Word / Excel / PPT 预览', '允许在线预览 .docx / .xlsx / .pptx 文件'],
               ['allowUserExtract', '在线解压', '允许把 zip/7z/rar/tar.gz 解压到当前目录'],
               ['allowUserScan', '安全查杀', '允许用户对文件发起 ClamAV / VirusTotal 查杀'],
             ] as const
@@ -487,9 +857,9 @@ export function SettingsPage({
             );
           })}
         </div>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -591,19 +961,19 @@ export function SettingsPage({
           {scanPending ? <Spinner className="h-4 w-4" /> : null}
           保存查杀设置
         </button>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-100">AI 与 MCP 服务</h2>
+              <h2 className="text-sm font-semibold text-slate-100">AI 服务</h2>
               <span className={`rounded-full px-2 py-0.5 text-[10px] ${ai.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
                 {ai.enabled ? 'AI 已开启' : 'AI 已关闭'}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。MCP 依赖 AI 总开关。
+              API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
             </p>
           </div>
           <button
@@ -652,29 +1022,13 @@ export function SettingsPage({
           )}
         </div>
 
-        <div className="mt-5 rounded-xl border border-slate-800 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input type="checkbox" checked={mcp.enabled} onChange={(event) => setMcp((current) => ({ ...current, enabled: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
-              启用原生 MCP Server（/api/mcp）
-            </label>
-            <button type="button" onClick={() => void generateMcpToken()} disabled={aiPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
-              生成随机 Token
-            </button>
-          </div>
-          <label className="mt-3 block text-[11px] text-slate-500" htmlFor="mcp-token">MCP Token</label>
-          <input id="mcp-token" value={mcp.token} onChange={(event) => setMcp((current) => ({ ...current, token: event.target.value }))} className={INPUT_CLASS} />
-          <label className="mt-3 block text-[11px] text-slate-500" htmlFor="mcp-config">客户端配置模板</label>
-          <pre id="mcp-config" className="mt-1 overflow-x-auto rounded-lg bg-slate-950 p-3 text-[10px] text-slate-400">{JSON.stringify(mcp.configTemplate, null, 2)}</pre>
-        </div>
-
         <button type="button" onClick={() => void saveAi()} disabled={aiPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60">
           {aiPending ? <Spinner className="h-4 w-4" /> : null}
-          保存 AI 与 MCP 设置
+          保存 AI 设置
         </button>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -693,19 +1047,18 @@ export function SettingsPage({
         </div>
         <label className="mt-3 block text-[11px] text-slate-500" htmlFor="hosting-base-url">公网基础地址（用于生成链接）</label>
         <input id="hosting-base-url" value={hosting.baseUrl} onChange={(event) => setHosting((current) => ({ ...current, baseUrl: event.target.value }))} className={INPUT_CLASS} placeholder="例如：https://pan.yourdomain.com" />
-        <p className="mt-2 text-[11px] leading-5 text-amber-300">
-          frp 必须使用 HTTP 或 HTTPS 隧道，并用 customDomains/locations（如 <code>["/", "/host"]</code>）合并到同一公网端口；不要为托管单独映射 TCP 端口。
-        </p>
         <button type="button" onClick={() => void saveHosting()} disabled={hostingPending} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
           {hostingPending ? <Spinner className="h-4 w-4" /> : null}
           保存托管设置
         </button>
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      
+
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">邮件通知</h2>
+            <div className="flex items-center gap-2"><h2 className="text-sm font-semibold text-slate-100">邮件通知</h2><span className={`rounded-full px-2 py-0.5 text-[10px] ${mail.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{mail.enabled ? '已开启' : '已关闭'}</span></div>
             <p className="mt-1 text-xs text-slate-500">SMTP 告警异步发送；密码 AES-256-GCM 加密，界面脱敏。</p>
           </div>
           <button type="button" role="switch" aria-checked={mail.enabled} aria-label="邮件总开关" onClick={() => setMail((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 rounded-full transition ${mail.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
@@ -716,7 +1069,7 @@ export function SettingsPage({
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-host">SMTP Host</label><input id="mail-host" value={mail.host} onChange={(e) => setMail((c) => ({ ...c, host: e.target.value }))} className={INPUT_CLASS} /></div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-port">Port</label><input id="mail-port" type="number" value={mail.port} onChange={(e) => setMail((c) => ({ ...c, port: Number(e.target.value) }))} className={INPUT_CLASS} /></div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-user">SMTP 用户</label><input id="mail-user" value={mail.user} onChange={(e) => setMail((c) => ({ ...c, user: e.target.value }))} className={INPUT_CLASS} /></div>
-          <div><label className="text-[11px] text-slate-500" htmlFor="mail-pass">授权码/密码（{mail.passMasked || '未配置'}）</label><input id="mail-pass" type="password" value={mailPass} onChange={(e) => setMailPass(e.target.value)} className={INPUT_CLASS} placeholder={mail.hasPass ? '留空保持现有密码' : ''} /></div>
+          <div><label className="text-[11px] text-slate-500" htmlFor="mail-pass">授权码/密码（{mail.passMasked || '未配置'}）</label><input id="mail-pass" type="password" value={mailPass} onChange={(e) => setMailPass(e.target.value)} className={INPUT_CLASS} placeholder={mail.hasPass ? '留空保持现有密码' : '请输入 QQ 邮箱授权码'} />{!mail.hasPass && mail.user ? <p className="mt-1 text-[10px] text-amber-300">未配置或无法解密，请重新填写授权码</p> : null}</div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-from">发件人</label><input id="mail-from" value={mail.from} onChange={(e) => setMail((c) => ({ ...c, from: e.target.value }))} className={INPUT_CLASS} /></div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-to">告警接收邮箱</label><input id="mail-to" value={mail.to} onChange={(e) => setMail((c) => ({ ...c, to: e.target.value }))} className={INPUT_CLASS} /></div>
         </div>
@@ -724,13 +1077,43 @@ export function SettingsPage({
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-300">
           <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.userRegistered} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, userRegistered: e.target.checked } }))} className="accent-indigo-500" />新用户注册</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityAlert: e.target.checked } }))} className="accent-indigo-500" />安全告警</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityLimit} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityLimit: e.target.checked } }))} className="accent-indigo-500" />{t('安全限制触发')}</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.resourceAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, resourceAlert: e.target.checked } }))} className="accent-indigo-500" />{t('本地资源告警')}</label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.systemError} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, systemError: e.target.checked } }))} className="accent-indigo-500" />系统错误</label>
         </div>
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={() => void saveMail()} disabled={mailPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">{mailPending ? '保存中…' : '保存邮件设置'}</button>
           <button type="button" onClick={() => void testMail()} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">发送测试邮件</button>
         </div>
-      </section>
+      </CollapsibleSection>
+
+            <div className="pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('系统与存储')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('启动与托盘、本地资源、运行日志、数据库备份与目录配置。')}</p>
+      </div>
+
+<CollapsibleSection>
+        <div className="flex items-center gap-2">
+          <HardDriveIcon className="h-4 w-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold text-slate-100">启动与托盘</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">控制登录 Windows 后是否自动启动 CloudBox，以及启动后是否隐藏在系统托盘。</p>
+        <div className="mt-4 space-y-3">
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
+            <span>开机自动启动 CloudBox<br /><span className="text-[11px] text-slate-500">打包安装版生效；开发版不会注册系统启动项。</span></span>
+            <input type="checkbox" checked={startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, autoStart: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
+          </label>
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
+            <span>自启动后收起到系统托盘<br /><span className="text-[11px] text-slate-500">需同时开启上一项；手动启动仍显示主窗口。</span></span>
+            <input type="checkbox" checked={startup.startInTray} disabled={!startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, startInTray: event.target.checked }))} className="h-4 w-4 accent-indigo-500 disabled:opacity-40" />
+          </label>
+          <button type="button" onClick={() => void saveStartup()} disabled={startupPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {startupPending ? <Spinner className="h-4 w-4" /> : null}
+            保存启动设置
+          </button>
+        </div>
+      </CollapsibleSection>
+
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex items-center gap-2">
@@ -751,6 +1134,8 @@ export function SettingsPage({
           选择位置并备份
         </button>
       </section>
+
+      
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -851,6 +1236,20 @@ export function SettingsPage({
         </button>
       </section>
 
+      {resetConfirm ? (
+        <ConfirmDialog title="恢复默认设置？" description="将重置安全、查杀、权限、邮件、资源配布等配置，并清除当前封禁和计数；不会删除用户、文件或数据库。" confirmLabel="确认恢复" danger onClose={() => setResetConfirm(false)} onConfirm={async () => { try { const next = await call(api.settings.resetDefaults()); setSecurity(next.security); setSecurityModeSnapshot(next.security.mode); setResources(next.resources); setPermissions(next.permissions); setScan(next.scan); setResetConfirm(false); notify('success','已恢复默认设置'); } catch (cause) { notify('error', errorMessage(cause)); } }} />
+      ) : null}
+      {modeChangeConfirm ? (
+        <ConfirmDialog
+          title="切换安全模式并清除封禁？"
+          description="切换简洁/高级模式会清空当前封禁、旧锁定、计数、策略重置时间和 IP 限流记录。此操作不可撤销。"
+          confirmLabel="确认切换并清除"
+          danger
+          onClose={() => setModeChangeConfirm(false)}
+          onConfirm={async () => { setModeChangeConfirm(false); await saveSecurity(true); }}
+        />
+      ) : null}
+
       {directoryChange ? (
         <Modal
           title={
@@ -947,6 +1346,23 @@ export function SettingsPage({
                 </span>
               </span>
             </label>
+
+            {migrate ? (
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-rose-900/50 bg-rose-950/20 p-3 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={deleteOld}
+                  onChange={(event) => setDeleteOld(event.target.checked)}
+                  disabled={directoryPending}
+                  className="mt-1 h-4 w-4 accent-rose-500"
+                />
+                <span>
+                  <strong className="text-slate-100">迁移完成后删除旧文件</strong>
+                  <br />
+                  应用重启前会删除原目录。请确认新目录已完整复制；此操作不可撤销。
+                </span>
+              </label>
+            ) : null}
 
             {directoryError ? (
               <div className="rounded-lg bg-rose-950/40 px-3 py-2 text-sm text-rose-300">

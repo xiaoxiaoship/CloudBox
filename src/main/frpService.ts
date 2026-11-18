@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
 import type { FrpConfig, FrpStatus } from '../shared/ipcTypes.ts';
+import { buildFrpConfig } from './frpConfig.ts';
 
 export const FRP_ERROR = {
   MISSING_BINARY: 'FRP_MISSING_BINARY',
@@ -225,43 +226,8 @@ export class FrpService {
   private writeConfigFile(): void {
     const localPort = this.getLocalPort();
     const protocol = this.getProtocol();
-    const lines = [
-      '# 由 CloudBox 管理端自动生成，请勿手工修改',
-      `serverAddr = ${JSON.stringify(this.config.serverAddr.trim())}`,
-      `serverPort = ${this.config.serverPort}`,
-      'loginFailExit = false',
-      '',
-    ];
-
-    if (this.config.token.trim()) {
-      lines.push('auth.method = "token"');
-      lines.push(`auth.token = ${JSON.stringify(this.config.token.trim())}`);
-      lines.push('');
-    }
-
-    lines.push('[[proxies]]');
-    lines.push(`name = ${JSON.stringify(this.config.proxyName)}`);
-    lines.push(`type = ${JSON.stringify(this.config.tunnelType)}`);
-    lines.push('localIP = "127.0.0.1"');
-    lines.push(`localPort = ${localPort}`);
-
-    if (this.config.tunnelType === 'tcp') {
-      lines.push(`remotePort = ${this.config.remotePort}`);
-      if (this.config.proxyProtocol) {
-        // 仅当本地服务支持 PROXY protocol v2 时启用；Express 默认不解析该协议。
-        lines.push('transport.proxyProtocolVersion = "v2"');
-      }
-    } else {
-      lines.push(`customDomains = [${JSON.stringify(this.config.customDomain.trim())}]`);
-      // 主界面与静态托管共享同一 HTTP 隧道端口，不额外映射 TCP 端口
-      lines.push('locations = ["/", "/host"]');
-    }
-
-    lines.push('');
-    lines.push(`# 本地协议：${protocol}`);
-
     const temporary = `${this.configPath}.tmp`;
-    writeFileSync(temporary, `${lines.join('\n')}\n`, 'utf8');
+    writeFileSync(temporary, buildFrpConfig(this.config, localPort, protocol), 'utf8');
     renameSync(temporary, this.configPath);
   }
 

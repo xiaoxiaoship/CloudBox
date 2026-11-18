@@ -34,6 +34,7 @@ export function PreviewModal({ entry, onClose }: PreviewModalProps) {
   const [text, setText] = useState<TextPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pluginPreviewer, setPluginPreviewer] = useState<string | null>(null);
 
   useLockBodyScroll();
   useEscapeKey(onClose);
@@ -45,9 +46,20 @@ export function PreviewModal({ entry, onClose }: PreviewModalProps) {
     setText(null);
     setError(null);
     setLoading(true);
+    setPluginPreviewer(null);
 
     void (async () => {
       try {
+        const extension = entry.name.includes('.') ? `.${entry.name.split('.').pop()!.toLowerCase()}` : '';
+        const previewers: Record<string, string> = await api.pluginPreviewers().catch(() => ({}));
+        if (cancelled) return;
+        const plugin = extension ? previewers[extension] : undefined;
+        if (plugin) {
+          setPluginPreviewer(plugin);
+          setLoading(false);
+          return;
+        }
+
         const detected = await api.previewInfo(entry.path);
         if (cancelled) return;
         setInfo(detected);
@@ -120,7 +132,14 @@ export function PreviewModal({ entry, onClose }: PreviewModalProps) {
         </header>
 
         <div className="flex-1 overflow-auto bg-slate-50 p-3 dark:bg-slate-950 sm:p-6">
-          {loading ? (
+          {pluginPreviewer ? (
+            <iframe
+              title={`${entry.name} 插件预览`}
+              src={`/api/plugins/${encodeURIComponent(pluginPreviewer)}/preview?path=${encodeURIComponent(entry.path)}`}
+              sandbox="allow-scripts allow-same-origin"
+              className="h-[70vh] w-full rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800"
+            />
+          ) : loading ? (
             <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-400 dark:text-slate-500">
               <Spinner className="h-7 w-7 text-indigo-500 dark:text-indigo-400" />
               <p className="text-sm">正在准备预览…</p>
@@ -190,6 +209,12 @@ export function PreviewModal({ entry, onClose }: PreviewModalProps) {
             </div>
           ) : info?.kind === 'pdf' ? (
             <PdfViewer url={previewContentUrl(entry.path)} />
+          ) : info?.kind === 'office' ? (
+            <OfficeViewer
+              url={previewContentUrl(entry.path)}
+              name={entry.name}
+              mime={info.mime ?? ''}
+            />
           ) : null}
         </div>
       </div>
@@ -205,6 +230,10 @@ function PdfViewer({ url }: { url: string }) {
   const [numPages, setNumPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,6 +251,7 @@ function PdfViewer({ url }: { url: string }) {
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 
         const response = await fetch(url, { credentials: 'same-origin' });
+        if (response.status === 429) throw new Error('服务器繁忙');
         if (!response.ok) {
           throw new Error(`加载 PDF 失败（HTTP ${response.status}）`);
         }
@@ -281,7 +311,6 @@ function PdfViewer({ url }: { url: string }) {
       if (!context) return;
 
       const task = pdfPage.render({
-        canvas,
         canvasContext: context,
         viewport,
         transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
@@ -300,6 +329,29 @@ function PdfViewer({ url }: { url: string }) {
       renderTask?.cancel();
     };
   }, [pdf, page]);
+
+  if (isIOS) {
+    return (
+      <div className="mx-auto w-full max-w-4xl">
+        <iframe
+          key={page}
+          title="PDF preview"
+          src={`${url}#page=${page}&zoom=page-fit`}
+          className="h-[70vh] w-full rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800"
+        />
+        <div className="mt-3 flex items-center justify-center gap-3">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400" aria-label="上一页">
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
+          <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{page} / {numPages || '?'}</span>
+          <button type="button" disabled={numPages > 0 && page >= numPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400" aria-label="下一页">
+            <ChevronRightIcon className="h-4 w-4" />
+          </button>
+          <a href={url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">打开完整 PDF</a>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -353,6 +405,111 @@ function PdfViewer({ url }: { url: string }) {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+
+function OfficeViewer({ url, name }: { url: string; name: string; mime: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sheetRows, setSheetRows] = useState<unknown[][] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSheetRows(null);
+    const container = containerRef.current;
+    if (container) container.innerHTML = '';
+
+    void (async () => {
+      try {
+        const response = await fetch(url, { credentials: 'same-origin' });
+        if (response.status === 429) throw new Error('服务器繁忙');
+        if (!response.ok) throw new Error('加载 Office 文件失败（HTTP ' + response.status + '）');
+        const buffer = await response.arrayBuffer();
+        if (cancelled) return;
+        const ext = name.split('.').pop()?.toLowerCase();
+
+        if (ext === 'docx') {
+          const { renderAsync } = await import('docx-preview');
+          if (!container) throw new Error('预览容器不可用');
+          await renderAsync(buffer, container, undefined, {
+            inWrapper: true,
+            breakPages: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            renderHeaders: true,
+            renderFooters: true,
+          });
+        } else if (ext === 'xlsx') {
+          const ExcelJS = await import('exceljs');
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(buffer as never);
+          const worksheet = workbook.worksheets[0];
+          if (!worksheet) throw new Error('工作簿没有工作表');
+          const rows: unknown[][] = [];
+          worksheet.eachRow({ includeEmpty: true }, (row) => {
+            rows.push((row.values as unknown[]).slice(1));
+          });
+          if (!cancelled) setSheetRows(rows);
+        } else if (ext === 'pptx') {
+          const { init } = await import('pptx-preview');
+          if (!container) throw new Error('预览容器不可用');
+          const viewer = init(container, { width: 960, height: 540, mode: 'list' });
+          await viewer.preview(buffer);
+        } else {
+          throw new Error('不支持的 Office 格式');
+        }
+      } catch (cause) {
+        if (!cancelled) setError(errorText(cause));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (container) container.innerHTML = '';
+    };
+  }, [url, name]);
+
+  return (
+    <div className="mx-auto max-w-full">
+      {loading ? (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-400 dark:text-slate-500">
+          <Spinner className="h-7 w-7 text-indigo-500 dark:text-indigo-400" />
+          <p className="text-sm">正在解析 Office 文件…</p>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mx-auto mt-10 max-w-md rounded-xl border border-rose-100 bg-white p-6 text-center dark:border-rose-900/60 dark:bg-slate-900">
+          <AlertIcon className="mx-auto h-8 w-8 text-rose-500 dark:text-rose-400" />
+          <p className="mt-3 text-sm font-medium text-slate-800 dark:text-slate-100">Office 预览失败</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{error}</p>
+        </div>
+      ) : null}
+      {sheetRows ? (
+        <div className="max-h-[70vh] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800">
+          <table className="min-w-full border-collapse text-xs">
+            <tbody>
+              {sheetRows.map((row, rowIndex) => (
+                <tr key={rowIndex} className={rowIndex === 0 ? 'bg-slate-100 font-medium dark:bg-slate-800' : ''}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className="border border-slate-200 px-2 py-1 align-top text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                      {String(cell ?? '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div ref={containerRef} className="office-preview max-h-[70vh] overflow-auto rounded-xl bg-white p-2 shadow-sm dark:bg-slate-900" />
+      )}
     </div>
   );
 }

@@ -4,6 +4,9 @@ export type CoreEvent =
   | 'user.registered'
   | 'user.created'
   | 'security.alert'
+  | 'security.limit'
+  | 'security.global.limit'
+  | 'resource.alert'
   | 'system.error';
 
 export type CoreEventHandler = (payload: Record<string, unknown>) => void;

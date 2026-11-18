@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { AiRepository } from '../db/repositories/aiRepo.ts';
 import type { UserRepository } from '../db/repositories/userRepo.ts';
 import type { SessionUser } from '../types/models.ts';
@@ -144,21 +144,6 @@ export class AiService {
       hasApiKey: adminKey !== '',
       apiKeyMasked: maskSecret(adminKey),
       dailyLimit: this.settings.get('ai.user_daily_limit'),
-      mcp: {
-        enabled: this.settings.get('mcp.enabled'),
-        token: this.settings.get('mcp.token'),
-        boundUserId: this.settings.get('mcp.bound_user_id'),
-        configTemplate: {
-          mcpServers: {
-            cloudbox: {
-              url: 'http://127.0.0.1:8686/api/mcp',
-              headers: {
-                Authorization: `Bearer ${this.settings.get('mcp.token')}`,
-              },
-            },
-          },
-        },
-      },
     };
   }
 
@@ -169,8 +154,6 @@ export class AiService {
     apiKey?: string;
     model: string;
     dailyLimit: number;
-    mcpEnabled: boolean;
-    mcpToken?: string;
   }): Record<string, unknown> {
     this.settings.set('ai.enabled', input.enabled, null);
     this.settings.set('ai.mode', input.mode, null);
@@ -180,20 +163,7 @@ export class AiService {
     if (input.apiKey && !input.apiKey.includes('***')) {
       this.settings.set('ai.admin_api_key', this.secrets.encrypt(input.apiKey.trim()), null);
     }
-    this.settings.set('mcp.enabled', input.mcpEnabled, null);
-    if (input.mcpToken !== undefined && input.mcpToken.trim() !== '') {
-      this.settings.set('mcp.token', input.mcpToken.trim(), null);
-    }
-    if (this.settings.get('mcp.bound_user_id') === 0) {
-      this.settings.set('mcp.bound_user_id', this.users.findAdmin()?.id ?? 0, null);
-    }
     return this.adminSettings();
-  }
-
-  generateMcpToken(): string {
-    const token = `cbx_${randomBytes(24).toString('base64url')}`;
-    this.settings.set('mcp.token', token, null);
-    return token;
   }
 
   publicSettings(user: SessionUser): Record<string, unknown> {

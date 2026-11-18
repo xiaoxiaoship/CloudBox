@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { UserSummary, UserStatus } from '../../../src/shared/ipcTypes.ts';
+import type { FrpStatus, UserIpHistoryEntry, UserSummary, UserStatus } from '../../../src/shared/ipcTypes.ts';
 import { api, call, errorMessage } from '../api/ipc.ts';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
 import {
@@ -7,12 +7,14 @@ import {
   KeyIcon,
   PlusIcon,
   PowerIcon,
+  ShieldIcon,
   RefreshIcon,
   Spinner,
   TrashIcon,
   UnlockIcon,
   UsersIcon,
 } from './Icons.tsx';
+import { autoT as t } from '../i18n.ts';
 import { bytesToInput, formatBytes, formatDate, quotaToBytes } from '../lib/format.ts';
 
 type DialogState =
@@ -32,6 +34,18 @@ export function UsersPage({ notify }: UsersPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [query, setQuery] = useState('');
+  const [batchMode, setBatchMode] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [sortKey, setSortKey] = useState<'username' | 'status' | 'clients' | 'lastLogin' | 'ip' | 'quota' | 'used'>('username');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [securityPending, setSecurityPending] = useState<number | null>(null);
+  const [batchPending, setBatchPending] = useState(false);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+  const [ipUser, setIpUser] = useState<UserSummary | null>(null);
+  const [ipHistory, setIpHistory] = useState<UserIpHistoryEntry[]>([]);
+  const [ipHistoryLoading, setIpHistoryLoading] = useState(false);
+  const [frpStatus, setFrpStatus] = useState<FrpStatus | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -46,38 +60,116 @@ export function UsersPage({ notify }: UsersPageProps) {
   }, []);
 
   useEffect(() => {
+    void api.frp.status().then((value) => { if (value.ok) setFrpStatus(value.data); }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 5000);
+    return () => window.clearInterval(timer);
   }, [refresh]);
+
+  const ipVisible = !(frpStatus?.running && frpStatus.config.tunnelType !== 'http' && !frpStatus.config.proxyProtocol);
+  const visibleUsers = [...users]
+    .filter((user) => {
+      const q = query.trim().toLowerCase();
+      if (!ipVisible && /^[0-9a-f:.]+$/i.test(q)) return false;
+      return !q || user.username.toLowerCase().includes(q) || String(user.id).includes(q) || user.displayName.toLowerCase().includes(q) || (user.ipAddresses ?? []).some((ip) => ip.toLowerCase().includes(q));
+    })
+    .sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      if (sortKey === 'username') return a.username.localeCompare(b.username) * dir;
+      if (sortKey === 'lastLogin') return ((a.lastLoginAt ?? 0) - (b.lastLoginAt ?? 0)) * dir;
+      if (sortKey === 'clients') return ((a.activeSessions ?? 0) - (b.activeSessions ?? 0)) * dir;
+      if (sortKey === 'ip') return (a.onlineIp ?? a.lastIp ?? '').localeCompare(b.onlineIp ?? b.lastIp ?? '') * dir;
+      if (sortKey === 'quota') return ((a.quotaBytes ?? Number.MAX_SAFE_INTEGER) - (b.quotaBytes ?? Number.MAX_SAFE_INTEGER)) * dir;
+      if (sortKey === 'used') return (a.usedBytes - b.usedBytes) * dir;
+      const rank = (u: UserSummary): number => (u.status === 'disabled' ? 2 : u.lockedUntil && u.lockedUntil > Date.now() ? 1 : 0);
+      return (rank(a) - rank(b)) * dir;
+    });
+  const onlineCount = users.filter((user) => user.online).length;
+  const abnormalCount = users.filter((user) => user.status === 'disabled' || (user.lockedUntil !== null && user.lockedUntil > Date.now())).length;
+  const selectable = visibleUsers.filter((user) => user.role !== 'admin');
+  const allSelected = selectable.length > 0 && selectable.every((user) => selected.includes(user.id));
+  const toggleSort = (key: 'username' | 'status' | 'clients' | 'lastLogin' | 'ip' | 'quota' | 'used'): void => {
+    if (sortKey === key) setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const openIpHistory = async (user: UserSummary): Promise<void> => {
+    setIpUser(user);
+    setIpHistory([]);
+    setIpHistoryLoading(true);
+    try { setIpHistory(await call(api.users.ipHistory({ userId: user.id }))); }
+    catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setIpHistoryLoading(false); }
+  };
+
+  const toggleSecurity = async (user: UserSummary): Promise<void> => {
+    setSecurityPending(user.id);
+    try {
+      await call(api.users.setSecurityMode({ userId: user.id, enabled: !user.securityMode }));
+      notify('success', user.securityMode ? '已关闭安全模式' : '已开启安全模式');
+      await refresh();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setSecurityPending(null); }
+  };
+  const applyBatch = async (action: 'enable' | 'disable' | 'delete'): Promise<void> => {
+    if (selected.length === 0) return;
+    setBatchPending(true);
+    try {
+      for (const id of selected) {
+        const user = users.find((item) => item.id === id);
+        if (!user || user.role === 'admin') continue;
+        if (action === 'delete') await call(api.users.remove({ userId: id, deleteFiles: false }));
+        else await call(api.users.setStatus({ userId: id, status: action === 'enable' ? 'active' : 'disabled' }));
+      }
+      notify('success', `已处理 ${selected.length} 个账户`);
+      setSelected([]);
+      await refresh();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setBatchPending(false); }
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">用户账户</h2>
           <p className="mt-0.5 text-xs text-slate-500">
             创建普通用户、分配配额、重置密码或禁用账户
           </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
-          >
+          <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50">
             <RefreshIcon className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             刷新
           </button>
-          <button
-            type="button"
-            onClick={() => setDialog({ kind: 'create' })}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-indigo-500"
-          >
+          <button type="button" onClick={() => setDialog({ kind: 'create' })} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-indigo-500">
             <PlusIcon className="h-3.5 w-3.5" />
             新建用户
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"><p className="text-[11px] text-slate-500">{t('注册账户')}</p><p className="mt-1 text-lg font-semibold text-slate-100">{users.length}</p></div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"><p className="text-[11px] text-slate-500">{t('当前在线')}</p><p className="mt-1 text-lg font-semibold text-emerald-300">{onlineCount}</p></div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3"><p className="text-[11px] text-slate-500">{t('异常账户')}</p><p className="mt-1 text-lg font-semibold text-amber-300">{abnormalCount}</p></div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label={t('搜索用户名或 ID')} placeholder={t('搜索用户名或 ID')} className="w-64 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500" />
+        <button type="button" onClick={() => { setBatchMode((value) => !value); setSelected([]); }} className={`rounded-lg border px-3 py-2 text-xs ${batchMode ? 'border-indigo-500 bg-indigo-500/15 text-indigo-200' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
+          {batchMode ? t('退出批量处理') : t('批量处理')}
+        </button>
+        {batchMode ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-900/60 bg-indigo-950/20 px-2 py-1">
+            <span className="px-2 text-xs text-indigo-300">{t('已选 {{count}} 人', { count: selected.length })}</span>
+            <button type="button" disabled={batchPending} onClick={() => void applyBatch('enable')} className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800 disabled:opacity-50">{t('启用')}</button>
+            <button type="button" disabled={batchPending} onClick={() => void applyBatch('disable')} className="rounded-md border border-amber-800 px-2 py-1 text-[11px] text-amber-300 hover:bg-amber-950/40 disabled:opacity-50">{t('禁用')}</button>
+            <button type="button" disabled={batchPending} onClick={() => setBatchDeleteConfirm(true)} className="rounded-md border border-rose-800 px-2 py-1 text-[11px] text-rose-300 hover:bg-rose-950/40 disabled:opacity-50">{t('删除')}</button>
+          </div>
+        ) : null}
       </div>
 
       {error ? (
@@ -88,22 +180,25 @@ export function UsersPage({ notify }: UsersPageProps) {
 
       <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full min-w-[1040px] text-left text-sm">
             <thead className="border-b border-slate-800 bg-slate-950/40 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3 font-medium">用户</th>
+                {batchMode ? <th className="w-10 px-3 py-3"><input type="checkbox" aria-label="全选" checked={allSelected} onChange={(event) => setSelected(event.target.checked ? selectable.map((user) => user.id) : [])} className="h-4 w-4 accent-indigo-500" /></th> : null}
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('username')} className="hover:text-slate-200">用户 {sortKey === 'username' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
                 <th className="px-4 py-3 font-medium">角色</th>
-                <th className="px-4 py-3 font-medium">状态</th>
-                <th className="px-4 py-3 font-medium">配额</th>
-                <th className="px-4 py-3 font-medium">已用</th>
-                <th className="px-4 py-3 font-medium">最近登录</th>
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('status')} className="hover:text-slate-200">状态 {sortKey === 'status' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('clients')} className="hover:text-slate-200">连接客户端 {sortKey === 'clients' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('quota')} className="hover:text-slate-200">配额 {sortKey === 'quota' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('used')} className="hover:text-slate-200">已用 {sortKey === 'used' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('lastLogin')} className="hover:text-slate-200">最近登录 {sortKey === 'lastLogin' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th>
+                {ipVisible ? <th className="px-4 py-3 font-medium"><button type="button" onClick={() => toggleSort('ip')} className="hover:text-slate-200">登录 IP {sortKey === 'ip' ? (sortDir === 'asc' ? '↑' : '↓') : ''}</button></th> : null}
                 <th className="px-4 py-3 text-right font-medium">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/70">
-              {loading && users.length === 0 ? (
+              {loading && visibleUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-slate-500">
+                  <td colSpan={ipVisible ? 10 : 9} className="px-4 py-10 text-center text-xs text-slate-500">
                     <Spinner className="mx-auto mb-2 h-5 w-5 text-indigo-400" />
                     正在加载用户…
                   </td>
@@ -116,11 +211,12 @@ export function UsersPage({ notify }: UsersPageProps) {
                   </td>
                 </tr>
               ) : (
-                users.map((user) => {
+                visibleUsers.map((user) => {
                   const locked = user.lockedUntil !== null && user.lockedUntil > Date.now();
 
                   return (
                   <tr key={user.id} className="transition hover:bg-slate-800/30">
+                    {batchMode ? <td className="px-3 py-3"><input type="checkbox" aria-label={`选择 ${user.username}`} checked={selected.includes(user.id)} disabled={user.role === 'admin'} onChange={(event) => setSelected((current) => event.target.checked ? [...current, user.id] : current.filter((id) => id !== user.id))} className="h-4 w-4 accent-indigo-500" /></td> : null}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-slate-800 text-xs font-medium text-slate-300">
@@ -136,7 +232,7 @@ export function UsersPage({ notify }: UsersPageProps) {
                         </div>
                         <div>
                           <p className="font-medium text-slate-200">{user.username}</p>
-                          <p className="text-[11px] text-slate-500">ID {user.id}</p>
+                          <p className="text-[11px] text-slate-500">ID {user.id}{user.securityMode ? ' · 安全模式' : ''}</p>
                         </div>
                       </div>
                     </td>
@@ -152,29 +248,17 @@ export function UsersPage({ notify }: UsersPageProps) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {locked ? (
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs text-amber-300"
-                          title={`锁定至 ${formatDate(user.lockedUntil)}`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                          已锁定
-                        </span>
+                      {user.status === 'disabled' ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-rose-400"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />已禁用</span>
+                      ) : locked ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-amber-300" title={`锁定至 ${formatDate(user.lockedUntil)}`}><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />锁定 {Math.max(1, Math.ceil(((user.lockedUntil ?? Date.now()) - Date.now()) / 60000))} 分钟</span>
+                      ) : user.online ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />在线</span>
                       ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs ${
-                            user.status === 'active' ? 'text-emerald-400' : 'text-slate-500'
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              user.status === 'active' ? 'bg-emerald-400' : 'bg-slate-600'
-                            }`}
-                          />
-                          {user.status === 'active' ? '正常' : '已禁用'}
-                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-slate-600" />离线</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-xs text-slate-300">{user.activeSessions ?? 0}</td>
                     <td className="px-4 py-3 text-xs text-slate-300">
                       {user.quotaBytes === null ? '不限量' : formatBytes(user.quotaBytes)}
                     </td>
@@ -184,11 +268,16 @@ export function UsersPage({ notify }: UsersPageProps) {
                     <td className="px-4 py-3 text-xs text-slate-400">
                       {formatDate(user.lastLoginAt)}
                     </td>
+                    {ipVisible ? <td className="px-4 py-3 text-xs">
+                      <button type="button" onClick={() => void openIpHistory(user)} className="rounded px-1.5 py-0.5 font-mono text-[11px] text-indigo-300 hover:bg-indigo-950/40" title="查看全部登录 IP">
+                        {user.online ? user.onlineIp ?? user.lastIp ?? '—' : user.lastIp ?? '—'}
+                      </button>
+                    </td> : null}
                     <td className="px-4 py-3">
                       {user.role === 'admin' ? (
                         <p className="text-right text-[11px] text-slate-600">当前账户</p>
                       ) : (
-                        <div className="flex justify-end gap-0.5">
+                        <div className={`flex justify-end gap-0.5 ${batchMode ? 'invisible' : ''}`}>
                           <IconButton
                             label="分配配额"
                             onClick={() => setDialog({ kind: 'quota', user })}
@@ -225,6 +314,15 @@ export function UsersPage({ notify }: UsersPageProps) {
                           >
                             <PowerIcon className="h-4 w-4" />
                           </IconButton>
+                          <IconButton
+                            label={user.securityMode ? '关闭安全模式' : '开启安全模式'}
+                            disabled={securityPending === user.id}
+                            active={user.securityMode}
+                            onClick={() => void toggleSecurity(user)}
+                          >
+                            <ShieldIcon className="h-4 w-4" />
+                          </IconButton>
+
                           <IconButton
                             label="删除用户"
                             danger
@@ -279,6 +377,27 @@ export function UsersPage({ notify }: UsersPageProps) {
         />
       ) : null}
 
+      {ipUser !== null ? (
+        <Modal
+          title={`登录 IP 记录 · ${ipUser.username}`}
+          description="在线时显示当前 IP；离线时显示最近一次登录 IP。"
+          onClose={() => setIpUser(null)}
+          width="lg"
+          footer={<button type="button" onClick={() => setIpUser(null)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800">关闭</button>}
+        >
+          {ipHistoryLoading ? <p className="text-xs text-slate-500">加载中…</p> : ipHistory.length === 0 ? <p className="text-xs text-slate-500">暂无 IP 记录</p> : (
+            <div className="overflow-hidden rounded-lg border border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/60 text-[10px] uppercase text-slate-500"><tr><th className="px-3 py-2">IP</th><th className="px-3 py-2">首次登录</th><th className="px-3 py-2">最近登录</th><th className="px-3 py-2 text-right">次数</th></tr></thead>
+                <tbody className="divide-y divide-slate-800">
+                  {ipHistory.map((entry) => <tr key={entry.ip}><td className="px-3 py-2 font-mono text-slate-300">{entry.ip}</td><td className="px-3 py-2 text-slate-400">{formatDate(entry.firstSeenAt)}</td><td className="px-3 py-2 text-slate-400">{formatDate(entry.lastSeenAt)}</td><td className="px-3 py-2 text-right text-slate-400">{entry.loginCount}</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      ) : null}
+
       {dialog?.kind === 'status' ? (
         <ConfirmDialog
           title={dialog.user.status === 'active' ? '禁用账户' : '启用账户'}
@@ -301,6 +420,17 @@ export function UsersPage({ notify }: UsersPageProps) {
             notify('success', '账户状态已更新');
             await refresh();
           }}
+        />
+      ) : null}
+
+      {batchDeleteConfirm ? (
+        <ConfirmDialog
+          title="再次确认批量删除"
+          description={`确定删除选中的 ${selected.length} 个账户吗？账户记录会被删除，此操作不可恢复。`}
+          confirmLabel="确认永久删除"
+          danger
+          onClose={() => setBatchDeleteConfirm(false)}
+          onConfirm={async () => { setBatchDeleteConfirm(false); await applyBatch('delete'); }}
         />
       ) : null}
 
@@ -673,15 +803,17 @@ function DeleteUserDialog({
 }) {
   const [deleteFiles, setDeleteFiles] = useState(true);
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async (): Promise<void> => {
+  const doDelete = async (): Promise<void> => {
     setPending(true);
     setError(null);
     try {
       await call(api.users.remove({ userId: user.id, deleteFiles }));
       await onDone();
     } catch (cause) {
+      setConfirming(false);
       setError(errorMessage(cause));
     } finally {
       setPending(false);
@@ -689,6 +821,7 @@ function DeleteUserDialog({
   };
 
   return (
+    <>
     <Modal
       title={`删除用户 · ${user.username}`}
       description="此操作不可撤销，请确认。"
@@ -700,7 +833,7 @@ function DeleteUserDialog({
           </button>
           <button
             type="button"
-            onClick={() => void submit()}
+            onClick={() => setConfirming(true)}
             disabled={pending}
             className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-500 disabled:opacity-60"
           >
@@ -726,5 +859,16 @@ function DeleteUserDialog({
         <p className="mt-3 rounded-lg bg-rose-950/40 px-3 py-2 text-sm text-rose-300">{error}</p>
       ) : null}
     </Modal>
+    {confirming ? (
+      <ConfirmDialog
+        title={t('\u518d\u6b21\u786e\u8ba4\u5220\u9664')}
+        description={t('\u786e\u5b9a\u8981\u5220\u9664\u8d26\u6237\u300c{{name}}\u300d\u5417\uff1f{{files}}\u6b64\u64cd\u4f5c\u4e0d\u53ef\u6062\u590d\u3002', { name: user.username, files: deleteFiles ? '\u8be5\u7528\u6237\u7684\u5168\u90e8\u6587\u4ef6\u4e5f\u4f1a\u88ab\u5220\u9664\uff0c' : '' })}
+        confirmLabel={t('\u786e\u8ba4\u6c38\u4e45\u5220\u9664')}
+        danger
+        onClose={() => setConfirming(false)}
+        onConfirm={doDelete}
+      />
+    ) : null}
+    </>
   );
 }

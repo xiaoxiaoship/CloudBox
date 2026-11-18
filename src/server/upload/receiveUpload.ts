@@ -39,6 +39,7 @@ export interface ReceiveUploadOptions {
   tempDir: string;
   /** 同步预检：拿到 filename 后立刻返回配额上限，流式写入时超限即断 */
   prepare: (filename: string) => PreparedUpload;
+  onProgress?: (bytes: number) => void;
 }
 
 export interface ReceivedUpload {
@@ -188,6 +189,7 @@ export async function receiveUpload(
       const limiter = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
           size += chunk.length;
+          options.onProgress?.(chunk.length);
           if (size > current.limitBytes) {
             const limitType =
               current.maxFileBytes <= current.remainingBytes ? 'FILE_TOO_LARGE' : 'QUOTA_EXCEEDED';

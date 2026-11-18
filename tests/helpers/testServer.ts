@@ -145,6 +145,7 @@ export async function createTestServer(
     mailTransport?: MailTransport;
     scanEnabled?: boolean;
     scanMode?: 'api' | 'local';
+    securityMode?: 'simple' | 'advanced';
     permissions?: {
       image?: boolean;
       video?: boolean;
@@ -185,6 +186,7 @@ export async function createTestServer(
     options.allowPublicRegistration ?? false,
     null,
   );
+  services.settings.set('security.mode', options.securityMode ?? 'simple', null);
   services.settings.set('scan.enabled', options.scanEnabled ?? false, null);
   services.settings.set('scan.mode', options.scanMode ?? 'local', null);
   services.settings.set('allow_user_preview_image', options.permissions?.image ?? true, null);

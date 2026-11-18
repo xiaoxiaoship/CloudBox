@@ -49,7 +49,6 @@ async function main(): Promise<void> {
     apiKey: 'sk-e2e-secret-123',
     model: 'test-model',
     dailyLimit: 50,
-    mcpEnabled: false,
   });
   const browser = await chromium.launch({ executablePath: EDGE, headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

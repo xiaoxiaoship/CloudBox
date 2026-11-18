@@ -156,7 +156,7 @@ async function main(): Promise<void> {
       .waitFor();
 
     console.log('5. 上传文本并验证安全文本预览');
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'note.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('你好 CloudBox\n<script>alert(1)</script>\n', 'utf8'),
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     await page.getByLabel('关闭预览').click();
 
     console.log('6. 上传图片并验证白名单图片预览');
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'gradient.png',
       mimeType: 'image/png',
       buffer: buildPng(),
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     await page.getByLabel('关闭预览').click();
 
     console.log('7. 上传 PDF 并验证 pdfjs Canvas 渲染');
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'doc.pdf',
       mimeType: 'application/pdf',
       buffer: buildPdf(),
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
     await page.screenshot({ path: shot('e2e-dark-dialog.png') });
     await page.getByRole('button', { name: '取消' }).click();
 
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'dark-upload.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('dark upload panel'),

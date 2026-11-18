@@ -13,6 +13,7 @@ import {
 } from './fileService.ts';
 import type { SettingsService } from './settingsService.ts';
 import type { TaskService } from './taskService.ts';
+import { scanGate } from '../../server/concurrency.ts';
 
 export const SCAN_MAX_API_BYTES = 32 * 1024 * 1024;
 
@@ -201,7 +202,7 @@ export class ScanService {
     }
 
     const task = this.tasks.create(user.id, 'scan', 'scanning');
-    void this.run(task.id, user, target, ctx);
+    void scanGate.run(this.settings.get('maxConcurrentScans'), () => this.run(task.id, user, target, ctx));
     return { taskId: task.id };
   }
 

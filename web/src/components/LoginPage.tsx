@@ -55,7 +55,7 @@ export function LoginPage() {
     event.preventDefault();
 
     if (!username.trim() || !password) {
-      setError('请输入用户名和密码');
+      setError(t('auth.enterCredentials'));
       return;
     }
 
@@ -65,7 +65,7 @@ export function LoginPage() {
     try {
       await login(username.trim(), password);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '登录失败，请稍后重试');
+      setError(cause instanceof Error ? cause.message : t('auth.loginFailed'));
     } finally {
       setPending(false);
     }
@@ -76,7 +76,7 @@ export function LoginPage() {
     setUsername(registeredUsername);
     setPassword('');
     setError(null);
-    setNotice('注册成功，请登录');
+    setNotice(t('auth.registerSuccess'));
   };
 
   return (
@@ -187,7 +187,7 @@ export function LoginPage() {
 
           {allowRegistration ? (
             <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-400">
-              没有账号？
+              {t('auth.noAccount')}
               <button
                 type="button"
                 onClick={() => {
@@ -197,7 +197,7 @@ export function LoginPage() {
                 }}
                 className="ml-0.5 font-medium text-indigo-600 underline-offset-2 transition hover:text-indigo-500 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
               >
-                点击注册
+                {t('auth.clickRegister')}
               </button>
             </p>
           ) : null}
@@ -209,14 +209,14 @@ export function LoginPage() {
                 download
                 className="text-indigo-500 underline-offset-2 transition hover:text-indigo-600 hover:underline dark:text-indigo-300 dark:hover:text-indigo-200"
               >
-                💡 首次访问遇到安全警告？请点击下载并安装根证书
+                {t('auth.certHint')}
               </a>
             </p>
           ) : null}
         </form>
 
         <p className="mt-6 text-center text-[11px] text-slate-400 dark:text-slate-500">
-          CloudBox · 本地多用户网盘 · 文件仅保存在本机
+          {t('auth.webFooter')}
         </p>
       </div>
 

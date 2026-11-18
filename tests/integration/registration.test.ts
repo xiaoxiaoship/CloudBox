@@ -108,4 +108,22 @@ describe('public registration', () => {
     assert.equal(t.services.users.list().length, before);
     assert.equal(t.services.users.findByUsername('thirduser'), null);
   });
+
+  it('网页注册密码必须同时包含字母和数字', async () => {
+    t = await createTestServer({ allowPublicRegistration: true });
+    const digits = await register(t.client.baseUrl, 'digitsonly', '12345678');
+    assert.equal(digits.status, 400);
+    const valid = await register(t.client.baseUrl, 'letteruser', 'abc12345');
+    assert.equal(valid.status, 201);
+  });
+
+  it('高级模式不受旧版每 IP 每小时 2 次注册硬限制', async () => {
+    t = await createTestServer({ allowPublicRegistration: true });
+    t.services.settings.set('security.mode', 'advanced', null);
+    t.services.settings.set('security.capEnabled', false, null);
+    t.services.settings.set('security.policy', JSON.stringify({ rules: [], savedRules: [] }), null);
+    assert.equal((await register(t.client.baseUrl, 'advuser1', 'Passw0rd1')).status, 201);
+    assert.equal((await register(t.client.baseUrl, 'advuser2', 'Passw0rd1')).status, 201);
+    assert.equal((await register(t.client.baseUrl, 'advuser3', 'Passw0rd1')).status, 201);
+  });
 });

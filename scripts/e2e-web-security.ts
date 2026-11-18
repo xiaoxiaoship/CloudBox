@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     await page.getByRole('heading', { name: '我的文件' }).waitFor();
 
     const normalZip = await makeZip({ 'folder/hello.txt': 'hello extract' });
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'bundle.zip',
       mimeType: 'application/zip',
       buffer: normalZip,
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     await page.getByRole('button', { name: 'folder', exact: true }).waitFor();
 
     const evilZip = await makeZip({ '../../evil.txt': 'evil' });
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'evil.zip',
       mimeType: 'application/zip',
       buffer: evilZip,
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     await page.getByText(/路径|解压|evil/).last().waitFor({ timeout: 10_000 });
     await page.screenshot({ path: path.resolve('artifacts/e2e-extract-slip.png') });
 
-    await page.setInputFiles('input[type=file]', {
+    await page.locator('input[type=file]').last().setInputFiles( {
       name: 'eicar.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from(EICAR),

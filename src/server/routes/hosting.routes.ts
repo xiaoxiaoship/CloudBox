@@ -11,17 +11,22 @@ const deployBody = z.object({
   visibility: z.enum(['public', 'private']),
 });
 
+// Hosted pages may load their own assets in-place, but must not be able to
+// call CloudBox APIs, submit forms, open same-origin popups, or embed API pages.
 const HOST_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'none'",
+  "media-src 'self' data: blob:",
   "object-src 'none'",
-  "base-uri 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
   "frame-ancestors 'none'",
-  "sandbox allow-scripts allow-forms allow-popups",
+  "sandbox allow-scripts allow-forms allow-same-origin",
 ].join('; ');
 
 export function createHostingApiRouter(
@@ -76,6 +81,8 @@ export function createHostingSiteRouter(services: CoreServices): Router {
       res.type(resolved.mimeHint || 'bin');
       res.setHeader('Content-Security-Policy', HOST_CSP);
       res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cache-Control', 'no-cache');
       res.status(200).send(content);
     } catch {

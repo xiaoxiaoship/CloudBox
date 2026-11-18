@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Db } from '../db/connection.ts';
 import type { QuotaRepository } from '../db/repositories/quotaRepo.ts';
 import type { UserRepository } from '../db/repositories/userRepo.ts';
-import { hashPassword } from '../security/password.ts';
+import { checkPasswordStrength, hashPassword } from '../security/password.ts';
 import { toPublicUser, type PublicUser, type UserRecord } from '../types/models.ts';
 import type { AuditService } from './auditService.ts';
 import type { EventBus } from './eventBus.ts';
@@ -94,10 +94,11 @@ export class RegistrationService {
         400,
       );
     }
-    if (input.password.length < 8 || input.password.length > 128) {
+    const strength = checkPasswordStrength(input.password);
+    if (!strength.ok) {
       throw new RegistrationError(
         REGISTRATION_ERROR.WEAK_PASSWORD,
-        '密码长度必须为 8-128 位',
+        `密码强度不足：${strength.issues.join('；')}`,
         400,
       );
     }

@@ -93,6 +93,39 @@ export class SessionRepository {
     return this.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now).changes;
   }
 
+  listConnectedIps(userId: number, now: number, windowMs = 5 * 60_000, since = 0): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT ip FROM sessions
+          WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? AND last_seen_at >= ?
+            AND ip IS NOT NULL AND ip != ''
+          GROUP BY ip ORDER BY MAX(last_seen_at) DESC`,
+      )
+      .all(userId, now, Math.max(now - windowMs, since)) as Array<{ ip: string }>;
+    return rows.map((row) => row.ip);
+  }
+
+  countConnectedForIp(ip: string, now: number, windowMs = 5 * 60_000, since = 0): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM sessions
+          WHERE ip = ? AND revoked_at IS NULL AND expires_at > ? AND last_seen_at >= ?`,
+      )
+      .get(ip, now, Math.max(now - windowMs, since)) as { n: number };
+    return row.n;
+  }
+
+  countConnected(userId: number, now: number, windowMs = 5 * 60_000, since = 0): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(DISTINCT COALESCE(ip, '') || '|' || COALESCE(user_agent, '')) AS n
+          FROM sessions
+          WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? AND last_seen_at >= ?`,
+      )
+      .get(userId, now, Math.max(now - windowMs, since)) as { n: number };
+    return row.n;
+  }
+
   countActive(userId: number, now: number): number {
     const row = this.db
       .prepare(

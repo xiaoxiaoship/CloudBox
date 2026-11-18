@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { createTestServer } from '../tests/helpers/testServer.ts';
 

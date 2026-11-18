@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import {
   chmod,
   copyFile,
@@ -24,6 +25,7 @@ export const CA_ERROR = {
   ALREADY_EXISTS: 'CA_ALREADY_EXISTS',
   MISSING: 'CA_MISSING',
   GENERATE_FAILED: 'CA_GENERATE_FAILED',
+  INVALID_HOSTS: 'CA_INVALID_HOSTS',
   INSTALL_FAILED: 'CA_INSTALL_FAILED',
   EXPORT_FAILED: 'CA_EXPORT_FAILED',
 } as const;
@@ -157,7 +159,7 @@ export class CaManager {
     return this.getCAInfo();
   }
 
-  async issueServerCert(): Promise<CertificateInfo> {
+  async issueServerCert(extraHosts = ''): Promise<CertificateInfo> {
     this.assertCAExists();
     await mkdir(this.serverDir, { recursive: true, mode: 0o700 });
 
@@ -167,6 +169,7 @@ export class CaManager {
       '::1',
       os.hostname(),
       ...listLanIps(),
+      ...parseExtraHosts(extraHosts),
     ].filter((host, index, all) => host.length > 0 && all.indexOf(host) === index);
 
     const serverCertPath = path.join(this.serverDir, 'server.crt');
@@ -404,8 +407,44 @@ export class CaManager {
   }
 }
 
-function resolveMkcertBinary(): string | null {
-  const candidates = [
+function parseExtraHosts(raw: string): string[] {
+  if (!raw.trim()) return [];
+  const entries = raw
+    .split(/[,\n]/)
+    .map((entry) => entry.trim().replace(/^\[|\]$/g, ''))
+    .filter((entry) => entry.length > 0);
+  if (entries.length > 20) {
+    throw new CaError(CA_ERROR.INVALID_HOSTS, '最多填写 20 个域名或 IP');
+  }
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const entry of entries) {
+    const host = entry.toLowerCase();
+    if (
+      host.includes('://') ||
+      host.includes('/') ||
+      host.includes('\\') ||
+      host.includes(' ') ||
+      host.length > 253
+    ) {
+      throw new CaError(CA_ERROR.INVALID_HOSTS, `无效的域名或 IP：${entry}`);
+    }
+    const isWildcard = host.startsWith('*.');
+    const candidate = isWildcard ? host.slice(2) : host;
+    const validHostname = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/i.test(candidate);
+    if (isIP(host) === 0 && !validHostname) {
+      throw new CaError(CA_ERROR.INVALID_HOSTS, `无效的域名或 IP：${entry}`);
+    }
+    if (!seen.has(host)) {
+      seen.add(host);
+      result.push(host);
+    }
+  }
+  return result;
+}
+
+function resolveMkcertBinary(): string | null {  const candidates = [
     path.join(process.resourcesPath, 'bin', 'mkcert.exe'),
     path.join(app.getAppPath(), 'resources', 'bin', 'mkcert.exe'),
   ];

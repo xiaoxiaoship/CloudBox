@@ -9,9 +9,11 @@ interface UserDbRow {
   password_hash: string;
   role: string;
   status: string;
+  security_mode: number;
   must_change_password: number;
   failed_attempts: number;
   locked_until: number | null;
+  rename_limited_until: number | null;
   last_login_at: number | null;
   created_at: number;
   updated_at: number;
@@ -19,7 +21,7 @@ interface UserDbRow {
 }
 
 const COLUMNS = `id, storage_key, username, display_name, password_hash, role, status,
-  must_change_password, failed_attempts, locked_until, last_login_at, created_at, updated_at, avatar_data`;
+  security_mode, must_change_password, failed_attempts, locked_until, rename_limited_until, last_login_at, created_at, updated_at, avatar_data`;
 
 function mapUser(row: UserDbRow): UserRecord {
   return {
@@ -30,9 +32,11 @@ function mapUser(row: UserDbRow): UserRecord {
     passwordHash: row.password_hash,
     role: row.role === 'admin' ? 'admin' : 'user',
     status: row.status === 'disabled' ? 'disabled' : 'active',
+    securityMode: row.security_mode === 1,
     mustChangePassword: row.must_change_password === 1,
     failedAttempts: row.failed_attempts,
     lockedUntil: row.locked_until,
+    renameLimitedUntil: row.rename_limited_until,
     lastLoginAt: row.last_login_at,
     avatarDataUrl: row.avatar_data,
     createdAt: row.created_at,
@@ -125,6 +129,28 @@ export class UserRepository {
     );
   }
 
+  updateUsername(id: number, username: string, now: number): boolean {
+    try {
+      return (
+        this.db
+          .prepare(
+            `UPDATE users
+                SET username = ?,
+                    display_name = CASE WHEN display_name = '' THEN ? ELSE display_name END,
+                    updated_at = ?
+              WHERE id = ?`,
+          )
+          .run(username, username, now, id).changes > 0
+      );
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   updatePasswordHash(id: number, passwordHash: string, now: number): boolean {    return (
       this.db
         .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
@@ -164,6 +190,14 @@ export class UserRepository {
         .prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?')
         .run(status, now, id).changes > 0
     );
+  }
+
+  setRenameLimitedUntil(id: number, until: number | null, now: number): boolean {
+    return this.db.prepare('UPDATE users SET rename_limited_until = ?, updated_at = ? WHERE id = ?').run(until, now, id).changes > 0;
+  }
+
+  setSecurityMode(id: number, enabled: boolean, now: number): boolean {
+    return this.db.prepare('UPDATE users SET security_mode = ?, updated_at = ? WHERE id = ?').run(enabled ? 1 : 0, now, id).changes > 0;
   }
 
   setMustChangePassword(id: number, required: boolean, now: number): boolean {

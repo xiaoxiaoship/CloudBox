@@ -9,6 +9,7 @@ export interface AdminUser {
   displayName: string;
   role: UserRole;
   status: UserStatus;
+  securityMode: boolean;
   mustChangePassword: boolean;
   lastLoginAt: number | null;
   avatarDataUrl: string | null;
@@ -20,6 +21,36 @@ export interface UserSummary extends AdminUser {
   usedBytes: number;
   failedAttempts: number;
   lockedUntil: number | null;
+  renameLimitedUntil: number | null;
+  activeSessions?: number;
+  online: boolean;
+  lastIp?: string | null;
+  onlineIp?: string | null;
+  ipAddresses?: string[];
+}
+
+export interface SecurityBanEntry {
+  id: number;
+  scope: 'ip' | 'account';
+  target: string;
+  feature: string;
+  until: number;
+  createdAt: number;
+}
+
+export interface UserIpHistoryEntry {
+  ip: string;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  loginCount: number;
+}
+
+export interface UpdateCheckResult {
+  hasUpdate: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes: string;
+  downloadUrl: string;
 }
 
 export interface AdminStatus {
@@ -81,10 +112,38 @@ export interface ClientCertExport {
 export interface AdminSettings {
   allowPublicRegistration: boolean;
   trustProxy: boolean;
+  security: {
+    mode: 'simple' | 'advanced';
+    enabled: boolean;
+    maxLoginFailures: number;
+    lockBaseMinutes: number;
+    lockMaxMinutes: number;
+    ipLoginLimit: number;
+    ipWindowMinutes: number;
+    ipLockMinutes: number;
+    simpleRegisterLimit: number;
+    renameEnabled: boolean;
+    renameLimit: number;
+    renameWindowHours: number;
+    renameLockHours: number;
+    capEnabled: boolean;
+    capLoginFailures: number;
+    capRegistrationLimit: number;
+    capShareLimit: number;
+    policy: string;
+  };
+  resources: {
+    maxConcurrentExtractions: number;
+    maxConcurrentScans: number;
+    maxConcurrentHeavyPreviews: number;
+    maxConcurrentPreviewsPerUser: number;
+    maxLogSizeMB: number;
+  };
   permissions: {
     allowUserPreviewImage: boolean;
     allowUserPreviewVideo: boolean;
     allowUserPreviewPdf: boolean;
+    allowUserPreviewOffice: boolean;
     allowUserExtract: boolean;
     allowUserScan: boolean;
   };
@@ -103,12 +162,6 @@ export interface AdminSettings {
     apiKeyMasked: string;
     dailyLimit: number;
   };
-  mcp: {
-    enabled: boolean;
-    token: string;
-    boundUserId: number;
-    configTemplate: unknown;
-  };
   hosting: {
     enabled: boolean;
     baseUrl: string;
@@ -126,6 +179,8 @@ export interface AdminSettings {
     events: {
       userRegistered: boolean;
       securityAlert: boolean;
+      securityLimit: boolean;
+      resourceAlert: boolean;
       systemError: boolean;
     };
   };
@@ -135,6 +190,7 @@ export interface FeaturePermissions {
   allowUserPreviewImage: boolean;
   allowUserPreviewVideo: boolean;
   allowUserPreviewPdf: boolean;
+  allowUserPreviewOffice: boolean;
   allowUserExtract: boolean;
   allowUserScan: boolean;
 }
@@ -144,6 +200,12 @@ export interface ScanConfig {
   mode: 'api' | 'local';
   apiKey: string;
   localPath: string;
+}
+
+export interface ServerScheduleConfig {
+  enabled: boolean;
+  start: string;
+  end: string;
 }
 
 export interface ServerStatus {
@@ -157,7 +219,10 @@ export interface ServerStatus {
   urls: string[];
   lanIps: string[];
   startedAt: number | null;
+  uploadedBytes: number;
+  downloadedBytes: number;
   error: string | null;
+  autoStart: boolean;
 }
 
 export interface FrpConfig {
@@ -165,10 +230,12 @@ export interface FrpConfig {
   serverPort: number;
   remotePort: number;
   token: string;
+  user: string;
   proxyName: string;
   tunnelType: 'tcp' | 'http' | 'https';
   customDomain: string;
   proxyProtocol: boolean;
+  healthCheckMux: boolean;
 }
 
 export interface FrpStatus {
@@ -224,11 +291,18 @@ export interface CloudboxApi {
       userId: number;
       status: UserStatus;
     }) => Promise<Result<null>>;
+    setSecurityMode: (input: { userId: number; enabled: boolean }) => Promise<Result<null>>;
+    clearRenameLimit: (input: { userId: number }) => Promise<Result<null>>;
+    ipHistory: (input: { userId: number }) => Promise<Result<UserIpHistoryEntry[]>>;
     remove: (input: { userId: number; deleteFiles: boolean }) => Promise<Result<null>>;
+    renameSelf: (input: { username: string }) => Promise<Result<{ username: string }>>;
   };
   server: {
     status: () => Promise<Result<ServerStatus>>;
     setOnline: (input: { enabled: boolean }) => Promise<Result<ServerStatus>>;
+    setAutoStart: (input: { enabled: boolean }) => Promise<Result<ServerStatus>>;
+    getSchedule: () => Promise<Result<ServerScheduleConfig>>;
+    setSchedule: (input: ServerScheduleConfig) => Promise<Result<ServerScheduleConfig>>;
     setPort: (input: { port: number }) => Promise<Result<ServerStatus>>;
     applyNetwork: (input: {
       protocol: 'http' | 'https';
@@ -245,7 +319,7 @@ export interface CloudboxApi {
     create: () => Promise<Result<CaInfo>>;
     install: () => Promise<Result<CaInfo>>;
     uninstall: () => Promise<Result<CaInfo>>;
-    issueServerCert: () => Promise<Result<CertificateInfo>>;
+    issueServerCert: (input: { extraHosts: string }) => Promise<Result<CertificateInfo>>;
     exportClientCert: () => Promise<Result<ClientCertExport>>;
   };
   settings: {
@@ -254,6 +328,10 @@ export interface CloudboxApi {
       input: { enabled: boolean },
     ) => Promise<Result<AdminSettings>>;
     setTrustProxy: (input: { enabled: boolean }) => Promise<Result<AdminSettings>>;
+    setSecurity: (input: AdminSettings['security']) => Promise<Result<AdminSettings>>;
+    setResources: (input: AdminSettings['resources']) => Promise<Result<AdminSettings>>;
+    resetDefaults: () => Promise<Result<AdminSettings>>;
+    clearResourceCache: () => Promise<Result<{ removedFiles: number; removedLogs: number }>>;
     setPermissions: (input: FeaturePermissions) => Promise<Result<AdminSettings>>;
     setScan: (input: ScanConfig) => Promise<Result<AdminSettings>>;
     setAi: (input: {
@@ -263,10 +341,7 @@ export interface CloudboxApi {
       apiKey?: string;
       model: string;
       dailyLimit: number;
-      mcpEnabled: boolean;
-      mcpToken?: string;
     }) => Promise<Result<AdminSettings>>;
-    generateMcpToken: () => Promise<Result<AdminSettings>>;
     setHosting: (input: { enabled: boolean; baseUrl: string }) => Promise<Result<AdminSettings>>;
     setMail: (input: {
       enabled: boolean;
@@ -279,9 +354,26 @@ export interface CloudboxApi {
       to: string;
       eventUserRegistered: boolean;
       eventSecurityAlert: boolean;
+      eventSecurityLimit: boolean;
+      eventResourceAlert: boolean;
       eventSystemError: boolean;
     }) => Promise<Result<AdminSettings>>;
     testMail: () => Promise<Result<{ ok: boolean; message: string }>>;
+  };
+  logs: {
+    get: (input?: { limit?: number }) => Promise<Result<{ runtime: string[]; audit: unknown[] }>>;
+  };
+  system: {
+    checkUpdate: () => Promise<Result<UpdateCheckResult>>;
+    openExternal: (input: { url: string }) => Promise<Result<null>>;
+    rateLimits: () => Promise<Result<Array<{ ip: string; until: number; endpoint: string }>>>;
+    clearRateLimit: (input: { ip: string }) => Promise<Result<null>>;
+    securityBans: () => Promise<Result<SecurityBanEntry[]>>;
+    clearSecurityBan: (input: { id: number }) => Promise<Result<null>>;
+    clearAllSecurityBans: () => Promise<Result<{ removed: number }>>;
+    securityCounts: () => Promise<Result<Array<{ scope: 'ip' | 'account' | 'global'; target: string; feature: string; count: number; updatedAt: number }>>>;
+    clearSecurityCount: (input: { scope: 'ip' | 'account' | 'global'; target: string; feature: string }) => Promise<Result<null>>;
+    clearAllSecurityCounts: () => Promise<Result<null>>;
   };
   frp: {
     status: () => Promise<Result<FrpStatus>>;
@@ -289,6 +381,8 @@ export interface CloudboxApi {
     start: () => Promise<Result<FrpStatus>>;
     stop: () => Promise<Result<FrpStatus>>;
     restart: () => Promise<Result<FrpStatus>>;
+    getSync: () => Promise<Result<{ enabled: boolean }>>;
+    setSync: (input: { enabled: boolean }) => Promise<Result<{ enabled: boolean }>>;
   };
   files: {
     list: (input: { userId: number; path: string }) => Promise<Result<FileListingDto>>;
@@ -298,7 +392,7 @@ export interface CloudboxApi {
     }) => Promise<Result<{ saved: boolean; fileName?: string }>>;
   };
   app: {
-    info: () => Promise<Result<{ version: string; dataDir: string; storageDir: string; pluginsDir: string }>>;
+    info: () => Promise<Result<{ version: string; dataDir: string; storageDir: string; pluginsDir: string; isPackaged: boolean; isPortable: boolean }>>;
     openDataDir: () => Promise<Result<null>>;
     openStorageDir: () => Promise<Result<null>>;
     openPluginsDir: () => Promise<Result<null>>;
@@ -310,7 +404,10 @@ export interface CloudboxApi {
       kind: 'data' | 'storage' | 'plugins';
       targetPath: string;
       migrate: boolean;
+      deleteOld: boolean;
     }) => Promise<Result<{ restarting: boolean }>>;
+    getStartup: () => Promise<Result<{ autoStart: boolean; startInTray: boolean }>>;
+    setStartup: (input: { autoStart: boolean; startInTray: boolean }) => Promise<Result<{ autoStart: boolean; startInTray: boolean }>>;
   };
   plugins: {
     list: () => Promise<Result<PluginInfo[]>>;
@@ -321,6 +418,7 @@ export interface CloudboxApi {
       allowed: boolean;
     }) => Promise<Result<PluginInfo[]>>;
     remove: (input: { name: string }) => Promise<Result<PluginInfo[]>>;
+    openAdmin: (input: { name: string }) => Promise<Result<null>>;
   };
 }
 
@@ -337,10 +435,17 @@ export const IPC = {
   usersResetPassword: 'users:reset-password',
   usersUnlock: 'users:unlock',
   usersSetStatus: 'users:set-status',
+  usersSetSecurityMode: 'users:set-security-mode',
+  usersClearRenameLimit: 'users:clear-rename-limit',
+  usersIpHistory: 'users:ip-history',
   usersRemove: 'users:remove',
+  adminRenameSelf: 'admin:rename-self',
 
   serverStatus: 'server:status',
   serverSetOnline: 'server:set-online',
+  serverSetAutoStart: 'server:set-auto-start',
+  serverGetSchedule: 'server:get-schedule',
+  serverSetSchedule: 'server:set-schedule',
   serverSetPort: 'server:set-port',
   serverApplyNetwork: 'server:apply-network',
   serverCertificate: 'server:certificate',
@@ -356,19 +461,35 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSetPublicRegistration: 'settings:set-public-registration',
   settingsSetTrustProxy: 'settings:set-trust-proxy',
+  settingsSetSecurity: 'settings:set-security',
+  settingsSetResources: 'settings:set-resources',
+  settingsResetDefaults: 'settings:reset-defaults',
+  resourcesClearCache: 'resources:clear-cache',
   settingsSetPermissions: 'settings:set-permissions',
   settingsSetScan: 'settings:set-scan',
   settingsSetAi: 'settings:set-ai',
-  settingsGenerateMcpToken: 'settings:generate-mcp-token',
   settingsSetHosting: 'settings:set-hosting',
   settingsSetMail: 'settings:set-mail',
   settingsTestMail: 'settings:test-mail',
+  logsGet: 'logs:get',
+  systemCheckUpdate: 'system:check-update',
+  systemOpenExternal: 'system:open-external',
+  systemRateLimits: 'system:rate-limits',
+  systemClearRateLimit: 'system:clear-rate-limit',
+  systemSecurityBans: 'system:security-bans',
+  systemClearSecurityBan: 'system:clear-security-ban',
+  systemClearAllSecurityBans: 'system:clear-all-security-bans',
+  systemSecurityCounts: 'system:security-counts',
+  systemClearSecurityCount: 'system:clear-security-count',
+  systemClearAllSecurityCounts: 'system:clear-all-security-counts',
 
   frpStatus: 'frp:status',
   frpSaveConfig: 'frp:save-config',
   frpStart: 'frp:start',
   frpStop: 'frp:stop',
   frpRestart: 'frp:restart',
+  frpGetSync: 'frp:get-sync',
+  frpSetSync: 'frp:set-sync',
 
   filesList: 'files:list',
   filesDownload: 'files:download',
@@ -380,9 +501,12 @@ export const IPC = {
   appBackupDatabase: 'app:backup-database',
   appChooseDirectory: 'app:choose-directory',
   appChangeDirectory: 'app:change-directory',
+  appGetStartup: 'app:get-startup',
+  appSetStartup: 'app:set-startup',
   pluginsList: 'plugins:list',
   pluginsImport: 'plugins:import',
   pluginsSetEnabled: 'plugins:set-enabled',
   pluginsSetAllowWebOverride: 'plugins:set-allow-web-override',
   pluginsRemove: 'plugins:remove',
+  pluginsOpenAdmin: 'plugins:open-admin',
 } as const;

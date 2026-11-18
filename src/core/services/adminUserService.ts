@@ -17,12 +17,20 @@ import {
 } from '../types/models.ts';
 import type { AuthService } from './authService.ts';
 import type { AuditService } from './auditService.ts';
+import type { SettingsService } from './settingsService.ts';
+import type { UserIpRepository, UserIpRecord } from '../db/repositories/userIpRepo.ts';
 
 export interface ManagedUser extends PublicUser {
   quotaBytes: number | null;
   usedBytes: number;
   failedAttempts: number;
   lockedUntil: number | null;
+  renameLimitedUntil: number | null;
+  activeSessions: number;
+  online: boolean;
+  lastIp: string | null;
+  onlineIp: string | null;
+  ipAddresses: string[];
 }
 
 export interface AdminActor {
@@ -87,6 +95,8 @@ export interface AdminUserServiceOptions {
   sessions: SessionRepository;
   auth: AuthService;
   audit: AuditService;
+  settings: SettingsService;
+  loginIps?: UserIpRepository;
   storageRoot: string;
   now?: () => number;
 }
@@ -106,6 +116,8 @@ export class AdminUserService {
   private readonly sessions: SessionRepository;
   private readonly auth: AuthService;
   private readonly audit: AuditService;
+  private readonly settings: SettingsService;
+  private readonly loginIps: UserIpRepository | null;
   private readonly storageRoot: string;
   private readonly now: () => number;
 
@@ -116,21 +128,38 @@ export class AdminUserService {
     this.sessions = options.sessions;
     this.auth = options.auth;
     this.audit = options.audit;
+    this.settings = options.settings;
+    this.loginIps = options.loginIps ?? null;
     this.storageRoot = options.storageRoot;
     this.now = options.now ?? Date.now;
   }
 
   list(): ManagedUser[] {
+    const now = this.now();
     return this.users.list().map((user) => {
       const quota = this.quotas.get(user.id);
+      const activeSessions = this.sessions.countConnected(user.id, now);
+      const historyIps = this.loginIps?.listForUser(user.id) ?? [];
+      const onlineIps = this.sessions.listConnectedIps(user.id, now);
+      const ipAddresses = [...new Set([...onlineIps, ...historyIps.map((entry) => entry.ip)])];
       return {
         ...toPublicUser(user),
         quotaBytes: quota === null ? 0 : quota.quotaBytes,
         usedBytes: quota?.usedBytes ?? 0,
         failedAttempts: user.failedAttempts,
         lockedUntil: user.lockedUntil,
+        renameLimitedUntil: user.renameLimitedUntil ?? null,
+        activeSessions,
+        online: activeSessions > 0,
+        lastIp: historyIps[0]?.ip ?? onlineIps[0] ?? null,
+        onlineIp: activeSessions > 0 ? onlineIps[0] ?? historyIps[0]?.ip ?? null : null,
+        ipAddresses,
       };
     });
+  }
+
+  ipHistory(userId: number): UserIpRecord[] {
+    return this.loginIps?.listForUser(userId) ?? [];
   }
 
   async createAdmin(input: { username: string; password: string }): Promise<ManagedUser> {
@@ -163,6 +192,29 @@ export class AdminUserService {
       actorId: actor.id,
       auditAction: 'user.create',
     });
+  }
+
+  renameSelf(actor: AdminActor, username: string): { username: string } {
+    const next = normalizeUsername(username);
+    const user = this.requireUser(actor.id);
+    const existing = this.users.findByUsername(next);
+    if (existing !== null && existing.id !== user.id) {
+      throw new AdminError(ADMIN_ERROR.USERNAME_TAKEN, '用户名已被占用');
+    }
+    if (next === user.username) return { username: user.username };
+    if (!this.users.updateUsername(user.id, next, this.now())) {
+      throw new AdminError(ADMIN_ERROR.USERNAME_TAKEN, '用户名已被占用');
+    }
+    this.audit.record({
+      actorType: 'admin',
+      actorId: actor.id,
+      action: 'admin.rename',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(user.id),
+      detail: { before: user.username, after: next },
+    });
+    return { username: next };
   }
 
   setQuota(userId: number, quotaBytes: number | null, actor: AdminActor): void {
@@ -202,6 +254,38 @@ export class AdminUserService {
       targetType: 'user',
       targetId: String(userId),
       detail: { username: user.username },
+    });
+  }
+
+  clearRenameLimit(userId: number, actor: AdminActor): void {
+    const user = this.requireUser(userId);
+    this.users.setRenameLimitedUntil(userId, null, this.now());
+    this.audit.clearRenameEvents(userId, 0);
+    this.audit.record({
+      actorType: 'admin',
+      actorId: actor.id,
+      action: 'user.rename.unlock',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(userId),
+      detail: { username: user.username },
+    });
+  }
+
+  setSecurityMode(userId: number, enabled: boolean, actor: AdminActor): void {
+    const user = this.requireUser(userId);
+    if (user.role === 'admin' && enabled) {
+      throw new AdminError(ADMIN_ERROR.FORBIDDEN, '管理员不能开启安全模式');
+    }
+    this.users.setSecurityMode(userId, enabled, this.now());
+    this.audit.record({
+      actorType: 'admin',
+      actorId: actor.id,
+      action: 'user.security_mode.update',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(userId),
+      detail: { username: user.username, securityMode: enabled },
     });
   }
 
@@ -331,6 +415,12 @@ export class AdminUserService {
       usedBytes: 0,
       failedAttempts: 0,
       lockedUntil: null,
+      renameLimitedUntil: null,
+      activeSessions: 0,
+      online: false,
+      lastIp: null,
+      onlineIp: null,
+      ipAddresses: [],
     };
   }
 

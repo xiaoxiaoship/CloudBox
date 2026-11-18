@@ -20,7 +20,6 @@ import {
   IPC,
   type AdminStatus,
   type AdminSettings,
-  type FrpConfig,
   type FrpStatus,
   type Result,
   type ServerStatus,
@@ -31,6 +30,9 @@ import { changeDirectory } from './directoryMigration.ts';
 import { FRP_ERROR, FrpError } from './frpService.ts';
 import { SERVER_ERROR, ServerError, isPortAvailable } from './serverController.ts';
 import { TLS_ERROR, TlsError } from './tlsManager.ts';
+import { getRecentLogs } from '../shared/logger.ts';
+import { applyLoginItem, isInstalledBuild } from './loginItem.ts';
+import { clearLimitedIp, listLimitedIps, resetLimitedIps } from '../server/middleware/rateLimit.ts';
 
 export interface IpcContext extends MainContext {
   getWindow: () => BrowserWindow | null;
@@ -102,12 +104,14 @@ const changeDirectorySchema = z.object({
   kind: z.enum(['data', 'storage', 'plugins']),
   targetPath: z.string().min(1),
   migrate: z.boolean(),
+  deleteOld: z.boolean().default(false),
 });
 const publicRegistrationSchema = z.object({ enabled: z.boolean() });
 const featurePermissionsSchema = z.object({
   allowUserPreviewImage: z.boolean(),
   allowUserPreviewVideo: z.boolean(),
   allowUserPreviewPdf: z.boolean(),
+  allowUserPreviewOffice: z.boolean(),
   allowUserExtract: z.boolean(),
   allowUserScan: z.boolean(),
 });
@@ -124,8 +128,6 @@ const aiConfigSchema = z.object({
   apiKey: z.string().max(2000).optional(),
   model: z.string().max(200),
   dailyLimit: z.number().int().min(1).max(10_000),
-  mcpEnabled: z.boolean(),
-  mcpToken: z.string().max(256).optional(),
 });
 const mailConfigSchema = z.object({
   enabled: z.boolean(),
@@ -138,6 +140,8 @@ const mailConfigSchema = z.object({
   to: z.string().max(500),
   eventUserRegistered: z.boolean(),
   eventSecurityAlert: z.boolean(),
+  eventSecurityLimit: z.boolean(),
+  eventResourceAlert: z.boolean(),
   eventSystemError: z.boolean(),
 });
 const changePasswordSchema = z.object({
@@ -149,10 +153,12 @@ const frpConfigSchema = z.object({
   serverPort: z.number().int().min(1).max(65_535),
   remotePort: z.number().int().min(0).max(65_535),
   token: z.string().max(255),
+  user: z.string().max(255),
   proxyName: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   tunnelType: z.enum(['tcp', 'http', 'https']),
   customDomain: z.string().max(253),
   proxyProtocol: z.boolean(),
+  healthCheckMux: z.boolean(),
 });
 
 const fileListSchema = z.object({
@@ -172,6 +178,7 @@ function toAdminUser(user: PublicUser) {
     displayName: user.displayName,
     role: user.role,
     status: user.status,
+    securityMode: user.securityMode ?? false,
     mustChangePassword: user.mustChangePassword,
     lastLoginAt: user.lastLoginAt,
     avatarDataUrl: user.avatarDataUrl ?? null,
@@ -372,9 +379,27 @@ export function registerIpc(context: IpcContext): void {
     return null;
   });
 
+  register(IPC.usersSetSecurityMode, z.object({ userId: z.number().int().positive(), enabled: z.boolean() }), (input) => {
+    context.adminUsers.setSecurityMode(input.userId, input.enabled, actor());
+    return null;
+  });
+
+  register(IPC.usersClearRenameLimit, z.object({ userId: z.number().int().positive() }), (input) => {
+    context.adminUsers.clearRenameLimit(input.userId, actor());
+    return null;
+  });
+
+  register(IPC.usersIpHistory, z.object({ userId: z.number().int().positive() }), (input) => {
+    return context.adminUsers.ipHistory(input.userId);
+  });
+
   register(IPC.usersRemove, removeUserSchema, async (input) => {
     await context.adminUsers.remove(input.userId, input.deleteFiles, actor());
     return null;
+  });
+
+  register(IPC.adminRenameSelf, z.object({ username: z.string().min(1).max(64) }), (input) => {
+    return context.adminUsers.renameSelf(actor(), input.username);
   });
 
   register(IPC.serverStatus, z.undefined(), (): ServerStatus => serverStatus(context));
@@ -428,6 +453,38 @@ export function registerIpc(context: IpcContext): void {
 
     return serverStatus(context);
   });
+
+  register(IPC.serverSetAutoStart, z.object({ enabled: z.boolean() }), (input): ServerStatus => {
+    const admin = actor();
+    context.services.settings.set('server.autoStart', input.enabled, admin.id);
+    return serverStatus(context);
+  });
+
+  register(IPC.serverGetSchedule, z.undefined(), () => context.automation.getSchedule());
+
+  register(
+    IPC.serverSetSchedule,
+    z.object({
+      enabled: z.boolean(),
+      start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    }),
+    (input) => {
+      const admin = actor();
+      context.services.settings.set('server.scheduleEnabled', input.enabled, admin.id);
+      context.services.settings.set('server.scheduleStart', input.start, admin.id);
+      context.services.settings.set('server.scheduleEnd', input.end, admin.id);
+      context.services.audit.record({
+        actorType: 'admin',
+        actorId: admin.id,
+        action: 'server.schedule.update',
+        result: 'success',
+        targetType: 'server',
+        detail: input,
+      });
+      return context.automation.getSchedule();
+    },
+  );
 
   register(IPC.serverSetPort, portSchema, async (input): Promise<ServerStatus> => {
     const admin = actor();
@@ -641,20 +698,42 @@ export function registerIpc(context: IpcContext): void {
       hasApiKey: boolean;
       apiKeyMasked: string;
       dailyLimit: number;
-      mcp: {
-        enabled: boolean;
-        token: string;
-        boundUserId: number;
-        configTemplate: unknown;
-      };
     };
     return {
       allowPublicRegistration: context.services.settings.get('allow_public_registration'),
       trustProxy: context.services.settings.get('network.trustProxy'),
+      security: {
+        mode: context.services.settings.get('security.mode'),
+        enabled: context.services.settings.get('security.lockEnabled'),
+        maxLoginFailures: context.services.settings.get('security.maxLoginFailures'),
+        lockBaseMinutes: context.services.settings.get('security.lockBaseMinutes'),
+        lockMaxMinutes: context.services.settings.get('security.lockMaxMinutes'),
+        ipLoginLimit: context.services.settings.get('security.ipLoginLimit'),
+        ipWindowMinutes: context.services.settings.get('security.ipWindowMinutes'),
+        ipLockMinutes: context.services.settings.get('security.ipLockMinutes'),
+        simpleRegisterLimit: context.services.settings.get('security.simpleRegisterLimit'),
+        renameEnabled: context.services.settings.get('security.renameEnabled'),
+        renameLimit: context.services.settings.get('security.renameLimit'),
+        renameWindowHours: context.services.settings.get('security.renameWindowHours'),
+        renameLockHours: context.services.settings.get('security.renameLockHours'),
+        capEnabled: context.services.settings.get('security.capEnabled'),
+        capLoginFailures: context.services.settings.get('security.capLoginFailures'),
+        capRegistrationLimit: context.services.settings.get('security.capRegistrationLimit'),
+        capShareLimit: context.services.settings.get('security.capShareLimit'),
+        policy: context.services.settings.get('security.policy'),
+      },
+      resources: {
+        maxConcurrentExtractions: context.services.settings.get('maxConcurrentExtractions'),
+        maxConcurrentScans: context.services.settings.get('maxConcurrentScans'),
+        maxConcurrentHeavyPreviews: context.services.settings.get('maxConcurrentHeavyPreviews'),
+        maxConcurrentPreviewsPerUser: context.services.settings.get('maxConcurrentPreviewsPerUser'),
+        maxLogSizeMB: context.services.settings.get('maxLogSizeMB'),
+      },
       permissions: {
         allowUserPreviewImage: context.services.settings.get('allow_user_preview_image'),
         allowUserPreviewVideo: context.services.settings.get('allow_user_preview_video'),
         allowUserPreviewPdf: context.services.settings.get('allow_user_preview_pdf'),
+        allowUserPreviewOffice: context.services.settings.get('allow_user_preview_office'),
         allowUserExtract: context.services.settings.get('allow_user_extract'),
         allowUserScan: context.services.settings.get('allow_user_scan'),
       },
@@ -673,7 +752,6 @@ export function registerIpc(context: IpcContext): void {
         apiKeyMasked: aiAdmin.apiKeyMasked,
         dailyLimit: aiAdmin.dailyLimit,
       },
-      mcp: aiAdmin.mcp,
       hosting: {
         enabled: context.services.settings.get('hosting.enabled'),
         baseUrl: context.services.settings.get('hosting.base_url'),
@@ -737,12 +815,107 @@ export function registerIpc(context: IpcContext): void {
     },
   );
 
+  register(IPC.settingsSetSecurity, z.object({
+    mode: z.enum(['simple', 'advanced']),
+    enabled: z.boolean(),
+    maxLoginFailures: z.number().int().min(3).max(50),
+    lockBaseMinutes: z.number().int().min(1).max(1440),
+    lockMaxMinutes: z.number().int().min(1).max(10080),
+    ipLoginLimit: z.number().int().min(1).max(10000),
+    ipWindowMinutes: z.number().int().min(1).max(1440),
+    ipLockMinutes: z.number().int().min(1).max(1440),
+    simpleRegisterLimit: z.number().int().min(1).max(1000),
+    renameEnabled: z.boolean(),
+    renameLimit: z.number().int().min(1).max(100),
+    renameWindowHours: z.number().int().min(1).max(8760),
+    renameLockHours: z.number().int().min(1).max(8760),
+    capEnabled: z.boolean(),
+    capLoginFailures: z.number().int().min(1).max(100),
+    capRegistrationLimit: z.number().int().min(1).max(100),
+    capShareLimit: z.number().int().min(1).max(100),
+    policy: z.string().max(50_000),
+  }), (input) => {
+    const admin = actor();
+    const settings = context.services.settings;
+    const previousMode = settings.get('security.mode');
+    if (previousMode !== input.mode) {
+      // Modes must not inherit each other's runtime bans/locks/counters.
+      context.services.securityPolicy.clearAll();
+    }
+    settings.set('security.mode', input.mode, admin.id);
+    settings.set('security.lockEnabled', input.enabled, admin.id);
+    settings.set('security.maxLoginFailures', input.maxLoginFailures, admin.id);
+    settings.set('security.lockBaseMinutes', input.lockBaseMinutes, admin.id);
+    settings.set('security.lockMaxMinutes', input.lockMaxMinutes, admin.id);
+    settings.set('security.ipLoginLimit', input.ipLoginLimit, admin.id);
+    settings.set('security.ipWindowMinutes', input.ipWindowMinutes, admin.id);
+    settings.set('security.ipLockMinutes', input.ipLockMinutes, admin.id);
+    settings.set('security.simpleRegisterLimit', input.simpleRegisterLimit, admin.id);
+    resetLimitedIps();
+    settings.set('security.renameEnabled', input.renameEnabled, admin.id);
+    settings.set('security.renameLimit', input.renameLimit, admin.id);
+    settings.set('security.renameWindowHours', input.renameWindowHours, admin.id);
+    settings.set('security.renameLockHours', input.renameLockHours, admin.id);
+    settings.set('security.capEnabled', input.capEnabled, admin.id);
+    settings.set('security.capLoginFailures', input.capLoginFailures, admin.id);
+    settings.set('security.capRegistrationLimit', input.capRegistrationLimit, admin.id);
+    settings.set('security.capShareLimit', input.capShareLimit, admin.id);
+    settings.set('security.policy', input.policy, admin.id);
+    context.services.audit.record({
+      actorType: 'admin',
+      actorId: admin.id,
+      action: 'settings.security.update',
+      result: 'success',
+      targetType: 'settings',
+      detail: input,
+    });
+    return adminSettings();
+  });
+
+  register(IPC.settingsSetResources, z.object({
+    maxConcurrentExtractions: z.number().int().min(1).max(1000),
+    maxConcurrentScans: z.number().int().min(1).max(1000),
+    maxConcurrentHeavyPreviews: z.number().int().min(1).max(1000),
+    maxConcurrentPreviewsPerUser: z.number().int().min(1).max(1000),
+    maxLogSizeMB: z.number().int().min(1).max(100000),
+  }), (input) => {
+    const admin = actor();
+    const settings = context.services.settings;
+    settings.set('maxConcurrentExtractions', input.maxConcurrentExtractions, admin.id);
+    settings.set('maxConcurrentScans', input.maxConcurrentScans, admin.id);
+    settings.set('maxConcurrentHeavyPreviews', input.maxConcurrentHeavyPreviews, admin.id);
+    settings.set('maxConcurrentPreviewsPerUser', input.maxConcurrentPreviewsPerUser, admin.id);
+    settings.set('maxLogSizeMB', input.maxLogSizeMB, admin.id);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'settings.resources', result: 'success', targetType: 'settings', detail: input });
+    context.services.events.emit('resource.alert', { category: '本地资源配布', message: '资源并发上限已更新', ...input });
+    return adminSettings();
+  });
+
+  register(IPC.settingsResetDefaults, z.undefined(), () => {
+    const admin = actor();
+    context.services.settings.resetUserConfig(admin.id);
+    context.services.securityPolicy.clearAll();
+    resetLimitedIps();
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'settings.reset-defaults', result: 'success', targetType: 'settings' });
+    return adminSettings();
+  });
+
+  register(IPC.resourcesClearCache, z.undefined(), async () => {
+    const admin = actor();
+    await rm(path.join(context.dataDir, 'tmp'), { recursive: true, force: true });
+    context.services.audit.pruneBefore(Date.now() - 30 * 24 * 60 * 60_000);
+    const removedLogs = context.services.audit.trimToBytes(context.services.settings.get('maxLogSizeMB') * 1024 * 1024);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'resources.clear-cache', result: 'success', targetType: 'settings', detail: { removedLogs } });
+    return { removedFiles: 0, removedLogs };
+  });
+
   register(IPC.settingsSetPermissions, featurePermissionsSchema, (input) => {
     const admin = actor();
     const settings = context.services.settings;
     settings.set('allow_user_preview_image', input.allowUserPreviewImage, admin.id);
     settings.set('allow_user_preview_video', input.allowUserPreviewVideo, admin.id);
     settings.set('allow_user_preview_pdf', input.allowUserPreviewPdf, admin.id);
+    settings.set('allow_user_preview_office', input.allowUserPreviewOffice, admin.id);
     settings.set('allow_user_extract', input.allowUserExtract, admin.id);
     settings.set('allow_user_scan', input.allowUserScan, admin.id);
     context.services.audit.record({
@@ -791,25 +964,10 @@ export function registerIpc(context: IpcContext): void {
       detail: {
         enabled: input.enabled,
         mode: input.mode,
-        mcpEnabled: input.mcpEnabled,
         hasApiKey: Boolean(input.apiKey && !input.apiKey.includes('***')),
       },
     });
     return adminSettings();
-  });
-
-  register(IPC.settingsGenerateMcpToken, z.undefined(), () => {
-    const admin = actor();
-    const token = context.services.ai.generateMcpToken();
-    context.services.audit.record({
-      actorType: 'admin',
-      actorId: admin.id,
-      action: 'settings.mcp-token',
-      result: 'success',
-      targetType: 'settings',
-      detail: { generated: true },
-    });
-    return { ...adminSettings(), generatedToken: token };
   });
 
   register(
@@ -850,6 +1008,18 @@ export function registerIpc(context: IpcContext): void {
   });
 
   register(IPC.settingsTestMail, z.undefined(), () => context.services.mail.sendTest());
+
+  register(
+    IPC.logsGet,
+    z.object({ limit: z.number().int().min(1).max(500).optional() }).optional(),
+    (input) => {
+      const limit = input?.limit ?? 200;
+      return {
+        runtime: getRecentLogs(limit),
+        audit: context.services.audit.list({ limit }),
+      };
+    },
+  );
 
   register(IPC.caInfo, z.undefined(), () => context.ca.getCAInfo());
   register(IPC.caCreate, z.undefined(), async () => {
@@ -894,9 +1064,9 @@ export function registerIpc(context: IpcContext): void {
     return info;
   });
 
-  register(IPC.caIssueServerCert, z.undefined(), async () => {
+  register(IPC.caIssueServerCert, z.object({ extraHosts: z.string().max(1000).default('') }), async (input) => {
     const admin = actor();
-    const certificate = await context.ca.issueServerCert();
+    const certificate = await context.ca.issueServerCert(input.extraHosts);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
@@ -944,6 +1114,14 @@ export function registerIpc(context: IpcContext): void {
     return result;
   });
 
+  register(IPC.frpGetSync, z.undefined(), () => ({ enabled: context.services.settings.get('frp.syncWithServer') }));
+
+  register(IPC.frpSetSync, z.object({ enabled: z.boolean() }), (input) => {
+    const admin = actor();
+    context.services.settings.set('frp.syncWithServer', input.enabled, admin.id);
+    return { enabled: input.enabled };
+  });
+
   register(IPC.frpStatus, z.undefined(), () => context.frp.getStatus());
 
   register(IPC.frpSaveConfig, frpConfigSchema, async (input): Promise<FrpStatus> => {
@@ -953,10 +1131,12 @@ export function registerIpc(context: IpcContext): void {
     context.services.settings.set('frp.serverPort', input.serverPort, admin.id);
     context.services.settings.set('frp.remotePort', input.remotePort, admin.id);
     context.services.settings.set('frp.token', input.token, admin.id);
+    context.services.settings.set('frp.user', input.user, admin.id);
     context.services.settings.set('frp.proxyName', input.proxyName, admin.id);
     context.services.settings.set('frp.tunnelType', input.tunnelType, admin.id);
     context.services.settings.set('frp.customDomain', input.customDomain, admin.id);
     context.services.settings.set('frp.proxyProtocol', input.proxyProtocol, admin.id);
+    context.services.settings.set('frp.healthCheckMux', input.healthCheckMux, admin.id);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
@@ -1071,11 +1251,48 @@ export function registerIpc(context: IpcContext): void {
     return { saved: true, fileName: path.basename(selection.filePath) };
   });
 
+  register(IPC.systemCheckUpdate, z.undefined(), () => context.services.update.check(context.version));
+
+  register(IPC.systemOpenExternal, z.object({ url: z.string().url() }), async (input) => {
+    const url = new URL(input.url);
+    if (url.protocol !== 'https:' || !['github.com', 'www.github.com'].includes(url.hostname)) {
+      throw new Error('只允许打开 GitHub 下载页面');
+    }
+    await shell.openExternal(url.toString());
+    return null;
+  });
+
+  register(IPC.systemRateLimits, z.undefined(), () => listLimitedIps());
+
+  register(IPC.systemClearRateLimit, z.object({ ip: z.string().min(1) }), (input) => {
+    clearLimitedIp(input.ip);
+    return null;
+  });
+
+  register(IPC.systemSecurityBans, z.undefined(), () => context.services.securityPolicy.listActive());
+
+  register(IPC.systemClearSecurityBan, z.object({ id: z.number().int().positive() }), (input) => {
+    context.services.securityPolicy.clear(input.id);
+    return null;
+  });
+
+  register(IPC.systemSecurityCounts, z.undefined(), () => context.services.securityPolicy.listCounts());
+
+  register(IPC.systemClearSecurityCount, z.object({ scope: z.enum(['ip', 'account', 'global']), target: z.string().min(1).max(200), feature: z.string().min(1).max(100) }), (input) => { context.services.securityPolicy.clearCount(input.scope, input.target, input.feature); return null; });
+
+  register(IPC.systemClearAllSecurityCounts, z.undefined(), () => { context.services.securityPolicy.clearAllCounts(); return null; });
+
+  register(IPC.systemClearAllSecurityBans, z.undefined(), () => ({
+    removed: context.services.securityPolicy.clearAll(),
+  }));
+
   register(IPC.appInfo, z.undefined(), () => ({
     version: context.version,
     dataDir: context.dataDir,
     storageDir: context.storageRoot,
     pluginsDir: context.pluginsDir,
+    isPackaged: app.isPackaged,
+    isPortable: Boolean(process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE),
   }));
 
   register(IPC.appOpenDataDir, z.undefined(), async () => {
@@ -1128,6 +1345,26 @@ export function registerIpc(context: IpcContext): void {
     await changeDirectory(context, input);
     return { restarting: true };
   });
+
+  register(IPC.appGetStartup, z.undefined(), () => ({
+    autoStart: context.services.settings.get('startup.autoStart'),
+    startInTray: context.services.settings.get('startup.startInTray'),
+  }));
+
+  register(
+    IPC.appSetStartup,
+    z.object({ autoStart: z.boolean(), startInTray: z.boolean() }),
+    (input) => {
+      const admin = actor();
+      if (input.autoStart && !isInstalledBuild()) {
+        throw new Error('开机自启仅支持安装版，当前开发版或便携版不会注册系统启动项');
+      }
+      context.services.settings.set('startup.autoStart', input.autoStart, admin.id);
+      context.services.settings.set('startup.startInTray', input.startInTray, admin.id);
+      applyLoginItem(input.autoStart, input.startInTray);
+      return input;
+    },
+  );
 
   register(IPC.appBackupDatabase, z.undefined(), async () => {
     const window = context.getWindow();
@@ -1225,6 +1462,13 @@ export function registerIpc(context: IpcContext): void {
       return context.services.plugins.list();
     },
   );
+
+  register(IPC.pluginsOpenAdmin, z.object({ name: z.string().min(1).max(64) }), async (input) => {
+    const plugin = context.services.plugins.list().find((entry) => entry.name === input.name);
+    if (!plugin?.adminUiUrl) throw new Error('该插件没有配置管理页面');
+    await shell.openExternal(plugin.adminUiUrl);
+    return null;
+  });
 
   register(IPC.pluginsRemove, z.object({ name: z.string().min(1) }), async (input) => {
     const admin = actor();

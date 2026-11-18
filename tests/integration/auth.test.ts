@@ -52,6 +52,7 @@ function buildHarness(db: Db): Harness {
 
   // 三个服务共用同一时钟，保证锁定/过期/TTL 逻辑完全确定
   const settings = new SettingsService(new SettingsRepository(db), clock);
+  settings.set('security.mode', 'simple', null);
   const audit = new AuditService(new AuditRepository(db), clock);
 
   const auth = new AuthService({ users, sessions, settings, audit, now: clock });

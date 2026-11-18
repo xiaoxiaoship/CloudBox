@@ -1,6 +1,8 @@
 import type { UserRepository } from '../db/repositories/userRepo.ts';
 import type { SessionRepository } from '../db/repositories/sessionRepo.ts';
 import type { AuditService } from './auditService.ts';
+import type { UserIpRepository } from '../db/repositories/userIpRepo.ts';
+import type { SecurityPolicyService } from './securityPolicyService.ts';
 import type { SettingsService } from './settingsService.ts';
 import {
   checkPasswordStrength,
@@ -30,6 +32,8 @@ export const AUTH_ERROR = {
   WEAK_PASSWORD: 'AUTH_WEAK_PASSWORD',
   PASSWORD_MISMATCH: 'AUTH_PASSWORD_MISMATCH',
   USER_NOT_FOUND: 'AUTH_USER_NOT_FOUND',
+  USERNAME_TAKEN: 'AUTH_USERNAME_TAKEN',
+  RENAME_LIMITED: 'AUTH_RENAME_LIMITED',
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR)[keyof typeof AUTH_ERROR];
@@ -95,6 +99,8 @@ export interface AuthServiceDeps {
   sessions: SessionRepository;
   settings: SettingsService;
   audit: AuditService;
+  loginIps?: UserIpRepository;
+  securityPolicy?: SecurityPolicyService;
   now?: () => number;
 }
 
@@ -104,9 +110,14 @@ export const LOCK_MAX_MS = 60 * 60_000;
 /** 会话 last_seen 的更新节流，避免每个请求都写库 */
 export const SESSION_TOUCH_INTERVAL_MS = 60_000;
 
-export function computeLockDurationMs(failedAttempts: number, threshold: number): number {
+export function computeLockDurationMs(
+  failedAttempts: number,
+  threshold: number,
+  baseMs = LOCK_BASE_MS,
+  maxMs = LOCK_MAX_MS,
+): number {
   const overflow = Math.max(0, Math.trunc(failedAttempts) - Math.trunc(threshold));
-  return Math.min(LOCK_BASE_MS * 2 ** overflow, LOCK_MAX_MS);
+  return Math.min(baseMs * 2 ** overflow, maxMs);
 }
 
 function normalizeUsername(value: unknown): string {
@@ -153,6 +164,8 @@ export class AuthService {
   private readonly sessions: SessionRepository;
   private readonly settings: SettingsService;
   private readonly audit: AuditService;
+  private readonly loginIps: UserIpRepository | null;
+  private readonly securityPolicy: SecurityPolicyService | null;
   private readonly now: () => number;
 
   constructor(deps: AuthServiceDeps) {
@@ -160,6 +173,8 @@ export class AuthService {
     this.sessions = deps.sessions;
     this.settings = deps.settings;
     this.audit = deps.audit;
+    this.loginIps = deps.loginIps ?? null;
+    this.securityPolicy = deps.securityPolicy ?? null;
     this.now = deps.now ?? Date.now;
   }
 
@@ -184,7 +199,9 @@ export class AuthService {
       throw new AuthError(AUTH_ERROR.INVALID_CREDENTIALS, '用户名或密码错误', 401);
     }
 
-    if (user.lockedUntil !== null && user.lockedUntil > now) {
+    const simpleMode = this.settings.get('security.mode') === 'simple';
+    const securityEnabled = simpleMode && this.settings.get('security.lockEnabled');
+    if (securityEnabled && user.lockedUntil !== null && user.lockedUntil > now) {
       const retryAfterMs = user.lockedUntil - now;
       this.recordAudit({
         actorType: user.role === 'admin' ? 'admin' : 'user',
@@ -210,7 +227,14 @@ export class AuthService {
       const threshold = this.settings.get('security.maxLoginFailures');
       const attempts = user.failedAttempts + 1;
       const lockedUntil =
-        attempts >= threshold ? now + computeLockDurationMs(attempts, threshold) : null;
+        securityEnabled && attempts >= threshold
+          ? now + computeLockDurationMs(
+              attempts,
+              threshold,
+              this.settings.get('security.lockBaseMinutes') * 60_000,
+              this.settings.get('security.lockMaxMinutes') * 60_000,
+            )
+          : null;
 
       this.users.recordLoginFailure(user.id, now, lockedUntil);
       this.recordAudit({
@@ -259,6 +283,7 @@ export class AuthService {
     }
 
     this.users.recordLoginSuccess(user.id, now);
+    if (input.ip) this.loginIps?.record(user.id, input.ip, now);
     const issue = this.issueSession(user.id, input, now);
     const fresh = this.users.findById(user.id) ?? user;
 
@@ -414,6 +439,79 @@ export class AuthService {
   }
 
   /** 管理员重置 / 本机 CLI 重置；会解锁账户并强制下线所有设备 */
+  async rename(user: SessionUser, username: string, context: AuthContext = {}): Promise<PublicUser> {
+    const next = normalizeUsername(username);
+    const current = this.users.findById(user.id);
+    if (current === null) {
+      throw new AuthError(AUTH_ERROR.USER_NOT_FOUND, '用户不存在', 404);
+    }
+    if (next === current.username) return toPublicUser(current);
+
+    const existing = this.users.findByUsername(next);
+    if (existing !== null && existing.id !== current.id) {
+      throw new AuthError(AUTH_ERROR.USERNAME_TAKEN, '用户名已被占用', 409);
+    }
+
+    const simpleMode = this.settings.get('security.mode') === 'simple';
+    const renamePolicy = simpleMode ? null : (this.securityPolicy?.rule('renameLimit', 'account') ?? null);
+    if (current.role !== 'admin' && (simpleMode ? this.settings.get('security.renameEnabled') : renamePolicy !== null)) {
+      const lockedUntil = current.renameLimitedUntil ?? 0;
+      if (lockedUntil > this.now()) {
+        throw new AuthError(
+          AUTH_ERROR.RENAME_LIMITED,
+          '改名限制中，请稍后再试',
+          429,
+          lockedUntil - this.now(),
+        );
+      }
+      const windowMs = (renamePolicy !== null ? Number(renamePolicy.config.windowHours ?? 24) : this.settings.get('security.renameWindowHours')) * 3_600_000;
+      const renameReset = this.securityPolicy?.resetAt('account', String(current.id)) ?? 0;
+      const since = Math.max(this.now() - windowMs, renameReset);
+      const recent = this.audit
+        .list({ limit: 500 })
+        .filter((entry) => entry.action === 'user.rename' && entry.actorId === current.id && entry.ts >= since);
+      const renameLimit = renamePolicy !== null ? Number(renamePolicy.config.threshold ?? 1) : this.settings.get('security.renameLimit');
+      if (recent.length >= renameLimit) {
+        const lockHours = renamePolicy !== null ? Number(renamePolicy.config.banHours ?? 24) : this.settings.get('security.renameLockHours');
+        const lockMs = lockHours * 3_600_000;
+        const retryAfterMs = Math.max(1_000, lockMs);
+        this.users.setRenameLimitedUntil(current.id, this.now() + lockMs, this.now());
+        if (!simpleMode) this.securityPolicy?.ban('account', String(current.id), 'renameLimit', lockHours * 60);
+        this.recordAudit({
+          actorType: 'user',
+          actorId: current.id,
+          action: 'user.rename',
+          result: 'denied',
+          targetType: 'user',
+          targetId: String(current.id),
+          context,
+          detail: { reason: 'rate_limited', next },
+        });
+        throw new AuthError(
+          AUTH_ERROR.RENAME_LIMITED,
+          '改名次数已达上限，请稍后再试',
+          429,
+          retryAfterMs,
+        );
+      }
+    }
+
+    if (!this.users.updateUsername(current.id, next, this.now())) {
+      throw new AuthError(AUTH_ERROR.USERNAME_TAKEN, '用户名已被占用', 409);
+    }
+    this.recordAudit({
+      actorType: current.role === 'admin' ? 'admin' : 'user',
+      actorId: current.id,
+      action: 'user.rename',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(current.id),
+      context,
+      detail: { before: current.username, after: next },
+    });
+    return toPublicUser(this.users.findById(current.id)!);
+  }
+
   async resetPassword(input: ResetPasswordInput): Promise<void> {
     const now = this.now();
     const user = this.users.findById(input.userId);

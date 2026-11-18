@@ -308,19 +308,19 @@ async function main(): Promise<void> {
     assert.equal(securitySettings.data.scan.mode, 'api');
     assert.equal(securitySettings.data.scan.apiKey, 'e2e-api-key');
 
-    console.log('10.5 AI 双模式与 MCP Token');
+    console.log('10.5 AI 双模式');
     const aiSwitch = win.getByRole('switch', { name: 'AI 总开关' });
     if ((await aiSwitch.getAttribute('aria-checked')) !== 'true') await aiSwitch.click();
     await win.locator('#ai-mode').selectOption('user');
-    await win.getByRole('button', { name: '保存 AI 与 MCP 设置' }).click();
-    await win.getByText('AI 与 MCP 设置已保存').waitFor();
+    await win.getByRole('button', { name: '保存 AI 设置' }).click();
+    await win.getByText('AI 设置已保存').waitFor();
     const aiUserSettings = await win.evaluate(async () =>
       (globalThis as unknown as {
         cloudbox: {
           settings: {
             get: () => Promise<{
               ok: boolean;
-              data: { ai: { enabled: boolean; mode: string }; mcp: { token: string } };
+              data: { ai: { enabled: boolean; mode: string } };
             }>;
           };
         };
@@ -333,8 +333,8 @@ async function main(): Promise<void> {
     await win.locator('#ai-base-url').fill('https://example.invalid/v1');
     await win.locator('#ai-model').fill('test-model');
     await win.locator('#ai-admin-key').fill('sk-e2e-admin-secret');
-    await win.getByRole('button', { name: '保存 AI 与 MCP 设置' }).click();
-    await win.getByText('AI 与 MCP 设置已保存').waitFor();
+    await win.getByRole('button', { name: '保存 AI 设置' }).click();
+    await win.getByText('AI 设置已保存').waitFor();
     const aiAdminSettings = await win.evaluate(async () =>
       (globalThis as unknown as {
         cloudbox: {
@@ -343,7 +343,6 @@ async function main(): Promise<void> {
               ok: boolean;
               data: {
                 ai: { enabled: boolean; mode: string; apiKeyMasked: string };
-                mcp: { token: string };
               };
             }>;
           };
@@ -352,10 +351,6 @@ async function main(): Promise<void> {
     );
     assert.equal(aiAdminSettings.data.ai.mode, 'admin');
     assert.match(aiAdminSettings.data.ai.apiKeyMasked, /^sk-\*\*\*/);
-
-    await win.getByRole('button', { name: '生成随机 Token' }).click();
-    await win.getByText('MCP Token 已重新生成').waitFor();
-    assert.ok((await win.locator('#mcp-token').inputValue()).length > 10);
 
     console.log('10.6 内嵌静态托管总控');
     const hostingSwitch = win.getByRole('switch', { name: '静态托管总开关' });

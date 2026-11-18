@@ -15,6 +15,7 @@ import {
 } from './fileService.ts';
 import type { SettingsService } from './settingsService.ts';
 import type { TaskService } from './taskService.ts';
+import { extractionGate } from '../../server/concurrency.ts';
 
 export const ARCHIVE_EXTENSIONS = ['.zip', '.7z', '.rar', '.tar.gz', '.tgz'];
 
@@ -200,7 +201,7 @@ export class ExtractionService {
     }
 
     const task = this.tasks.create(user.id, 'extract', 'running');
-    void this.run(task.id, user, archive.absolutePath, target.absolutePath, cleanupPaths, totalBytes, ctx);
+    void extractionGate.run(this.settings.get('maxConcurrentExtractions'), () => this.run(task.id, user, archive.absolutePath, target.absolutePath, cleanupPaths, totalBytes, ctx));
     return { taskId: task.id };
   }
 

@@ -60,7 +60,19 @@ export class AuditService {
     });
   }
 
+  clearRenameEvents(userId: number, since: number): number {
+    return this.repo.deleteRenameEvents(userId, since);
+  }
+
   list(options: { limit?: number; offset?: number } = {}): AuditLogRecord[] {
     return this.repo.list(options);
+  }
+
+  pruneBefore(ts: number): number {
+    return this.repo.pruneBefore(ts);
+  }
+
+  trimToBytes(maxBytes: number): number {
+    return this.repo.trimToBytes(maxBytes);
   }
 }

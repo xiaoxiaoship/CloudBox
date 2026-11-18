@@ -88,6 +88,12 @@ export class AuditRepository {
     return rows.map(mapAudit);
   }
 
+  deleteRenameEvents(userId: number, since: number): number {
+    return this.db
+      .prepare("DELETE FROM audit_logs WHERE action = 'user.rename' AND actor_id = ? AND ts >= ?")
+      .run(userId, since).changes;
+  }
+
   count(): number {
     const row = this.db.prepare('SELECT COUNT(*) AS n FROM audit_logs').get() as { n: number };
     return row.n;
@@ -95,5 +101,22 @@ export class AuditRepository {
 
   pruneBefore(ts: number): number {
     return this.db.prepare('DELETE FROM audit_logs WHERE ts < ?').run(ts).changes;
+  }
+
+  trimToBytes(maxBytes: number): number {
+    if (maxBytes <= 0) return 0;
+    const row = this.db.prepare("SELECT COALESCE(SUM(length(CAST(detail AS BLOB)) + length(action) + length(COALESCE(target_path, '')) + length(COALESCE(ip, ''))), 0) AS bytes FROM audit_logs").get() as { bytes: number };
+    if (row.bytes <= maxBytes) return 0;
+    let remaining = row.bytes - maxBytes;
+    const ids = this.db.prepare('SELECT id, length(CAST(detail AS BLOB)) + length(action) AS bytes FROM audit_logs ORDER BY ts ASC, id ASC').all() as Array<{ id: number; bytes: number }>;
+    const remove: number[] = [];
+    for (const entry of ids) {
+      remove.push(entry.id);
+      remaining -= entry.bytes;
+      if (remaining <= 0) break;
+    }
+    if (remove.length === 0) return 0;
+    const placeholders = remove.map(() => '?').join(', ');
+    return this.db.prepare(`DELETE FROM audit_logs WHERE id IN (${placeholders})`).run(...remove).changes;
   }
 }

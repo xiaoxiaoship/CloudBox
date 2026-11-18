@@ -39,6 +39,7 @@ win:
   icon: resources/icon.png
 
 nsis:
+  include: build/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

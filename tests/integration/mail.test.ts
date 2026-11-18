@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import type { MailTransport } from '../../src/core/services/mailService.ts';
-import { createTestServer, type TestServer } from '../helpers/testServer.ts';
+import { createTestServer, TestClient, type TestServer } from '../helpers/testServer.ts';
 
 describe('mail alerts', () => {
   let t: TestServer | null = null;
@@ -30,6 +30,8 @@ describe('mail alerts', () => {
       to: 'admin@example.com',
       eventUserRegistered: true,
       eventSecurityAlert: true,
+      eventSecurityLimit: true,
+      eventResourceAlert: true,
       eventSystemError: true,
     });
 
@@ -51,5 +53,23 @@ describe('mail alerts', () => {
     t.services.mail.notify('security.alert', { ip: '5.6.7.8', endpoint: '/api/auth/login' });
     await t.services.mail.drain();
     assert.equal(sent, 2);
+
+    t.services.mail.notify('security.limit', { scope: 'ip', target: '9.9.9.9', feature: 'apiFlood', featureName: 'API 泛洪拦截', remainingMinutes: 0, message: 'threshold reached' });
+    await t.services.mail.drain();
+    assert.equal(sent, 3);
+  });
+
+  it('账户登录策略封禁会触发安全限制邮件', async () => {
+    let sent = 0;
+    t = await createTestServer({ mailTransport: { async send() { sent += 1; } } });
+    t.services.settings.set('security.mode', 'advanced', null);
+    t.services.settings.set('security.capEnabled', false, null);
+    t.services.settings.set('security.policy', JSON.stringify({ rules: [{ feature: 'loginFailure', scope: 'account', config: { threshold: 1, mode: 'window', windowMinutes: 15, banMode: 'fixed', fixedMinutes: 5 } }], savedRules: [] }), null);
+    t.services.mail.save({ enabled: true, host: 'smtp.example.com', port: 587, secure: false, user: 'u@example.com', pass: 'secret', from: 'u@example.com', to: 'admin@example.com', eventUserRegistered: true, eventSecurityAlert: true, eventSecurityLimit: true, eventResourceAlert: true, eventSystemError: true });
+    const attacker = new TestClient(t.client.baseUrl);
+    await attacker.request('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: t.user.username, password: 'WrongPass1' }) });
+    await attacker.request('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: t.user.username, password: 'WrongPass1' }) });
+    await t.services.mail.drain();
+    assert.ok(sent >= 1);
   });
 });

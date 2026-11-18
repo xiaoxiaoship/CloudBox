@@ -33,12 +33,18 @@ describe('database connection & migrations', () => {
         '005_ai.sql',
         '006_hosting.sql',
         '007_avatar.sql',
+        '008_security_mode.sql',
+        '009_rename_lock.sql',
+        '010_login_ips.sql',
+        '011_security_bans.sql',
+        '012_policy_resets.sql',
+        '013_policy_counts.sql',
       ]);
-      assert.equal(first.version, 7);
+      assert.equal(first.version, 13);
 
       const second = migrate(db);
       assert.deepEqual(second.applied, []);
-      assert.equal(second.version, 7);
+      assert.equal(second.version, 13);
 
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -76,7 +82,7 @@ describe('database connection & migrations', () => {
       assert.equal(map.get('server.online'), 'false');
       assert.equal(map.get('server.port'), '8686');
       assert.equal(map.get('upload.maxFileBytes'), '2147483648');
-      assert.equal(db.pragma('user_version', { simple: true }), 7);
+      assert.equal(db.pragma('user_version', { simple: true }), 13);
     } finally {
       closeDatabase(db);
     }

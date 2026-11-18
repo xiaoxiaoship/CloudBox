@@ -29,6 +29,7 @@ button {
   cursor: pointer;
 }
 
+
 button:disabled {
   cursor: not-allowed;
 }
@@ -52,3 +53,8 @@ select {
 .animate-fade-in {
   animation: fade-in 160ms ease-out;
 }
+
+html.theme-light body { background: #eef2f7; }
+html.theme-light #root { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.95) saturate(0.85); background: #eef2f7; }
+html.theme-light #root span.rounded-full.bg-white { background: #0f172a !important; }
+html.theme-light #root img, html.theme-light #root video, html.theme-light #root canvas, html.theme-light #root svg { filter: invert(1) hue-rotate(180deg); }

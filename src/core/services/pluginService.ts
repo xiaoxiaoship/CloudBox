@@ -1,6 +1,6 @@
 import { fork, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { cp, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { cp, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
 import type { PluginRepository, PluginRecord } from '../db/repositories/pluginRepo.ts';
@@ -11,9 +11,14 @@ export interface PluginManifest {
   version: string;
   description?: string;
   author?: string;
+  /** File extensions supported by this plugin, e.g. [".json"]. */
+  previews?: string[];
+  /** Optional external settings page opened in the browser. */
+  adminUrl?: string;
 }
 
 export interface PluginStatus extends PluginRecord {
+  previews: string[];
   running: boolean;
   hasAdminUi: boolean;
   hasTheme: boolean;
@@ -29,6 +34,8 @@ export interface PluginRequest {
   headers: Record<string, string>;
   body: unknown;
   user: { id: number; username: string; role: string } | null;
+  /** Populated by the host after a safePath read for /preview routes. */
+  fileContent?: string;
 }
 
 export interface PluginResponse {
@@ -57,6 +64,19 @@ function safeRelativePath(value: string): string {
   return normalized;
 }
 
+function normalizePreviews(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const extension = item.trim().toLowerCase().replace(/^\.?/, '.');
+    if (!/^\.[a-z0-9]{1,16}$/.test(extension) || result.includes(extension)) continue;
+    result.push(extension);
+    if (result.length >= 20) break;
+  }
+  return result;
+}
+
 function readManifest(directory: string): PluginManifest {
   const file = path.join(directory, 'manifest.json');
   if (!existsSync(file)) throw new Error('插件缺少 manifest.json');
@@ -72,6 +92,7 @@ function readManifest(directory: string): PluginManifest {
     version: manifest.version,
     description: typeof manifest.description === 'string' ? manifest.description : '',
     author: typeof manifest.author === 'string' ? manifest.author : '',
+    previews: normalizePreviews(manifest.previews),
   };
 }
 
@@ -155,14 +176,23 @@ export class PluginService {
 
   private status(record: PluginRecord): PluginStatus {
     const directory = path.join(this.pluginRoot, record.name);
-    const hasAdminUi = existsSync(path.join(directory, 'admin-ui', 'index.html'));
+    let previews: string[] = [];
+    try {
+      previews = normalizePreviews((JSON.parse(record.manifestJson) as PluginManifest).previews);
+    } catch {
+      previews = [];
+    }
+    const manifest = JSON.parse(record.manifestJson) as PluginManifest;
+    const configuredAdminUrl = typeof manifest.adminUrl === 'string' && /^https?:\/\//i.test(manifest.adminUrl) ? manifest.adminUrl : null;
+    const hasAdminUi = configuredAdminUrl !== null || existsSync(path.join(directory, 'admin-ui', 'index.html'));
     return {
       ...record,
+      previews,
       running: this.children.has(record.name) && this.children.get(record.name)!.ready,
       hasAdminUi,
       hasTheme: existsSync(path.join(directory, 'web-theme.css')),
       hasWebOverride: existsSync(path.join(directory, 'web-override', 'index.html')),
-      adminUiUrl: hasAdminUi ? `plugin-admin://${record.name}/index.html` : null,
+      adminUiUrl: configuredAdminUrl ?? (hasAdminUi ? `plugin-admin://${record.name}/index.html` : null),
       directory,
     };
   }
@@ -383,6 +413,19 @@ export class PluginService {
       state.pending.set(id, { resolve, reject, timer });
       state.child.send({ type: 'http', id, request });
     });
+  }
+
+  /** Enabled plugin extension -> plugin name map, first enabled plugin wins. */
+  previewers(): Record<string, string> {
+    this.scanInstalled();
+    const result: Record<string, string> = {};
+    for (const record of this.plugins.list()) {
+      if (!record.enabled) continue;
+      for (const extension of this.status(record).previews) {
+        if (!(extension in result)) result[extension] = record.name;
+      }
+    }
+    return result;
   }
 
   getThemeCss(): string {

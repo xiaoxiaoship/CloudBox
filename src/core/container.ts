@@ -10,6 +10,7 @@ import { SessionRepository } from './db/repositories/sessionRepo.ts';
 import { ShareRepository } from './db/repositories/shareRepo.ts';
 import { SettingsRepository } from './db/repositories/settingsRepo.ts';
 import { UserRepository } from './db/repositories/userRepo.ts';
+import { UserIpRepository } from './db/repositories/userIpRepo.ts';
 import { AuthService } from './services/authService.ts';
 import { AuditService } from './services/auditService.ts';
 import { AiService, type AiChatClient } from './services/aiService.ts';
@@ -27,7 +28,9 @@ import {
 } from './services/scanService.ts';
 import { ShareService } from './services/shareService.ts';
 import { SettingsService } from './services/settingsService.ts';
+import { SecurityPolicyService } from './services/securityPolicyService.ts';
 import { TaskService } from './services/taskService.ts';
+import { UpdateService } from './services/updateService.ts';
 import { SecretBox } from './security/secretBox.ts';
 
 export interface CoreServices {
@@ -35,8 +38,10 @@ export interface CoreServices {
   users: UserRepository;
   quotas: QuotaRepository;
   sessions: SessionRepository;
+  loginIps: UserIpRepository;
   scans: ScanRepository;
   settings: SettingsService;
+  securityPolicy: SecurityPolicyService;
   audit: AuditService;
   auth: AuthService;
   files: FileService;
@@ -50,6 +55,7 @@ export interface CoreServices {
   ai: AiService;
   hosting: HostingService;
   mail: MailService;
+  update: UpdateService;
 }
 
 export interface CreateCoreServicesOptions {
@@ -79,8 +85,10 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
   const users = new UserRepository(db);
   const quotas = new QuotaRepository(db);
   const sessions = new SessionRepository(db);
+  const loginIps = new UserIpRepository(db);
   const scans = new ScanRepository(db);
   const settings = new SettingsService(new SettingsRepository(db), now);
+  const securityPolicy = new SecurityPolicyService(db, settings, now);
   const audit = new AuditService(new AuditRepository(db), now);
   const tasks = new TaskService({ now });
   const events = new EventBus();
@@ -92,7 +100,7 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     childScript: options.pluginChildScript,
     execPath: options.pluginExecPath,
   });
-  const auth = new AuthService({ users, sessions, settings, audit, now });
+  const auth = new AuthService({ users, sessions, settings, audit, loginIps, securityPolicy, now });
   const files = new FileService({
     db,
     storageRoot,
@@ -163,6 +171,7 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     storageRoot,
     now,
   });
+  const update = new UpdateService({ settings, now });
   const mail = new MailService({
     settings,
     secrets,
@@ -176,8 +185,10 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     users,
     quotas,
     sessions,
+    loginIps,
     scans,
     settings,
+    securityPolicy,
     audit,
     auth,
     files,
@@ -191,5 +202,6 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     ai,
     hosting,
     mail,
+    update,
   };
 }

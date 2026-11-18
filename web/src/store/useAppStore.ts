@@ -46,6 +46,7 @@ interface AppState {
   init: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  renameAccount: (username: string) => Promise<void>;
   uploadAvatar: (file: File) => Promise<void>;
   load: (path: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -131,6 +132,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const result = await api.login(username, password);
     set({ user: result.user, error: null });
     await get().load('');
+  },
+
+  renameAccount: async (username) => {
+    const result = await api.renameAccount(username);
+    set({ user: result.user, error: null });
   },
 
   uploadAvatar: async (file) => {
@@ -222,42 +228,48 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (files.length === 0) return;
 
     const targetPath = get().currentPath;
-
-    for (const file of files) {
-      const id = createId();
-      const update = (patch: Partial<UploadItem>): void => {
-        set((state) => ({
-          uploads: state.uploads.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-        }));
-      };
-
+    const items = files.map((file) => ({ file, id: createId() }));
+    for (const item of items) {
       set((state) => ({
         uploads: [
           ...state.uploads,
-          { id, name: file.name, size: file.size, progress: 0, status: 'uploading' },
+          { id: item.id, name: item.file.name, size: item.file.size, progress: 0, status: 'uploading' },
         ],
       }));
+    }
 
+    const uploadOne = async (item: { file: File; id: string }): Promise<void> => {
+      const update = (patch: Partial<UploadItem>): void => {
+        set((state) => ({
+          uploads: state.uploads.map((entry) => (entry.id === item.id ? { ...entry, ...patch } : entry)),
+        }));
+      };
       try {
         await uploadFile({
-          file,
+          file: item.file,
           path: targetPath,
           onProgress: (ratio) => update({ progress: ratio }),
-          onAbortReady: (abort) => uploadAborts.set(id, abort),
+          onAbortReady: (abort) => uploadAborts.set(item.id, abort),
         });
-
         update({ status: 'success', progress: 1 });
-        await get().refresh();
       } catch (error) {
         const canceled = error instanceof ApiError && error.code === 'UPLOAD_ABORTED';
-        update({
-          status: canceled ? 'canceled' : 'error',
-          error: canceled ? '已取消' : errorMessage(error),
-        });
+        update({ status: canceled ? 'canceled' : 'error', error: canceled ? '已取消' : errorMessage(error) });
       } finally {
-        uploadAborts.delete(id);
+        uploadAborts.delete(item.id);
       }
-    }
+    };
+
+    let index = 0;
+    const worker = async (): Promise<void> => {
+      while (index < items.length) {
+        const item = items[index];
+        index += 1;
+        if (item) await uploadOne(item);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(10, items.length) }, () => worker()));
+    await get().refresh();
   },
 
   cancelUpload: (id) => {

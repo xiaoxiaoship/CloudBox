@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import type { SettingsRepository } from '../db/repositories/settingsRepo.ts';
 
 interface SettingDefinitions {
@@ -7,24 +8,58 @@ interface SettingDefinitions {
   'server.mtlsEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'server.port': { schema: z.ZodType<number>; fallback: number };
   'server.bind': { schema: z.ZodType<string>; fallback: string };
+  'server.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
+  'system.updateRepo': { schema: z.ZodType<string>; fallback: string };
+  'startup.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
+  'startup.startInTray': { schema: z.ZodType<boolean>; fallback: boolean };
+  'server.scheduleEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'server.scheduleStart': { schema: z.ZodType<string>; fallback: string };
+  'server.scheduleEnd': { schema: z.ZodType<string>; fallback: string };
+  'frp.syncWithServer': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.sessionTtlHours': { schema: z.ZodType<number>; fallback: number };
+  'security.mode': { schema: z.ZodType<'simple' | 'advanced'>; fallback: 'simple' | 'advanced' };
+  'security.lockEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.maxLoginFailures': { schema: z.ZodType<number>; fallback: number };
+  'security.lockBaseMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.lockMaxMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.ipLoginLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.ipWindowMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.ipLockMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.simpleRegisterLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.renameEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'security.renameLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.renameWindowHours': { schema: z.ZodType<number>; fallback: number };
+  'security.renameLockHours': { schema: z.ZodType<number>; fallback: number };
+  'security.capEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'security.capSecret': { schema: z.ZodType<string>; fallback: string };
+  'security.capLoginFailures': { schema: z.ZodType<number>; fallback: number };
+  'security.capRegistrationLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.capShareLimit': { schema: z.ZodType<number>; fallback: number };
+  'security.policy': { schema: z.ZodType<string>; fallback: string };
+  'maxConcurrentExtractions': { schema: z.ZodType<number>; fallback: number };
+  'maxConcurrentScans': { schema: z.ZodType<number>; fallback: number };
+  'maxConcurrentHeavyPreviews': { schema: z.ZodType<number>; fallback: number };
+  'maxConcurrentPreviewsPerUser': { schema: z.ZodType<number>; fallback: number };
+  'maxLogSizeMB': { schema: z.ZodType<number>; fallback: number };
   'upload.maxFileBytes': { schema: z.ZodType<number>; fallback: number };
   'frp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'frp.serverAddr': { schema: z.ZodType<string>; fallback: string };
   'frp.serverPort': { schema: z.ZodType<number>; fallback: number };
   'frp.remotePort': { schema: z.ZodType<number>; fallback: number };
   'frp.token': { schema: z.ZodType<string>; fallback: string };
+  'frp.user': { schema: z.ZodType<string>; fallback: string };
   'frp.proxyName': { schema: z.ZodType<string>; fallback: string };
   'frp.tunnelType': { schema: z.ZodType<'tcp' | 'http' | 'https'>; fallback: 'tcp' };
   'frp.customDomain': { schema: z.ZodType<string>; fallback: string };
   'frp.proxyProtocol': { schema: z.ZodType<boolean>; fallback: boolean };
+  'frp.healthCheckMux': { schema: z.ZodType<boolean>; fallback: boolean };
   'ca.installed': { schema: z.ZodType<boolean>; fallback: boolean };
   allow_public_registration: { schema: z.ZodType<boolean>; fallback: boolean };
   'network.trustProxy': { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_preview_image: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_preview_video: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_preview_pdf: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_user_preview_office: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_extract: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_scan: { schema: z.ZodType<boolean>; fallback: boolean };
   'scan.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -37,9 +72,6 @@ interface SettingDefinitions {
   'ai.admin_api_key': { schema: z.ZodType<string>; fallback: string };
   'ai.admin_model': { schema: z.ZodType<string>; fallback: string };
   'ai.user_daily_limit': { schema: z.ZodType<number>; fallback: number };
-  'mcp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
-  'mcp.token': { schema: z.ZodType<string>; fallback: string };
-  'mcp.bound_user_id': { schema: z.ZodType<number>; fallback: number };
   'hosting.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'hosting.base_url': { schema: z.ZodType<string>; fallback: string };
   'mail.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -52,6 +84,8 @@ interface SettingDefinitions {
   'mail.to': { schema: z.ZodType<string>; fallback: string };
   'mail.eventUserRegistered': { schema: z.ZodType<boolean>; fallback: boolean };
   'mail.eventSecurityAlert': { schema: z.ZodType<boolean>; fallback: boolean };
+  'mail.eventSecurityLimit': { schema: z.ZodType<boolean>; fallback: boolean };
+  'mail.eventResourceAlert': { schema: z.ZodType<boolean>; fallback: boolean };
   'mail.eventSystemError': { schema: z.ZodType<boolean>; fallback: boolean };
 }
 
@@ -61,24 +95,58 @@ const DEFINITIONS: SettingDefinitions = {
   'server.mtlsEnabled': { schema: z.boolean(), fallback: false },
   'server.port': { schema: z.number().int().min(1024).max(65_535), fallback: 8686 },
   'server.bind': { schema: z.string().min(1), fallback: '0.0.0.0' },
+  'server.autoStart': { schema: z.boolean(), fallback: false },
+  'system.updateRepo': { schema: z.string().min(3).max(200), fallback: 'xiaoxiaoship/CloudBox' },
+  'startup.autoStart': { schema: z.boolean(), fallback: false },
+  'startup.startInTray': { schema: z.boolean(), fallback: false },
+  'server.scheduleEnabled': { schema: z.boolean(), fallback: false },
+  'server.scheduleStart': { schema: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), fallback: '08:00' },
+  'server.scheduleEnd': { schema: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), fallback: '22:00' },
+  'frp.syncWithServer': { schema: z.boolean(), fallback: false },
   'security.sessionTtlHours': { schema: z.number().int().min(1).max(8760), fallback: 168 },
+  'security.mode': { schema: z.enum(['simple', 'advanced']), fallback: 'advanced' },
+  'security.lockEnabled': { schema: z.boolean(), fallback: true },
   'security.maxLoginFailures': { schema: z.number().int().min(3).max(50), fallback: 5 },
+  'security.lockBaseMinutes': { schema: z.number().int().min(1).max(1440), fallback: 1 },
+  'security.lockMaxMinutes': { schema: z.number().int().min(1).max(10080), fallback: 60 },
+  'security.ipLoginLimit': { schema: z.number().int().min(1).max(10000), fallback: 30 },
+  'security.ipWindowMinutes': { schema: z.number().int().min(1).max(1440), fallback: 15 },
+  'security.ipLockMinutes': { schema: z.number().int().min(1).max(1440), fallback: 15 },
+  'security.simpleRegisterLimit': { schema: z.number().int().min(1).max(1000), fallback: 2 },
+  'security.renameEnabled': { schema: z.boolean(), fallback: true },
+  'security.renameLimit': { schema: z.number().int().min(1).max(100), fallback: 1 },
+  'security.renameWindowHours': { schema: z.number().int().min(1).max(8760), fallback: 24 },
+  'security.renameLockHours': { schema: z.number().int().min(1).max(8760), fallback: 24 },
+  'security.capEnabled': { schema: z.boolean(), fallback: true },
+  'security.capSecret': { schema: z.string().min(32), fallback: randomBytes(32).toString('hex') },
+  'security.capLoginFailures': { schema: z.number().int().min(1).max(100), fallback: 3 },
+  'security.capRegistrationLimit': { schema: z.number().int().min(1).max(100), fallback: 2 },
+  'security.capShareLimit': { schema: z.number().int().min(1).max(100), fallback: 10 },
+  'security.policy': { schema: z.string().max(50_000), fallback: '' },
+  'maxConcurrentExtractions': { schema: z.number().int().min(1).max(1000), fallback: 10 },
+  'maxConcurrentScans': { schema: z.number().int().min(1).max(1000), fallback: 10 },
+  'maxConcurrentHeavyPreviews': { schema: z.number().int().min(1).max(1000), fallback: 10 },
+  'maxConcurrentPreviewsPerUser': { schema: z.number().int().min(1).max(1000), fallback: 10 },
+  'maxLogSizeMB': { schema: z.number().int().min(1).max(100000), fallback: 100 },
   'upload.maxFileBytes': { schema: z.number().int().min(1), fallback: 2 * 1024 ** 3 },
   'frp.enabled': { schema: z.boolean(), fallback: false },
   'frp.serverAddr': { schema: z.string().max(255), fallback: '' },
   'frp.serverPort': { schema: z.number().int().min(1).max(65_535), fallback: 7000 },
   'frp.remotePort': { schema: z.number().int().min(0).max(65_535), fallback: 0 },
   'frp.token': { schema: z.string().max(255), fallback: '' },
+  'frp.user': { schema: z.string().max(255), fallback: '' },
   'frp.proxyName': { schema: z.string().max(64), fallback: 'cloudbox' },
   'frp.tunnelType': { schema: z.enum(['tcp', 'http', 'https']), fallback: 'tcp' },
   'frp.customDomain': { schema: z.string().max(253), fallback: '' },
-  'frp.proxyProtocol': { schema: z.boolean(), fallback: false },
+  'frp.proxyProtocol': { schema: z.boolean(), fallback: true },
+  'frp.healthCheckMux': { schema: z.boolean(), fallback: false },
   'ca.installed': { schema: z.boolean(), fallback: false },
   allow_public_registration: { schema: z.boolean(), fallback: false },
   'network.trustProxy': { schema: z.boolean(), fallback: false },
   allow_user_preview_image: { schema: z.boolean(), fallback: true },
   allow_user_preview_video: { schema: z.boolean(), fallback: true },
   allow_user_preview_pdf: { schema: z.boolean(), fallback: true },
+  allow_user_preview_office: { schema: z.boolean(), fallback: true },
   allow_user_extract: { schema: z.boolean(), fallback: true },
   allow_user_scan: { schema: z.boolean(), fallback: true },
   'scan.enabled': { schema: z.boolean(), fallback: false },
@@ -91,9 +159,6 @@ const DEFINITIONS: SettingDefinitions = {
   'ai.admin_api_key': { schema: z.string().max(2000), fallback: '' },
   'ai.admin_model': { schema: z.string().max(200), fallback: 'gpt-4o-mini' },
   'ai.user_daily_limit': { schema: z.number().int().min(1).max(10_000), fallback: 50 },
-  'mcp.enabled': { schema: z.boolean(), fallback: false },
-  'mcp.token': { schema: z.string().max(256), fallback: '' },
-  'mcp.bound_user_id': { schema: z.number().int().min(0), fallback: 0 },
   'hosting.enabled': { schema: z.boolean(), fallback: false },
   'hosting.base_url': { schema: z.string().max(500), fallback: '' },
   'mail.enabled': { schema: z.boolean(), fallback: false },
@@ -106,6 +171,8 @@ const DEFINITIONS: SettingDefinitions = {
   'mail.to': { schema: z.string().max(500), fallback: '' },
   'mail.eventUserRegistered': { schema: z.boolean(), fallback: true },
   'mail.eventSecurityAlert': { schema: z.boolean(), fallback: true },
+  'mail.eventSecurityLimit': { schema: z.boolean(), fallback: true },
+  'mail.eventResourceAlert': { schema: z.boolean(), fallback: true },
   'mail.eventSystemError': { schema: z.boolean(), fallback: true },
 };
 
@@ -123,6 +190,11 @@ export class SettingsService {
   constructor(repo: SettingsRepository, now: () => number = Date.now) {
     this.repo = repo;
     this.now = now;
+    // Persist the Cap signing secret once; otherwise a restart would invalidate
+    // every challenge/token generated with the random fallback.
+    if (this.repo.get('security.capSecret') === null) {
+      this.set('security.capSecret', randomBytes(32).toString('hex'), null);
+    }
   }
 
   get<K extends SettingKey>(key: K): SettingValue<K> {
@@ -147,6 +219,18 @@ export class SettingsService {
   }
 
   /** 供管理端展示全部设置（原始值） */
+  resetUserConfig(updatedBy: number | null = null): string[] {
+    const prefixes = ['security.', 'scan.', 'ai.', 'mail.', 'hosting.', 'allow_', 'maxConcurrent', 'maxLog'];
+    const changed: string[] = [];
+    for (const key of Object.keys(DEFINITIONS) as SettingKey[]) {
+      if (key === 'security.capSecret') continue;
+      if (!prefixes.some((prefix) => key.startsWith(prefix))) continue;
+      this.set(key, DEFINITIONS[key].fallback as SettingValue<SettingKey>, updatedBy);
+      changed.push(key);
+    }
+    return changed;
+  }
+
   list(): Array<{ key: string; value: unknown; updatedAt: number; updatedBy: number | null }> {
     return this.repo.getAll().map((entry) => {
       let value: unknown = entry.value;

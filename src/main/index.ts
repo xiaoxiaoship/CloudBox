@@ -14,6 +14,7 @@ import {
 import { disposeMainContext, createMainContext, type MainContext } from './context.ts';
 import { registerIpc } from './ipc.ts';
 import { createAppTray } from './tray.ts';
+import { applyLoginItem } from './loginItem.ts';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -65,11 +66,27 @@ function bootstrap(): void {
   Menu.setApplicationMenu(null);
 
   context = createMainContext();
+  applyLoginItemSettings(context);
 
   const adminIndex = path.join(context.adminDist, 'index.html');
   if (!existsSync(adminIndex)) {
     throw new Error(`未找到管理员界面构建产物：${adminIndex}\n请先运行 npm run build:desktop`);
   }
+
+  const ctx = context;
+  context.services.securityPolicy.onGlobalLimit = () => {
+    const status = ctx.server.getStatus();
+    if (!status || !status.running) return;
+    const policy = JSON.parse(ctx.services.settings.get('security.policy')) as { globalBan?: { recoveryMinutes?: number } };
+    const recovery = Math.max(0, Number(policy.globalBan?.recoveryMinutes ?? 0));
+    void ctx.server.stop();
+    ctx.services.events.emit('security.global.limit', { recoveryMinutes: recovery });
+    if (recovery > 0) {
+      setTimeout(() => {
+        if (!ctx.server.getStatus().running) void ctx.server.start(status.port);
+      }, recovery * 60_000).unref();
+    }
+  };
 
   registerIpc({
     ...context,
@@ -79,6 +96,11 @@ function bootstrap(): void {
   registerPluginProtocol();
 
   void context.services.plugins.startAll();
+  const logTrimTimer = setInterval(() => {
+    if (context === null) return;
+    context.services.audit.trimToBytes(context.services.settings.get('maxLogSizeMB') * 1024 * 1024);
+  }, 15 * 60_000);
+  logTrimTimer.unref();
 
   mainWindow = createMainWindow(context, adminIndex);
   tray = createAppTray({
@@ -199,7 +221,11 @@ function createMainWindow(mainContext: MainContext, adminIndex: string): Browser
   window.setMenuBarVisibility(false);
 
   window.once('ready-to-show', () => {
-    window.show();
+    const startHidden =
+      process.argv.includes('--hidden') &&
+      mainContext.services.settings.get('startup.startInTray');
+    if (startHidden) window.hide();
+    else window.show();
   });
 
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -225,4 +251,11 @@ function createMainWindow(mainContext: MainContext, adminIndex: string): Browser
   });
 
   return window;
+}
+
+function applyLoginItemSettings(mainContext: MainContext): void {
+  applyLoginItem(
+    mainContext.services.settings.get('startup.autoStart'),
+    mainContext.services.settings.get('startup.startInTray'),
+  );
 }

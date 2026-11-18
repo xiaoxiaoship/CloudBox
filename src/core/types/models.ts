@@ -12,9 +12,11 @@ export interface UserRecord {
   passwordHash: string;
   role: UserRole;
   status: UserStatus;
+  securityMode?: boolean;
   mustChangePassword: boolean;
   failedAttempts: number;
   lockedUntil: number | null;
+  renameLimitedUntil?: number | null;
   lastLoginAt: number | null;
   avatarDataUrl: string | null;
   createdAt: number;
@@ -28,6 +30,7 @@ export interface PublicUser {
   displayName: string;
   role: UserRole;
   status: UserStatus;
+  securityMode: boolean;
   mustChangePassword: boolean;
   lastLoginAt: number | null;
   avatarDataUrl: string | null;
@@ -43,6 +46,7 @@ interface PublicUserSource {
   displayName: string;
   role: UserRole;
   status: UserStatus;
+  securityMode?: boolean;
   mustChangePassword: boolean;
   lastLoginAt: number | null;
   createdAt: number;
@@ -56,6 +60,7 @@ export function toPublicUser(user: PublicUserSource): PublicUser {
     displayName: user.displayName,
     role: user.role,
     status: user.status,
+    securityMode: user.securityMode ?? false,
     mustChangePassword: user.mustChangePassword,
     lastLoginAt: user.lastLoginAt,
     avatarDataUrl: user.avatarDataUrl ?? null,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { CollapsibleSection } from './CollapsibleSection.tsx';
 import QRCode from 'qrcode';
 import type {
   CaInfo,
@@ -8,7 +9,7 @@ import type {
   ServerStatus,
 } from '../../../src/shared/ipcTypes.ts';
 import { api, call, errorMessage } from '../api/ipc.ts';
-import type { ToastState } from './Dialog.tsx';
+import { ConfirmDialog, type ToastState } from './Dialog.tsx';
 import {
   AlertIcon,
   HardDriveIcon,
@@ -46,9 +47,11 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const [ca, setCa] = useState<CaInfo | null>(null);
   const [caOpen, setCaOpen] = useState(false);
   const [caPending, setCaPending] = useState<string | null>(null);
+  const [extraHosts, setExtraHosts] = useState('');
   const [mtls, setMtls] = useState(false);
   const [trustProxy, setTrustProxy] = useState(false);
   const [trustProxyPending, setTrustProxyPending] = useState(false);
+  const [trustProxyConfirm, setTrustProxyConfirm] = useState<boolean | null>(null);
 
   const [frp, setFrp] = useState<FrpStatus | null>(null);
   const [frpConfig, setFrpConfig] = useState<FrpConfig>({
@@ -56,12 +59,18 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     serverPort: 7000,
     remotePort: 0,
     token: '',
+    user: '',
     proxyName: 'cloudbox',
     tunnelType: 'tcp',
     customDomain: '',
-    proxyProtocol: false,
+    proxyProtocol: true,
+    healthCheckMux: false,
   });
   const [frpPending, setFrpPending] = useState<string | null>(null);
+  const [frpSync, setFrpSync] = useState(false);
+  const [frpSyncPending, setFrpSyncPending] = useState(false);
+  const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
+  const [schedulePending, setSchedulePending] = useState(false);
   const frpLoaded = useRef(false);
 
   useEffect(() => {
@@ -94,6 +103,55 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([call(api.server.getSchedule()), call(api.frp.getSync())])
+      .then(([nextSchedule, nextSync]) => {
+        if (!active) return;
+        setSchedule(nextSchedule);
+        setFrpSync(nextSync.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveSchedule = async (): Promise<void> => {
+    setSchedulePending(true);
+    try {
+      setSchedule(await call(api.server.setSchedule(schedule)));
+      notify('success', 'Web 服务定时设置已保存');
+    } catch (error) {
+      notify('error', errorMessage(error));
+    } finally {
+      setSchedulePending(false);
+    }
+  };
+
+  const toggleFrpSync = async (enabled: boolean): Promise<void> => {
+    setFrpSyncPending(true);
+    try {
+      const result = await call(api.frp.setSync({ enabled }));
+      setFrpSync(result.enabled);
+      notify('success', enabled ? 'frp 将随 Web 服务同步启停' : 'frp 同步已关闭');
+    } catch (error) {
+      notify('error', errorMessage(error));
+    } finally {
+      setFrpSyncPending(false);
+    }
+  };
+
+  const toggleAutoStart = async (enabled: boolean): Promise<void> => {
+    try {
+      await call(api.server.setAutoStart({ enabled }));
+      notify('success', enabled ? '程序启动后将自动开启 Web 服务' : '已关闭程序启动自动在线');
+      await refreshServer();
+    } catch (error) {
+      notify('error', errorMessage(error));
+    }
+  };
 
   const toggleTrustProxy = async (enabled: boolean): Promise<void> => {
     setTrustProxyPending(true);
@@ -292,7 +350,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const issueServerCert = async (): Promise<void> => {
     setCaPending('issue');
     try {
-      await call(api.ca.issueServerCert());
+      await call(api.ca.issueServerCert({ extraHosts }));
       setProtocol('https');
       await refreshCa();
       notify('success', '服务端证书已签发，正在应用 HTTPS 配置');
@@ -364,7 +422,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -411,6 +469,30 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             {server.error}
           </div>
         ) : null}
+
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-200">Web 服务定时开关 <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${schedule.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{schedule.enabled ? '已开启' : '已关闭'}</span></p>
+              <p className="mt-1 text-[11px] text-slate-500">启用后每天在指定时间窗口自动启停 Web 服务；跨午夜会自动识别。</p>
+            </div>
+            <button type="button" role="switch" aria-checked={schedule.enabled} aria-label="Web 服务定时开关" onClick={() => setSchedule((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${schedule.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${schedule.enabled ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          {schedule.enabled ? (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="text-[11px] text-slate-500">开始时间<input type="time" value={schedule.start} onChange={(event) => setSchedule((current) => ({ ...current, start: event.target.value }))} className={`${INPUT_CLASS} mt-1 w-32`} /></label>
+              <label className="text-[11px] text-slate-500">停止时间<input type="time" value={schedule.end} onChange={(event) => setSchedule((current) => ({ ...current, end: event.target.value }))} className={`${INPUT_CLASS} mt-1 w-32`} /></label>
+              <button type="button" onClick={() => void saveSchedule()} disabled={schedulePending} className={PRIMARY_BUTTON}>{schedulePending ? <Spinner className="h-4 w-4" /> : null}保存定时</button>
+            </div>
+          ) : null}
+        </div>
+
+        <label className="mt-4 flex w-fit items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+          <input type="checkbox" checked={server?.autoStart ?? false} onChange={(event) => void toggleAutoStart(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
+          程序启动后自动开启在线模式
+        </label>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
@@ -498,7 +580,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             aria-checked={trustProxy}
             aria-label="信任反向代理的真实 IP"
             disabled={trustProxyPending}
-            onClick={() => void toggleTrustProxy(!trustProxy)}
+            onClick={() => setTrustProxyConfirm(!trustProxy)}
             className={`relative h-7 w-12 shrink-0 rounded-full transition ${
               trustProxy ? 'bg-emerald-500' : 'bg-slate-700'
             } disabled:opacity-50`}
@@ -517,9 +599,9 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             局域网自签证书会导致浏览器警告，公网请使用正式证书。启用 HTTPS 前需要同时导入证书与私钥。
           </div>
         ) : null}
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex items-center gap-2">
           <ShieldIcon className="h-4 w-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-slate-100">TLS 证书</h2>
@@ -589,7 +671,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </button>
           </div>
         </div>
-      </section>
+      </CollapsibleSection>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <button
@@ -653,6 +735,22 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
                 尚未生成 CA。生成后会自动安装到系统信任库，并显示指纹与有效期。
               </p>
             )}
+
+            <div>
+              <label className="text-[11px] text-slate-500" htmlFor="ca-extra-hosts">
+                包含的域名或 IP（多个用英文逗号分隔）
+              </label>
+              <input
+                id="ca-extra-hosts"
+                value={extraHosts}
+                onChange={(event) => setExtraHosts(event.target.value)}
+                className={INPUT_CLASS}
+                placeholder="例如：192.168.1.10, 1.2.3.4, cloud.example.com"
+              />
+              <p className="mt-1 text-[10px] leading-5 text-slate-600">
+                如果是局域网访问，填局域网 IP；如果是公网 IP 穿透访问，填公网 IP；如果有域名，填域名。
+              </p>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               {!ca?.exists ? (
@@ -736,7 +834,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex items-center gap-2">
           <WifiIcon className="h-4 w-4 text-sky-400" />
           <h2 className="text-sm font-semibold text-slate-100">访问地址与二维码</h2>
@@ -781,9 +879,9 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
         ) : (
           <p className="mt-3 text-xs text-slate-500">开启在线模式后生成访问地址与二维码。</p>
         )}
-      </section>
+      </CollapsibleSection>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+      <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -799,15 +897,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
                 {frp?.running ? `运行中 · PID ${frp.pid}` : '未运行'}
               </span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {frpConfig.tunnelType === 'tcp'
-                ? `当前使用 TCP 隧道指向本地 ${server?.protocol.toUpperCase() ?? 'HTTP'} 端口；TCP 本身不携带 X-Forwarded-For。`
-                : `当前使用 ${frpConfig.tunnelType.toUpperCase()} 隧道，frps 会注入 X-Forwarded-For，请同时开启“信任反向代理的真实 IP”。`}
-            </p>
-            <p className="mt-1 text-[11px] leading-5 text-amber-300">
-              静态托管统一挂载在 <code>/host/</code>，frp 必须选择 HTTP 或 HTTPS，并使用 locations
-              <code> ["/", "/host"] </code>（或通配域名）复用同一端口；不要为托管单独开 TCP 端口。
-            </p>
           </div>
 
           <div className="flex gap-2">
@@ -840,6 +929,11 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </button>
           </div>
         </div>
+
+        <label className="mt-4 flex w-fit items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+          <input type="checkbox" checked={frpSync} disabled={frpSyncPending} onChange={(event) => void toggleFrpSync(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
+          frp 启停与 Web 服务启停同步
+        </label>
 
         {!frp?.available ? (
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-[11px] leading-5 text-amber-300">
@@ -895,6 +989,31 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </select>
           </div>
           {frpConfig.tunnelType === 'tcp' ? (
+            <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+              <input type="checkbox" checked={frpConfig.healthCheckMux} onChange={(event) => updateFrpConfig('healthCheckMux', event.target.checked)} className="mt-0.5 h-4 w-4 accent-indigo-500" />
+              <span>健康检查与业务流量共用一条 TCP<span className="mt-0.5 block text-[11px] text-slate-500">启用 tcpMux 与 TCP healthCheck，减少额外连接。</span></span>
+            </label>
+          ) : null}
+
+
+          {frpConfig.tunnelType === 'tcp' || frpConfig.tunnelType === 'https' ? (
+            <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={frpConfig.proxyProtocol}
+                onChange={(event) => updateFrpConfig('proxyProtocol', event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-indigo-500"
+              />
+              <span>
+                启用 PROXY Protocol v2（用于透传真实 IP）
+                <span className="mt-0.5 block text-[11px] text-slate-500">
+                  仅 TCP 隧道可用；LAN 直连不受影响。
+                </span>
+              </span>
+            </label>
+          ) : null}
+
+          {frpConfig.tunnelType === 'tcp' ? (
             <div>
               <label className="text-[11px] text-slate-500" htmlFor="frp-remote-port">
                 公网映射端口
@@ -935,6 +1054,19 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             />
           </div>
           <div>
+            <label className="text-[11px] text-slate-500" htmlFor="frp-user">
+              用户令牌 user
+            </label>
+            <input
+              id="frp-user"
+              type="password"
+              value={frpConfig.user}
+              onChange={(event) => updateFrpConfig('user', event.target.value)}
+              className={INPUT_CLASS}
+              placeholder="面板配置中的顶层 user 字段"
+            />
+          </div>
+          <div>
             <label className="text-[11px] text-slate-500" htmlFor="frp-name">
               代理名称
             </label>
@@ -958,22 +1090,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           </div>
         </div>
 
-        {frpConfig.tunnelType === 'tcp' ? (
-          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px] leading-5 text-slate-400">
-            <input
-              type="checkbox"
-              checked={frpConfig.proxyProtocol}
-              onChange={(event) =>
-                updateFrpConfig('proxyProtocol', event.target.checked)
-              }
-              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 text-indigo-500"
-            />
-            <span>
-              TCP 隧道启用 PROXY protocol v2（仅当本地服务支持时开启；Express 默认不解析该协议，推荐使用 HTTP 隧道）。
-            </span>
-          </label>
-        ) : null}
-
         <div className="mt-4">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -993,7 +1109,27 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           </pre>
           <p className="mt-1 text-[10px] text-slate-600">配置：{frp?.configPath ?? '—'}</p>
         </div>
-      </section>
+      </CollapsibleSection>
+      {trustProxyConfirm !== null ? (
+        <ConfirmDialog
+          title="确认信任反向代理真实 IP"
+          description={
+            trustProxyConfirm && frpConfig.tunnelType === 'tcp' && !frpConfig.proxyProtocol
+              ? '当前为 TCP 隧道且未启用 PROXY Protocol v2。开启后可能导致 IP 限流失效，或允许伪造来源 IP，建议先启用 PROXY Protocol v2。'
+              : trustProxyConfirm
+                ? '开启后 CloudBox 将信任反向代理传入的真实 IP。请确认反向代理已正确设置来源 IP。'
+                : '关闭后 CloudBox 将不再信任反向代理传入的真实 IP，限流可能回退到代理地址。'
+          }
+          confirmLabel={trustProxyConfirm ? '确认开启' : '确认关闭'}
+          danger={trustProxyConfirm && frpConfig.tunnelType === 'tcp' && !frpConfig.proxyProtocol}
+          onClose={() => setTrustProxyConfirm(null)}
+          onConfirm={async () => {
+            const target = trustProxyConfirm;
+            setTrustProxyConfirm(null);
+            if (target !== null) await toggleTrustProxy(target);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -16,7 +16,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 
 export function formatDate(timestamp: number | null): string {
   if (timestamp === null) return '从未登录';
-  return new Date(timestamp).toLocaleString('zh-CN', {
+  return new Date(timestamp).toLocaleString(document.documentElement.lang.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

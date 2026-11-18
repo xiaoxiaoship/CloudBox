@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, call, errorMessage } from '../api/ipc.ts';
 import { CloudIcon, Spinner } from './Icons.tsx';
 
@@ -6,6 +7,7 @@ const INPUT_CLASS =
   'mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-950';
 
 export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -16,11 +18,11 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
     event.preventDefault();
 
     if (password.length < 8) {
-      setError('密码至少 8 位，且需要包含字母与数字');
+      setError(t('auth.passwordRule'));
       return;
     }
     if (password !== confirm) {
-      setError('两次输入的密码不一致');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
@@ -45,8 +47,8 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-xl shadow-indigo-950/60">
             <CloudIcon className="h-7 w-7" />
           </div>
-          <p className="mt-3 text-sm font-semibold tracking-tight text-slate-200">欢迎使用 CloudBox</p>
-          <p className="text-[11px] text-slate-500">首次运行，请创建唯一的管理员账户</p>
+          <p className="mt-3 text-sm font-semibold tracking-tight text-slate-200">{t('auth.welcomeTitle')}</p>
+          <p className="text-[11px] text-slate-500">{t('auth.firstRun')}</p>
         </div>
 
         <form
@@ -59,7 +61,7 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 htmlFor="setup-username"
                 className="block text-sm font-medium text-slate-300"
               >
-                管理员用户名
+                {t('auth.createAdminUsername')}
               </label>
               <input
                 id="setup-username"
@@ -76,7 +78,7 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 htmlFor="setup-password"
                 className="block text-sm font-medium text-slate-300"
               >
-                管理员密码
+                {t('auth.createAdminPassword')}
               </label>
               <input
                 id="setup-password"
@@ -85,7 +87,7 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className={INPUT_CLASS}
-                placeholder="至少 8 位，含字母和数字"
+                placeholder={t('auth.passwordRule')}
               />
             </div>
 
@@ -94,7 +96,7 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 htmlFor="setup-confirm"
                 className="block text-sm font-medium text-slate-300"
               >
-                确认密码
+                {t('auth.confirmPassword')}
               </label>
               <input
                 id="setup-confirm"
@@ -103,7 +105,7 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
                 value={confirm}
                 onChange={(event) => setConfirm(event.target.value)}
                 className={INPUT_CLASS}
-                placeholder="再次输入密码"
+                placeholder={t('auth.confirmPasswordPlaceholder')}
               />
             </div>
           </div>
@@ -118,11 +120,11 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-indigo-950/50 transition hover:bg-indigo-500 disabled:opacity-60"
           >
             {pending ? <Spinner className="h-4 w-4" /> : null}
-            {pending ? '正在创建…' : '创建管理员并进入'}
+            {pending ? t('auth.creating') : t('auth.createAndEnter')}
           </button>
 
           <p className="mt-4 text-center text-[11px] leading-5 text-slate-600">
-            密码使用 scrypt 哈希保存，明文不会写入磁盘。创建后可在设置中重置。
+            {t('auth.createPasswordHint')}
           </p>
         </form>
       </div>

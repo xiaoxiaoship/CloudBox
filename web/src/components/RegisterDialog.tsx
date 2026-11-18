@@ -35,6 +35,14 @@ export function RegisterDialog({ onClose, onSuccess }: RegisterDialogProps) {
       setError('密码至少需要 8 位');
       return;
     }
+    if (!/[A-Za-z]/.test(password)) {
+      setError('密码至少包含一个字母');
+      return;
+    }
+    if (!/\d/.test(password)) {
+      setError('密码至少包含一个数字');
+      return;
+    }
     if (password !== confirm) {
       setError('两次输入的密码不一致');
       return;
@@ -114,7 +122,7 @@ export function RegisterDialog({ onClose, onSuccess }: RegisterDialogProps) {
               maxLength={128}
               onChange={(event) => setPassword(event.target.value)}
               className={INPUT_CLASS}
-              placeholder="至少 8 位"
+              placeholder="至少 8 位，含字母和数字"
             />
           </div>
           <div>

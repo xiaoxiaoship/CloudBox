@@ -1,0 +1,7 @@
+{
+  "name": "json-explorer",
+  "version": "1.0.0",
+  "description": "可折叠的 JSON 文件树预览",
+  "author": "CloudBox",
+  "previews": [".json"]
+}

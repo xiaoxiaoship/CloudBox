@@ -9,6 +9,7 @@ describe('admin unlock user', () => {
 
   beforeEach(async () => {
     t = await createTestServer();
+    t.services.settings.set('security.capEnabled', false, null);
     adminUsers = new AdminUserService({
       db: t.services.db,
       users: t.services.users,
@@ -16,6 +17,8 @@ describe('admin unlock user', () => {
       sessions: t.services.sessions,
       auth: t.services.auth,
       audit: t.services.audit,
+      settings: t.services.settings,
+      loginIps: t.services.loginIps,
       storageRoot: t.storageRoot,
     });
   });
