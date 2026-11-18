@@ -25,3 +25,12 @@ coverage/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# root-level screenshots / test captures
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+/*.gif
+/*.bmp
+
