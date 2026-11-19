@@ -138,6 +138,7 @@ export async function createTestServer(
     localScanner?: LocalScanner;
     sevenZipBinary?: string;
     pluginRoot?: string;
+    webDist?: string | null;
     pluginChildScript?: string;
     pluginExecPath?: string;
     aiClient?: AiChatClient;
@@ -210,6 +211,7 @@ export async function createTestServer(
     services,
     version: '0.0.0-test',
     getPublicRootCa: options.getPublicRootCa,
+    webDist: options.webDist,
   });
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');

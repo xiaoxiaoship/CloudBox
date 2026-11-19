@@ -76,7 +76,12 @@ describe('plugin runtime and web extensions', () => {
   });
 
   it('CSS 主题注入和 Web 接管', async () => {
-    t = await createTestServer();
+    const webDist = mkdtempSync(path.join(os.tmpdir(), 'cloudbox-web-dist-'));
+    stagedRoots.push(webDist);
+    const webIndex = path.join(webDist, 'index.html');
+    writeFileSync(webIndex, '<!doctype html><html><head></head><body>CloudBox test</body></html>');
+    assert.ok(existsSync(webIndex), `web index missing before start: ${webIndex}`);
+    t = await createTestServer({ webDist });
     const stagedTheme = stagePlugin('dark-neon-theme');
     const themeFile = path.join(stagedTheme, 'web-theme.css');
     assert.ok(existsSync(themeFile), `theme file missing before import: ${themeFile}`);
@@ -90,6 +95,7 @@ describe('plugin runtime and web extensions', () => {
     assert.match(await css.text(), /plugin-neon/);
 
     const html = await t.client.request('/', { headers: { accept: 'text/html' } });
+    if (html.status !== 200) console.error('web-root diagnostics', { webDist, webIndex, stagedTheme, storageRoot: t.storageRoot });
     assert.equal(html.status, 200);
     assert.match(await html.text(), /plugin-theme\.css/);
 
