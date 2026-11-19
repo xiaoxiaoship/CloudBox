@@ -1,11 +1,24 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, it } from 'node:test';
 import { createTestServer, type TestServer } from '../helpers/testServer.ts';
 import { makeZip } from '../helpers/zip.ts';
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const stagedRoots: string[] = [];
+
+function stagePlugin(name: string): string {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'cloudbox-plugin-stage-'));
+  const destination = path.join(root, name);
+  cpSync(path.join(PROJECT_ROOT, 'resources', 'plugins', name), destination, { recursive: true });
+  assert.ok(existsSync(path.join(destination, 'manifest.json')), `staged plugin manifest missing: ${destination}`);
+  stagedRoots.push(root);
+  return destination;
+}
 
 describe('plugin runtime and web extensions', () => {
   let t: TestServer | null = null;
@@ -13,11 +26,13 @@ describe('plugin runtime and web extensions', () => {
   afterEach(async () => {
     await t?.close();
     t = null;
+    while (stagedRoots.length > 0) { const root = stagedRoots.pop(); if (root) rmSync(root, { recursive: true, force: true }); }
   });
 
   it('导入示例插件、启用并调用 API；禁用后 404 且子进程停止', async () => {
     t = await createTestServer();
-    await t.services.plugins.importFolder(path.resolve('resources/plugins/ai-summary'));
+    const stagedAiSummary = stagePlugin('ai-summary');
+    await t.services.plugins.importFolder(stagedAiSummary);
     const imported = t.services.plugins.list().find((plugin) => plugin.name === 'ai-summary');
     assert.ok(imported);
     assert.equal(imported.enabled, false);
@@ -62,9 +77,15 @@ describe('plugin runtime and web extensions', () => {
 
   it('CSS 主题注入和 Web 接管', async () => {
     t = await createTestServer();
-    await t.services.plugins.importFolder(path.resolve('resources/plugins/dark-neon-theme'));
+    const stagedTheme = stagePlugin('dark-neon-theme');
+    const themeFile = path.join(stagedTheme, 'web-theme.css');
+    assert.ok(existsSync(themeFile), `theme file missing before import: ${themeFile}`);
+    await t.services.plugins.importFolder(stagedTheme);
     await t.services.plugins.setEnabled('dark-neon-theme', true);
     const css = await t.client.request('/api/public/plugin-theme.css');
+    if (css.status !== 200) {
+      console.error('plugin-theme 404 diagnostics', { projectRoot: PROJECT_ROOT, stagedTheme, themeFile, storageRoot: t.storageRoot, pluginRoot: path.join(t.storageRoot, '.plugins'), plugins: t.services.plugins.list().map((plugin) => ({ name: plugin.name, enabled: plugin.enabled, hasTheme: plugin.hasTheme })) });
+    }
     assert.equal(css.status, 200);
     assert.match(await css.text(), /plugin-neon/);
 
