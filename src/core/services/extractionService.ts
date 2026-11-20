@@ -18,6 +18,9 @@ import type { TaskService } from './taskService.ts';
 import { extractionGate } from '../../server/concurrency.ts';
 
 export const ARCHIVE_EXTENSIONS = ['.zip', '.7z', '.rar', '.tar.gz', '.tgz'];
+export const MAX_EXTRACT_FILES = 10_000;
+export const MAX_EXTRACT_TOTAL_BYTES = 50 * 1024 ** 3;
+export const SEVEN_ZIP_TIMEOUT_MS = 5 * 60_000;
 
 export function isArchiveName(name: string): boolean {
   const lower = name.toLowerCase();
@@ -46,26 +49,40 @@ function listArchive(archive: string, binary: string): Promise<ArchiveEntry[]> {
   return new Promise<ArchiveEntry[]>((resolve, reject) => {
     const entries: ArchiveEntry[] = [];
     const stream = Seven.list(archive, { $bin: binary });
+    let settled = false;
+    const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      (stream as unknown as { destroy?: () => void; _childProcess?: { kill?: () => void } })._childProcess?.kill?.();
+      (stream as unknown as { destroy?: () => void }).destroy?.();
+      reject(error);
+    };
+    const timer = setTimeout(() => fail(new Error('7z 列目录超时（5 分钟）')), SEVEN_ZIP_TIMEOUT_MS);
+    timer.unref?.();
 
     stream.on('data', (entry) => {
-      if (typeof entry.file !== 'string' || entry.file.length === 0) return;
+      if (settled || typeof entry.file !== 'string' || entry.file.length === 0) return;
       entries.push({
         file: entry.file,
         attributes: entry.attributes ?? '',
         size: entry.size ?? 0,
         isDirectory: (entry.attributes ?? '').startsWith('D'),
       });
+      if (entries.length > MAX_EXTRACT_FILES) fail(new Error(`压缩包文件数超过上限（${MAX_EXTRACT_FILES}）`));
     });
-    stream.on('error', reject);
-    stream.on('end', () => resolve(entries));
+    stream.on('error', (error) => fail(error instanceof Error ? error : new Error(String(error))));
+    stream.on('end', () => { if (settled) return; settled = true; clearTimeout(timer); resolve(entries); });
   });
 }
 
 function extractArchive(archive: string, target: string, binary: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const stream = Seven.extractFull(archive, target, { $bin: binary, yes: true });
-    stream.on('error', reject);
-    stream.on('end', resolve);
+    const timer = setTimeout(() => { (stream as unknown as { destroy?: () => void; _childProcess?: { kill?: () => void } })._childProcess?.kill?.(); (stream as unknown as { destroy?: () => void }).destroy?.(); reject(new Error('7z 解压超时（5 分钟）')); }, SEVEN_ZIP_TIMEOUT_MS);
+    timer.unref?.();
+    stream.on('error', (error) => { clearTimeout(timer); reject(error); });
+    stream.on('end', () => { clearTimeout(timer); resolve(); });
   });
 }
 
@@ -161,6 +178,9 @@ export class ExtractionService {
     const target = resolveUserPath(userRoot, targetDir, { expect: 'dir' });
 
     const entries = await listArchive(archive.absolutePath, this.sevenZipBinary);
+    if (entries.length > MAX_EXTRACT_FILES) {
+      throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, `压缩包文件数超过上限（${MAX_EXTRACT_FILES}）`, 413);
+    }
     const cleanupPaths: string[] = [];
     let totalBytes = 0;
 
@@ -189,6 +209,9 @@ export class ExtractionService {
 
       cleanupPaths.push(absolute);
       if (!entry.isDirectory) totalBytes += entry.size;
+      if (totalBytes > MAX_EXTRACT_TOTAL_BYTES) {
+        throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, '压缩包解压后总大小超过上限（50GB）', 413);
+      }
     }
 
     const quota = this.quotas.get(user.id);

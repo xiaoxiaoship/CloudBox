@@ -108,8 +108,36 @@ export function createApp(options: CreateAppOptions): Express {
     next();
   });
 
+  const lowLevel = services.settings.getLowLevel();
   const limiters = createRateLimiters({
-    onAlert: (info) => services.events.emit('security.alert', info),
+    dynamicLimits: () => {
+      const current = services.settings.getLowLevel();
+      return {
+        api: current.apiRateLimit,
+        upload: current.uploadRateLimit,
+        shares: current.shareRateLimit,
+        shareDownload: current.shareDownloadRateLimit,
+        extract: current.extractRateLimit,
+        scan: current.scanRateLimit,
+      };
+    },
+    limits: {
+      api: lowLevel.apiRateLimit,
+      upload: lowLevel.uploadRateLimit,
+      shares: lowLevel.shareRateLimit,
+      shareDownload: lowLevel.shareDownloadRateLimit,
+      extract: lowLevel.extractRateLimit,
+      scan: lowLevel.scanRateLimit,
+    },
+    onAlert: (info) => services.events.emit('security.alert', {
+      category: '基础限流',
+      scope: 'ip',
+      target: info.ip ?? 'unknown',
+      feature: info.feature,
+      featureName: info.featureName,
+      remainingMinutes: Math.max(1, Math.ceil(info.windowSeconds / 60)),
+      message: `${info.message}（${info.endpoint}）`,
+    } as Record<string, unknown>),
     securityEnabled: services.settings.get('security.lockEnabled'),
     loginLimit: () => services.settings.get('security.ipLoginLimit'),
     loginWindowMs: () => services.settings.get('security.ipWindowMinutes') * 60_000,
@@ -172,6 +200,7 @@ export function createApp(options: CreateAppOptions): Express {
       ai_mode: services.settings.get('ai.mode'),
       hosting_enabled: services.settings.get('hosting.enabled'),
       hosting_base_url: services.settings.get('hosting.base_url'),
+      upload_queue_concurrency: services.settings.getLowLevel().uploadQueueConcurrency,
     });
   });
 
@@ -180,6 +209,16 @@ export function createApp(options: CreateAppOptions): Express {
 
   app.use('/api/ai', requireUser, createAiRouter(services, { csrf }));
   app.use('/api/system', requireUser, createSystemRouter(services, { version: options.version }));
+
+  // Reserved admin namespace: every route must be an authenticated admin and
+  // every mutating request must pass CSRF. No /api/admin route is mounted today.
+  app.use('/api/admin', requireUser, (req, res, next) => {
+    if (req.user?.role !== 'admin') {
+      res.status(403).json({ code: 'FORBIDDEN', message: '仅管理员可以访问该接口' });
+      return;
+    }
+    next();
+  }, csrf);
 
   app.get('/api/public/plugin-theme.css', (_req, res) => {
     res.type('text/css').send(services.plugins.getThemeCss());

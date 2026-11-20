@@ -379,11 +379,12 @@ export class FileService {
       return a.name.localeCompare(b.name, 'zh-CN');
     });
 
-    const truncated = entries.length > MAX_LIST_ENTRIES;
+    const maxListEntries = this.settings.getLowLevel().maxListEntries;
+    const truncated = entries.length > maxListEntries;
     return {
       path: resolved.relativePath,
       parent: parentOf(resolved.relativePath),
-      entries: truncated ? entries.slice(0, MAX_LIST_ENTRIES) : entries,
+      entries: truncated ? entries.slice(0, maxListEntries) : entries,
       truncated,
     };
   }
@@ -490,10 +491,11 @@ export class FileService {
     if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
       throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, '请至少选择一个文件或文件夹', 400);
     }
-    if (relativePaths.length > MAX_DELETE_PATHS) {
+    const maxBatchPaths = this.settings.getLowLevel().maxBatchPaths;
+    if (relativePaths.length > maxBatchPaths) {
       throw new FileServiceError(
         FILE_ERROR.TOO_MANY_PATHS,
-        `一次最多操作 ${MAX_DELETE_PATHS} 个路径`,
+        `一次最多操作 ${maxBatchPaths} 个路径`,
         400,
       );
     }
@@ -623,10 +625,11 @@ export class FileService {
     if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
       throw new FileServiceError(FILE_ERROR.INVALID_OPERATION, '请至少选择一个路径', 400);
     }
-    if (relativePaths.length > MAX_DELETE_PATHS) {
+    const maxBatchPaths = this.settings.getLowLevel().maxBatchPaths;
+    if (relativePaths.length > maxBatchPaths) {
       throw new FileServiceError(
         FILE_ERROR.TOO_MANY_PATHS,
-        `一次最多删除 ${MAX_DELETE_PATHS} 个路径`,
+        `一次最多删除 ${maxBatchPaths} 个路径`,
         400,
       );
     }
@@ -886,10 +889,11 @@ export class FileService {
     this.assertPreviewPermission(detected.kind);
 
     if (detected.kind === 'text') {
-      const truncated = info.size > TEXT_PREVIEW_LIMIT_BYTES;
+      const textPreviewLimit = this.settings.getLowLevel().maxTextPreviewBytes;
+      const truncated = info.size > textPreviewLimit;
       const buffer = await readPrefix(
         resolved.absolutePath,
-        Math.min(info.size, TEXT_PREVIEW_LIMIT_BYTES),
+        Math.min(info.size, textPreviewLimit),
       );
       const decoded = decodeTextBuffer(buffer);
 

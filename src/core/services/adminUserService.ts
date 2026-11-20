@@ -138,9 +138,10 @@ export class AdminUserService {
     const now = this.now();
     return this.users.list().map((user) => {
       const quota = this.quotas.get(user.id);
-      const activeSessions = this.sessions.countConnected(user.id, now);
+      const onlineWindowMs = this.settings.getLowLevel().onlineWindowSeconds * 1_000;
+      const activeSessions = this.sessions.countConnected(user.id, now, onlineWindowMs);
       const historyIps = this.loginIps?.listForUser(user.id) ?? [];
-      const onlineIps = this.sessions.listConnectedIps(user.id, now);
+      const onlineIps = this.sessions.listConnectedIps(user.id, now, onlineWindowMs);
       const ipAddresses = [...new Set([...onlineIps, ...historyIps.map((entry) => entry.ip)])];
       return {
         ...toPublicUser(user),

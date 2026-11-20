@@ -5,6 +5,8 @@ import type { FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../
 import { api, call, errorMessage } from '../api/ipc.ts';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
 import { SecurityPolicyPanel } from './SecurityPolicyPanel.tsx';
+import { LowLevelSecurityPanel } from './LowLevelSecurityPanel.tsx';
+import { DEFAULT_LOW_LEVEL_SECURITY } from '../../../src/shared/lowLevelSecurity.ts';
 import { SimpleSecurityPanel } from './SimpleSecurityPanel.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
 import { DatabaseIcon, HardDriveIcon, KeyIcon, RefreshIcon, ServerIcon, Spinner, UsersIcon } from './Icons.tsx';
@@ -72,6 +74,9 @@ export function SettingsPage({
     capRegistrationLimit: 2,
     capShareLimit: 10,
     policy: '',
+    adminIdleEnabled: true,
+    adminIdleMinutes: 30,
+    lowLevel: { ...DEFAULT_LOW_LEVEL_SECURITY },
   });
   const [securityPending, setSecurityPending] = useState(false);
   const [securityModeSnapshot, setSecurityModeSnapshot] = useState<'simple' | 'advanced'>('simple');
@@ -609,6 +614,20 @@ export function SettingsPage({
             保存用户名
           </button>
         </div>
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-slate-200">管理员 GUI 空闲锁定</p>
+              <p className="mt-1 text-xs text-slate-500">无操作超时后自动退出管理员界面，需要重新登录；随网络安全设置保存。</p>
+            </div>
+            <button type="button" role="switch" aria-checked={security.adminIdleEnabled} onClick={() => setSecurity((current) => ({ ...current, adminIdleEnabled: !current.adminIdleEnabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${security.adminIdleEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${security.adminIdleEnabled ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          <label className="mt-3 block text-[11px] text-slate-500">空闲超时（分钟）
+            <input type="number" min={1} max={1440} value={security.adminIdleMinutes} disabled={!security.adminIdleEnabled} onChange={(event) => setSecurity((current) => ({ ...current, adminIdleMinutes: Math.max(1, Math.min(1440, Number(event.target.value) || 30)) }))} className={`${INPUT_CLASS} max-w-48 disabled:opacity-50`} />
+          </label>
+        </div>
       </CollapsibleSection>
 
             <div className="pt-2">
@@ -699,6 +718,9 @@ export function SettingsPage({
             capSettings={{ enabled: security.capEnabled, loginFailures: security.capLoginFailures, registrationLimit: security.capRegistrationLimit, shareLimit: security.capShareLimit }}
             onCapSettingsChange={(value) => setSecurity((current) => ({ ...current, capEnabled: value.enabled, capLoginFailures: value.loginFailures, capRegistrationLimit: value.registrationLimit, capShareLimit: value.shareLimit }))}
           />
+          ) : null}
+          {security.mode === 'advanced' ? (
+            <LowLevelSecurityPanel value={security.lowLevel} policyRaw={security.policy} onChange={(lowLevel) => setSecurity((current) => ({ ...current, lowLevel }))} />
           ) : null}
         </div>
 

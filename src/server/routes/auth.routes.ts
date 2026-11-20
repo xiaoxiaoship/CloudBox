@@ -81,6 +81,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
   };
   const checkLoginPolicy = (req: Request, res: Response, user: { id: number; failedAttempts: number; username?: string } | null): boolean => {
     const ip = req.ip ?? 'unknown';
+    const onlineWindowMs = services.settings.getLowLevel().onlineWindowSeconds * 1_000;
     const globalLoginRule = deps.policy.rule('loginFailure', 'global');
     if (globalLoginRule !== null) {
       const globalWindow = Math.max(1, Number(globalLoginRule.config.windowMinutes ?? 15)) * 60_000;
@@ -97,7 +98,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
     const ipReset = deps.policy.resetAt('ip', ip);
     const accountReset = user !== null ? deps.policy.resetAt('account', String(user.id)) : 0;
     const ipSessionRule = deps.policy.rule('concurrentSessions', 'ip');
-    if (!ipAllowed && ipSessionRule !== null && services.sessions.countConnectedForIp(ip, Date.now(), 5 * 60_000, ipReset) >= Number(ipSessionRule.config.max ?? 3)) {
+    if (!ipAllowed && ipSessionRule !== null && services.sessions.countConnectedForIp(ip, Date.now(), onlineWindowMs, ipReset) >= Number(ipSessionRule.config.max ?? 3)) {
       deps.policy.ban('ip', ip, 'concurrentSessions', banMinutes(ipSessionRule));
       return banned(req, res, 'ip', ip);
     }
@@ -118,7 +119,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
         return banned(req, res, 'account', String(user.id));
       }
       const sessionsRule = deps.policy.rule('concurrentSessions', 'account');
-      if (!accountAllowed && sessionsRule !== null && services.sessions.countConnected(user.id, Date.now(), 5 * 60_000, accountReset) >= Number(sessionsRule.config.max ?? 3)) {
+      if (!accountAllowed && sessionsRule !== null && services.sessions.countConnected(user.id, Date.now(), onlineWindowMs, accountReset) >= Number(sessionsRule.config.max ?? 3)) {
         deps.policy.ban('account', String(user.id), 'concurrentSessions', banMinutes(sessionsRule));
         return banned(req, res, 'account', String(user.id));
       }
@@ -128,7 +129,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
         return banned(req, res, 'account', String(user.id));
       }
       const ipCountRule = deps.policy.rule('concurrentIpLimit', 'account');
-      if (!accountAllowed && ipCountRule !== null && services.sessions.listConnectedIps(user.id, Date.now(), 5 * 60_000, accountReset).length >= Number(ipCountRule.config.max ?? 3)) {
+      if (!accountAllowed && ipCountRule !== null && services.sessions.listConnectedIps(user.id, Date.now(), onlineWindowMs, accountReset).length >= Number(ipCountRule.config.max ?? 3)) {
         deps.policy.ban('account', String(user.id), 'concurrentIpLimit', banMinutes(ipCountRule));
         return banned(req, res, 'account', String(user.id));
       }
@@ -216,6 +217,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
+      secure: req.secure,
       maxAge,
     });
 
@@ -224,6 +226,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
       httpOnly: false,
       sameSite: 'lax',
       path: '/',
+      secure: req.secure,
       maxAge,
     });
 
@@ -241,8 +244,8 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
       services.auth.logout(token, requestContext(req, res));
     }
 
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
-    res.clearCookie(CSRF_COOKIE, { path: '/' });
+    res.clearCookie(SESSION_COOKIE, { path: '/', secure: req.secure });
+    res.clearCookie(CSRF_COOKIE, { path: '/', secure: req.secure });
     res.status(204).end();
   });
 

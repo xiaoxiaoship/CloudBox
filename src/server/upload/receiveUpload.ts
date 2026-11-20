@@ -40,6 +40,7 @@ export interface ReceiveUploadOptions {
   /** 同步预检：拿到 filename 后立刻返回配额上限，流式写入时超限即断 */
   prepare: (filename: string) => PreparedUpload;
   onProgress?: (bytes: number) => void;
+  maxDrainBytes?: number;
 }
 
 export interface ReceivedUpload {
@@ -52,7 +53,7 @@ export interface ReceivedUpload {
 /** 预检失败时最多继续丢弃这么多请求体，避免恶意客户端用超大文件拖住服务 */
 const MAX_DRAIN_BYTES = 16 * 1024 * 1024;
 
-function drainRequest(req: Request): Promise<void> {
+function drainRequest(req: Request, maxDrainBytes = MAX_DRAIN_BYTES): Promise<void> {
   if (req.readableEnded || req.complete) return Promise.resolve();
 
   return new Promise<void>((resolve) => {
@@ -71,7 +72,7 @@ function drainRequest(req: Request): Promise<void> {
 
     const onData = (chunk: Buffer): void => {
       drained += chunk.length;
-      if (drained > MAX_DRAIN_BYTES) {
+      if (drained > maxDrainBytes) {
         req.destroy();
         finish();
       }
@@ -146,7 +147,7 @@ export async function receiveUpload(
 
       req.unpipe(parser);
       parser.destroy();
-      void drainRequest(req).finally(() => reject(error));
+      void drainRequest(req, options.maxDrainBytes).finally(() => reject(error));
     };
 
     parser.on('file', (fieldName, stream, info) => {

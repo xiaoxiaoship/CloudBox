@@ -5,6 +5,7 @@ export function buildFrpConfig(
   config: FrpConfig,
   localPort: number,
   protocol: 'http' | 'https',
+  health: { timeoutSeconds?: number; intervalSeconds?: number } = {},
 ): string {
   const lines = [
     '# 由 CloudBox 管理端自动生成，请勿手工修改',
@@ -47,9 +48,9 @@ export function buildFrpConfig(
     }
     if (config.healthCheckMux) {
       lines.push('healthCheck.type = "tcp"');
-      lines.push('healthCheck.timeoutSeconds = 3');
+      lines.push(`healthCheck.timeoutSeconds = ${health.timeoutSeconds ?? 3}`);
       lines.push('healthCheck.maxFailed = 3');
-      lines.push('healthCheck.intervalSeconds = 10');
+      lines.push(`healthCheck.intervalSeconds = ${health.intervalSeconds ?? 10}`);
     }
   } else {
     lines.push(`customDomains = [${JSON.stringify(config.customDomain.trim())}]`);

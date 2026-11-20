@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_LOW_LEVEL_SECURITY, parseLowLevelSecurity, type LowLevelSecurity } from '../../shared/lowLevelSecurity.ts';
 import { randomBytes } from 'node:crypto';
 import type { SettingsRepository } from '../db/repositories/settingsRepo.ts';
 
@@ -17,6 +18,9 @@ interface SettingDefinitions {
   'server.scheduleEnd': { schema: z.ZodType<string>; fallback: string };
   'frp.syncWithServer': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.sessionTtlHours': { schema: z.ZodType<number>; fallback: number };
+  'security.adminIdleEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'security.adminIdleMinutes': { schema: z.ZodType<number>; fallback: number };
+  'security.lowLevel': { schema: z.ZodType<string>; fallback: string };
   'security.mode': { schema: z.ZodType<'simple' | 'advanced'>; fallback: 'simple' | 'advanced' };
   'security.lockEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'security.maxLoginFailures': { schema: z.ZodType<number>; fallback: number };
@@ -65,6 +69,8 @@ interface SettingDefinitions {
   'scan.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'scan.mode': { schema: z.ZodType<'api' | 'local'>; fallback: 'api' | 'local' };
   'scan.api_key': { schema: z.ZodType<string>; fallback: string };
+  'scan.localMaxBytes': { schema: z.ZodType<number>; fallback: number };
+  'scan.localTimeoutSeconds': { schema: z.ZodType<number>; fallback: number };
   'scan.local_path': { schema: z.ZodType<string>; fallback: string };
   'ai.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'ai.mode': { schema: z.ZodType<'admin' | 'user'>; fallback: 'admin' | 'user' };
@@ -104,6 +110,9 @@ const DEFINITIONS: SettingDefinitions = {
   'server.scheduleEnd': { schema: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), fallback: '22:00' },
   'frp.syncWithServer': { schema: z.boolean(), fallback: false },
   'security.sessionTtlHours': { schema: z.number().int().min(1).max(8760), fallback: 168 },
+  'security.adminIdleEnabled': { schema: z.boolean(), fallback: true },
+  'security.adminIdleMinutes': { schema: z.number().int().min(1).max(1440), fallback: 30 },
+  'security.lowLevel': { schema: z.string().max(50_000), fallback: JSON.stringify(DEFAULT_LOW_LEVEL_SECURITY) },
   'security.mode': { schema: z.enum(['simple', 'advanced']), fallback: 'advanced' },
   'security.lockEnabled': { schema: z.boolean(), fallback: true },
   'security.maxLoginFailures': { schema: z.number().int().min(3).max(50), fallback: 5 },
@@ -153,6 +162,8 @@ const DEFINITIONS: SettingDefinitions = {
   'scan.mode': { schema: z.enum(['api', 'local']), fallback: 'local' },
   'scan.api_key': { schema: z.string().max(256), fallback: '' },
   'scan.local_path': { schema: z.string().max(500), fallback: '' },
+  'scan.localMaxBytes': { schema: z.number().int().min(1), fallback: 100 * 1024 ** 2 },
+  'scan.localTimeoutSeconds': { schema: z.number().int().min(1).max(3600), fallback: 300 },
   'ai.enabled': { schema: z.boolean(), fallback: false },
   'ai.mode': { schema: z.enum(['admin', 'user']), fallback: 'admin' },
   'ai.admin_base_url': { schema: z.string().max(500), fallback: '' },
@@ -195,6 +206,10 @@ export class SettingsService {
     if (this.repo.get('security.capSecret') === null) {
       this.set('security.capSecret', randomBytes(32).toString('hex'), null);
     }
+  }
+
+  getLowLevel(): LowLevelSecurity {
+    return parseLowLevelSecurity(this.get('security.lowLevel'));
   }
 
   get<K extends SettingKey>(key: K): SettingValue<K> {

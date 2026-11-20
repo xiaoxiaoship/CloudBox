@@ -100,6 +100,10 @@ export function createMainContext(): MainContext {
     getMtlsCa: () => ca.getCACertBuffer(),
     getRootCaPath: () => (ca.getCAInfo().exists ? ca.caCertPath : null),
     isProxyProtocolEnabled: () => services.settings.get('frp.proxyProtocol'),
+    proxyTimeoutMs: services.settings.getLowLevel().proxyTimeoutMs,
+    tlsMinVersion: services.settings.getLowLevel().tlsMinVersion,
+    headersTimeoutMs: services.settings.getLowLevel().headersTimeoutMs,
+    requestTimeoutMs: services.settings.getLowLevel().requestTimeoutMs,
   });
   serverRef = server;
 
@@ -119,6 +123,8 @@ export function createMainContext(): MainContext {
     },
     getLocalPort: () => serverRef?.getStatus().port ?? configuredPort,
     getProtocol: () => serverRef?.getStatus().protocol ?? (httpsEnabled ? 'https' : 'http'),
+    healthCheckTimeoutSeconds: services.settings.getLowLevel().frpHealthTimeoutSeconds,
+    healthCheckIntervalSeconds: services.settings.getLowLevel().frpHealthIntervalSeconds,
   });
 
   const automation = new ServiceAutomation({

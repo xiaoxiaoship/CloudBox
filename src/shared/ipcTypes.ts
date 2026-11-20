@@ -1,5 +1,7 @@
 /** 主进程 <-> 预加载 <-> 管理员渲染层共享的 IPC 契约（仅类型 + 通道常量） */
 
+import type { LowLevelSecurity } from './lowLevelSecurity.ts';
+
 export type UserRole = 'admin' | 'user';
 export type UserStatus = 'active' | 'disabled';
 
@@ -131,6 +133,9 @@ export interface AdminSettings {
     capRegistrationLimit: number;
     capShareLimit: number;
     policy: string;
+    adminIdleEnabled: boolean;
+    adminIdleMinutes: number;
+    lowLevel: LowLevelSecurity;
   };
   resources: {
     maxConcurrentExtractions: number;

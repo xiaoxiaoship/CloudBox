@@ -64,6 +64,7 @@ export function createRequireUser(auth: AuthService, policy?: SecurityPolicyServ
           httpOnly: false,
           sameSite: 'lax',
           path: '/',
+          secure: req.secure,
           maxAge: Math.max(0, session.expiresAt - Date.now()),
         });
       }

@@ -50,6 +50,8 @@ export class FrpService {
   private readonly getLocalPort: () => number;
   private readonly getProtocol: () => 'http' | 'https';
   private readonly binaryPath: string | null;
+  private readonly healthCheckTimeoutSeconds: number;
+  private readonly healthCheckIntervalSeconds: number;
 
   private config: FrpConfig;
   private child: ChildProcess | null = null;
@@ -63,6 +65,8 @@ export class FrpService {
     getLocalPort: () => number;
     getProtocol: () => 'http' | 'https';
     binaryPath?: string | null;
+    healthCheckTimeoutSeconds?: number;
+    healthCheckIntervalSeconds?: number;
   }) {
     const configDir = path.join(options.dataDir, 'config');
     mkdirSync(configDir, { recursive: true });
@@ -70,6 +74,8 @@ export class FrpService {
     this.config = options.config;
     this.getLocalPort = options.getLocalPort;
     this.getProtocol = options.getProtocol;
+    this.healthCheckTimeoutSeconds = options.healthCheckTimeoutSeconds ?? 3;
+    this.healthCheckIntervalSeconds = options.healthCheckIntervalSeconds ?? 10;
     this.binaryPath =
       options.binaryPath === undefined ? resolveFrpcBinary() : options.binaryPath;
   }
@@ -227,7 +233,10 @@ export class FrpService {
     const localPort = this.getLocalPort();
     const protocol = this.getProtocol();
     const temporary = `${this.configPath}.tmp`;
-    writeFileSync(temporary, buildFrpConfig(this.config, localPort, protocol), 'utf8');
+    writeFileSync(temporary, buildFrpConfig(this.config, localPort, protocol, {
+      timeoutSeconds: this.healthCheckTimeoutSeconds,
+      intervalSeconds: this.healthCheckIntervalSeconds,
+    }), 'utf8');
     renameSync(temporary, this.configPath);
   }
 

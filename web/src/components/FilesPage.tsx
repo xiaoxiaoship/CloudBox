@@ -143,7 +143,7 @@ export function FilesPage() {
   const waitForTask = async (taskId: string): Promise<BackgroundTask> => {
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const task = await api.task(taskId);
-      if (['completed', 'clean', 'infected', 'failed'].includes(task.status)) {
+      if (['completed', 'clean', 'infected', 'skipped', 'failed'].includes(task.status)) {
         return task;
       }
       await new Promise((resolve) => setTimeout(resolve, 800));

@@ -43,6 +43,13 @@ export function errorHandler(events?: EventBus): ErrorRequestHandler {
   if (error instanceof AuthError) {
     if (error.code === 'AUTH_ACCOUNT_LOCKED') {
       events?.emit('security.alert', {
+        category: '账户锁定',
+        scope: 'account',
+        target: req.user?.username ?? req.ip ?? 'unknown',
+        feature: 'loginFailure',
+        featureName: '登录失败锁定',
+        remainingMinutes: error.retryAfterMs === undefined ? 1 : Math.max(1, Math.ceil(error.retryAfterMs / 60_000)),
+        message: error.message,
         ip: req.ip ?? null,
         endpoint: req.path,
         reason: 'account_locked',

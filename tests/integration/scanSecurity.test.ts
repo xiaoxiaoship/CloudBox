@@ -15,7 +15,7 @@ async function waitForTask(t: TestServer, taskId: string) {
     const response = await t.client.request(`/api/tasks/${taskId}`);
     assert.equal(response.status, 200);
     const task = (await response.json()) as { status: string; error: string | null };
-    if (['clean', 'infected', 'failed'].includes(task.status)) return task;
+    if (['clean', 'infected', 'skipped', 'failed'].includes(task.status)) return task;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error('scan task timeout');
@@ -37,6 +37,20 @@ const localScanner: LocalScanner = {
 };
 
 describe('dual-mode scan + infected enforcement', () => {
+  it('本地查杀超过大小上限时返回 skipped，不启动 ClamAV', async () => {
+    t = await createTestServer({ scanEnabled: true, scanMode: 'local', localScanner });
+    t.services.settings.set('scan.localMaxBytes', 8, null);
+    await t.client.upload('too-large.bin', Buffer.alloc(9));
+    const scan = await t.client.request('/api/files/scan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: 'too-large.bin' }),
+    });
+    assert.equal(scan.status, 202);
+    const { taskId } = (await scan.json()) as { taskId: string };
+    const task = await waitForTask(t, taskId);
+    assert.equal(task.status, 'skipped');
+  });
   let t: TestServer | null = null;
 
   afterEach(async () => {

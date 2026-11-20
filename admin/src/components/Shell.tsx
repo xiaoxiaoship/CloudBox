@@ -61,6 +61,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
   const [theme, setTheme] = useState<AdminTheme>(() => readAdminTheme());
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [idlePolicy, setIdlePolicy] = useState({ enabled: true, minutes: 30 });
 
   const refreshServer = useCallback(async (): Promise<void> => {
     try {
@@ -106,6 +107,41 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
       setLoggingOut(false);
     }
   };
+  const logoutRef = useRef(handleLogout);
+  logoutRef.current = handleLogout;
+  const loggingOutRef = useRef(loggingOut);
+  loggingOutRef.current = loggingOut;
+
+  useEffect(() => {
+    let active = true;
+    const loadPolicy = async (): Promise<void> => {
+      try {
+        const settings = await call(api.settings.get());
+        if (active) setIdlePolicy({ enabled: settings.security.adminIdleEnabled, minutes: settings.security.adminIdleMinutes });
+      } catch { /* keep previous policy */ }
+    };
+    void loadPolicy();
+    const refresh = window.setInterval(() => { void loadPolicy(); }, 60_000);
+    return () => { active = false; window.clearInterval(refresh); };
+  }, []);
+
+  useEffect(() => {
+    if (!idlePolicy.enabled || loggingOut) return;
+    let timer = 0;
+    const reset = (): void => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!loggingOutRef.current) void logoutRef.current();
+      }, Math.max(1, idlePolicy.minutes) * 60_000);
+    };
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach((event) => window.addEventListener(event, reset, { passive: true }));
+    reset();
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((event) => window.removeEventListener(event, reset));
+    };
+  }, [idlePolicy, loggingOut]);
 
   return (
     <>

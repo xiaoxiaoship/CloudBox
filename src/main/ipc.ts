@@ -11,6 +11,7 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron';
 import { z } from 'zod';
+import { clampLowLevelSecurity, type LowLevelSecurity } from '../shared/lowLevelSecurity.ts';
 import { PathSecurityError } from '../core/security/safePath.ts';
 import { ADMIN_ERROR, AdminError, type ManagedUser } from '../core/services/adminUserService.ts';
 import { AUTH_ERROR, AuthError } from '../core/services/authService.ts';
@@ -721,6 +722,9 @@ export function registerIpc(context: IpcContext): void {
         capRegistrationLimit: context.services.settings.get('security.capRegistrationLimit'),
         capShareLimit: context.services.settings.get('security.capShareLimit'),
         policy: context.services.settings.get('security.policy'),
+        adminIdleEnabled: context.services.settings.get('security.adminIdleEnabled'),
+        adminIdleMinutes: context.services.settings.get('security.adminIdleMinutes'),
+        lowLevel: context.services.settings.getLowLevel(),
       },
       resources: {
         maxConcurrentExtractions: context.services.settings.get('maxConcurrentExtractions'),
@@ -834,6 +838,9 @@ export function registerIpc(context: IpcContext): void {
     capRegistrationLimit: z.number().int().min(1).max(100),
     capShareLimit: z.number().int().min(1).max(100),
     policy: z.string().max(50_000),
+    adminIdleEnabled: z.boolean().default(true),
+    adminIdleMinutes: z.number().int().min(1).max(1440).default(30),
+    lowLevel: z.record(z.string(), z.unknown()).default({}),
   }), (input) => {
     const admin = actor();
     const settings = context.services.settings;
@@ -861,6 +868,17 @@ export function registerIpc(context: IpcContext): void {
     settings.set('security.capRegistrationLimit', input.capRegistrationLimit, admin.id);
     settings.set('security.capShareLimit', input.capShareLimit, admin.id);
     settings.set('security.policy', input.policy, admin.id);
+    settings.set('security.adminIdleEnabled', input.adminIdleEnabled, admin.id);
+    settings.set('security.adminIdleMinutes', input.adminIdleMinutes, admin.id);
+    const lowLevel = clampLowLevelSecurity(input.lowLevel as Partial<LowLevelSecurity>);
+    settings.set('security.lowLevel', JSON.stringify(lowLevel), admin.id);
+    settings.set('upload.maxFileBytes', lowLevel.maxFileBytes, admin.id);
+    settings.set('security.simpleRegisterLimit', lowLevel.registrationLimit, admin.id);
+    settings.set('security.sessionTtlHours', lowLevel.sessionTtlHours, admin.id);
+    settings.set('scan.localMaxBytes', lowLevel.clamavMaxBytes, admin.id);
+    settings.set('scan.localTimeoutSeconds', lowLevel.clamavTimeoutSeconds, admin.id);
+    settings.set('maxConcurrentExtractions', lowLevel.maxConcurrentExtractions, admin.id);
+    settings.set('maxConcurrentScans', lowLevel.maxConcurrentScans, admin.id);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,

@@ -21,6 +21,7 @@ interface ProxyOptions {
   port: number;
   bind?: string;
   enabled: () => boolean;
+  proxyTimeoutMs?: number;
 }
 
 /**
@@ -97,7 +98,7 @@ export class ProxyProtocolServer {
       socket.off('data', onData);
       socket.unshift(buffer);
       this.forwardViaInternal(socket, remote);
-    }, 3_000);
+    }, this.options.proxyTimeoutMs ?? 3_000);
     timeout.unref?.();
 
     const finish = (realIp: string, rest: Buffer): void => {

@@ -37,6 +37,7 @@ interface AppState {
   uploads: UploadItem[];
   /** 目录是否被截断（超过 5000 项） */
   truncated: boolean;
+  uploadConcurrency: number;
   theme: ThemePreference;
   audioQueue: FileEntry[];
   audioIndex: number;
@@ -102,6 +103,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   selected: [],
   uploads: [],
   truncated: false,
+  uploadConcurrency: 10,
   theme: readStoredTheme(),
   audioQueue: [],
   audioIndex: 0,
@@ -114,7 +116,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
     bootstrapPromise = (async () => {
       try {
         const me = await api.me();
-        set({ user: me.user, usage: me.usage, initialized: true });
+        const publicSettings = await api.publicSettings();
+        set({ user: me.user, usage: me.usage, uploadConcurrency: Math.max(1, publicSettings.upload_queue_concurrency || 10), initialized: true });
         await get().load('');
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
@@ -268,7 +271,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         if (item) await uploadOne(item);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(10, items.length) }, () => worker()));
+    await Promise.all(Array.from({ length: Math.min(Math.max(1, get().uploadConcurrency), items.length) }, () => worker()));
     await get().refresh();
   },
 

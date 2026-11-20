@@ -8,7 +8,7 @@ import { sendDownload } from '../http/download.ts';
 
 const createShareSchema = z.object({
   file_path: z.string().min(1).max(900),
-  duration_seconds: z.number().int().min(30).max(7_200),
+  duration_seconds: z.number().int().min(30).max(31_536_000),
 });
 
 export interface SharesRouterDeps {
@@ -23,6 +23,11 @@ export function createSharesRouter(services: CoreServices, deps: SharesRouterDep
 
   router.post('/', deps.shareLimiter, deps.csrf, async (req, res) => {
     const body = createShareSchema.parse(req.body);
+    const shareMaxSeconds = services.settings.getLowLevel().shareMaxSeconds;
+    if (body.duration_seconds > shareMaxSeconds) {
+      res.status(400).json({ code: 'SHARE_DURATION_TOO_LONG', message: `分享有效期不能超过 ${shareMaxSeconds} 秒` });
+      return;
+    }
     if (deps.cap.enabled() && !deps.cap.hasValidToken(req)) {
       const capRule = deps.policy.rule('cap', 'ip');
       const limit = capRule !== null ? Number(capRule.config.threshold ?? 10) : deps.cap.shareLimit();

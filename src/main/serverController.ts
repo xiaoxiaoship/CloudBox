@@ -99,6 +99,10 @@ export class ServerController {
   private readonly getMtlsCa: (() => Buffer | null) | null;
   private readonly getRootCaPath: (() => string | null) | null;
   private readonly isProxyProtocolEnabled: () => boolean;
+  private readonly proxyTimeoutMs: number;
+  private readonly tlsMinVersion: 'TLSv1.2' | 'TLSv1.3';
+  private readonly headersTimeoutMs: number;
+  private readonly requestTimeoutMs: number;
 
   constructor(options: {
     services: CoreServices;
@@ -112,6 +116,10 @@ export class ServerController {
     getMtlsCa?: () => Buffer | null;
     getRootCaPath?: () => string | null;
     isProxyProtocolEnabled?: () => boolean;
+    proxyTimeoutMs?: number;
+    tlsMinVersion?: 'TLSv1.2' | 'TLSv1.3';
+    headersTimeoutMs?: number;
+    requestTimeoutMs?: number;
   }) {
     this.services = options.services;
     this.version = options.version;
@@ -124,6 +132,10 @@ export class ServerController {
     this.getMtlsCa = options.getMtlsCa ?? null;
     this.getRootCaPath = options.getRootCaPath ?? null;
     this.isProxyProtocolEnabled = options.isProxyProtocolEnabled ?? (() => false);
+    this.proxyTimeoutMs = options.proxyTimeoutMs ?? 3_000;
+    this.tlsMinVersion = options.tlsMinVersion ?? 'TLSv1.2';
+    this.headersTimeoutMs = options.headersTimeoutMs ?? 60_000;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 300_000;
   }
 
   getStatus(): ServerStatus {
@@ -194,7 +206,7 @@ export class ServerController {
         const tlsOptions = this.getTlsOptions();
         const serverOptions: Parameters<typeof createHttpsServer>[0] = {
           ...tlsOptions,
-          minVersion: 'TLSv1.2',
+          minVersion: this.tlsMinVersion,
         };
 
         if (this.mtlsEnabled) {
@@ -245,11 +257,15 @@ export class ServerController {
         instance.listen(0, '127.0.0.1');
       });
 
+      instance.headersTimeout = this.headersTimeoutMs;
+      instance.requestTimeout = this.requestTimeoutMs;
+
       const proxyFront = new ProxyProtocolServer({
         expressServer: instance,
         port,
         bind: this.bind,
         enabled: this.isProxyProtocolEnabled,
+        proxyTimeoutMs: this.proxyTimeoutMs,
       });
       try {
         await proxyFront.start();

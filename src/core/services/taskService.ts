@@ -6,6 +6,7 @@ export type TaskStatus =
   | 'scanning'
   | 'clean'
   | 'infected'
+  | 'skipped'
   | 'completed'
   | 'failed';
 

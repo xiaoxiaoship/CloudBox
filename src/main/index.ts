@@ -102,6 +102,14 @@ function bootstrap(): void {
   }, 15 * 60_000);
   logTrimTimer.unref();
 
+  // Expired sessions must not accumulate in SQLite. Run once at startup and hourly.
+  context.services.sessions.deleteExpired(Date.now());
+  const sessionCleanupTimer = setInterval(() => {
+    if (context === null) return;
+    context.services.sessions.deleteExpired(Date.now());
+  }, 60 * 60_000);
+  sessionCleanupTimer.unref();
+
   mainWindow = createMainWindow(context, adminIndex);
   tray = createAppTray({
     iconPath: path.join(app.getAppPath(), 'resources', 'tray.png'),

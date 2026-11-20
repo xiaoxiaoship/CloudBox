@@ -59,6 +59,7 @@ export interface PublicSettings {
     allow_user_scan: boolean;
   };
   scan_enabled: boolean;
+  upload_queue_concurrency: number;
   ai_enabled: boolean;
   ai_mode: 'admin' | 'user';
   hosting_enabled: boolean;
@@ -109,6 +110,7 @@ export interface BackgroundTask {
     | 'scanning'
     | 'clean'
     | 'infected'
+    | 'skipped'
     | 'completed'
     | 'failed';
   result: unknown;

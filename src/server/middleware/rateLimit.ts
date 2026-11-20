@@ -2,7 +2,16 @@ import { ipKeyGenerator, rateLimit, type RateLimitRequestHandler } from 'express
 import type { Request, RequestHandler, Response } from 'express';
 import { getRequestId } from './requestId.ts';
 
-let onRateLimitAlert: ((info: { ip: string | null; endpoint: string }) => void) | undefined;
+export interface RateLimitAlertInfo {
+  ip: string | null;
+  endpoint: string;
+  feature: string;
+  featureName: string;
+  windowSeconds: number;
+  message: string;
+}
+
+let onRateLimitAlert: ((info: RateLimitAlertInfo) => void) | undefined;
 
 export interface LimitedIp {
   ip: string;
@@ -82,9 +91,9 @@ export function consumeSimpleLogin(ip: string, limit: number, windowMs: number, 
   return true;
 }
 
-function rateLimitResponse(message = '请求过于频繁，请稍后再试') {
+function rateLimitResponse(message = '请求过于频繁，请稍后再试', feature = 'apiRateLimit', featureName = 'API 基础限流', windowSeconds = 60) {
   return (req: Request, res: Response): void => {
-    onRateLimitAlert?.({ ip: req.ip ?? null, endpoint: req.path });
+    onRateLimitAlert?.({ ip: req.ip ?? null, endpoint: req.path, feature, featureName, windowSeconds, message });
     res.status(429).json({
       code: 'RATE_LIMITED',
       message,
@@ -93,8 +102,8 @@ function rateLimitResponse(message = '请求过于频繁，请稍后再试') {
   };
 }
 
-function jsonRateLimitHandler(message: string) {
-  return rateLimitResponse(message);
+function jsonRateLimitHandler(message: string, feature = 'apiRateLimit', featureName = 'API 基础限流', windowSeconds = 60) {
+  return rateLimitResponse(message, feature, featureName, windowSeconds);
 }
 
 export interface RateLimiters {
@@ -114,12 +123,21 @@ export interface RateLimiters {
  * 次数阈值和锁定时间后立即生效；其余接口使用固定窗口。
  */
 export function createRateLimiters(options: {
-  onAlert?: (info: { ip: string | null; endpoint: string }) => void;
+  onAlert?: (info: RateLimitAlertInfo) => void;
   registerLimit?: () => number;
   securityEnabled?: boolean;
   loginLimit?: number | (() => number);
   loginWindowMs?: number | (() => number);
   loginLockMs?: number | (() => number);
+  limits?: {
+    api?: number;
+    upload?: number;
+    shares?: number;
+    shareDownload?: number;
+    extract?: number;
+    scan?: number;
+  };
+  dynamicLimits?: () => { api?: number; upload?: number; shares?: number; shareDownload?: number; extract?: number; scan?: number };
 } = {}): RateLimiters {
   onRateLimitAlert = options.onAlert;
   const securityEnabled = options.securityEnabled !== false;
@@ -134,41 +152,44 @@ export function createRateLimiters(options: {
   // Keep the middleware shape so existing route wiring remains harmless.
   const loginGuard: RequestHandler = (_req, _res, next) => next();
 
+  const currentLimit = (key: 'api' | 'upload' | 'shares' | 'shareDownload' | 'extract' | 'scan', fallback: number): (() => number) => () =>
+    options.dynamicLimits?.()[key] ?? options.limits?.[key] ?? fallback;
+
   return {
     loginGuard,
     // Keep a harmless second middleware so the auth router shape stays stable.
     login: (_req, _res, next) => next(),
     api: rateLimit({
       windowMs: 60_000,
-      limit: 600,
+      limit: currentLimit('api', 600),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
-      handler: jsonRateLimitHandler('请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('请求过于频繁，请稍后再试', 'apiRateLimit', 'API 基础限流', 60),
     }),
     upload: rateLimit({
       windowMs: 60_000,
-      limit: 120,
+      limit: currentLimit('upload', 120),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
-      handler: jsonRateLimitHandler('上传请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('上传请求过于频繁，请稍后再试', 'uploadRateLimit', '上传基础限流', 60),
     }),
     shares: rateLimit({
       windowMs: 60_000,
-      limit: 10,
+      limit: currentLimit('shares', 10),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       keyGenerator: (req) =>
         `user:${req.user?.id ?? ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
-      handler: jsonRateLimitHandler('分享请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('分享请求过于频繁，请稍后再试', 'shareRateLimit', '分享基础限流', 60),
     }),
     shareDownload: rateLimit({
       windowMs: 60_000,
-      limit: 60,
+      limit: currentLimit('shareDownload', 60),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       keyGenerator: (req) =>
         `share:${ipKeyGenerator(req.ip ?? '0.0.0.0')}:${req.params.token ?? ''}`,
-      handler: jsonRateLimitHandler('分享下载请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('分享下载请求过于频繁，请稍后再试', 'shareDownloadRateLimit', '分享下载基础限流', 60),
     }),
     register: rateLimit({
       windowMs: 60 * 60_000,
@@ -177,23 +198,23 @@ export function createRateLimiters(options: {
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       keyGenerator: (req) => `register:${ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
-      handler: jsonRateLimitHandler('注册过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('注册过于频繁，请稍后再试', 'registerRateLimit', '注册基础限流', 3600),
     }),
     extract: rateLimit({
       windowMs: 60_000,
-      limit: 10,
+      limit: currentLimit('extract', 10),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       keyGenerator: (req) => `extract:${req.user?.id ?? ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
-      handler: jsonRateLimitHandler('解压请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('解压请求过于频繁，请稍后再试', 'extractRateLimit', '解压基础限流', 60),
     }),
     scan: rateLimit({
       windowMs: 60_000,
-      limit: 10,
+      limit: currentLimit('scan', 10),
       standardHeaders: 'draft-8',
       legacyHeaders: false,
       keyGenerator: (req) => `scan:${req.user?.id ?? ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
-      handler: jsonRateLimitHandler('查杀请求过于频繁，请稍后再试'),
+      handler: jsonRateLimitHandler('查杀请求过于频繁，请稍后再试', 'scanRateLimit', '查杀基础限流', 60),
     }),
   };
 }

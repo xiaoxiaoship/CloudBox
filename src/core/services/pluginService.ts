@@ -1,6 +1,7 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { cp, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
 import type { PluginRepository, PluginRecord } from '../db/repositories/pluginRepo.ts';
@@ -48,7 +49,12 @@ interface ChildState {
   child: ChildProcess;
   ready: boolean;
   pending: Map<string, { resolve: (value: PluginResponse) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>;
+  logs: string[];
 }
+
+export const MAX_PLUGIN_PACKAGE_BYTES = 20 * 1024 * 1024;
+export const MAX_PLUGIN_PACKAGE_ENTRIES = 2_000;
+export const MAX_PLUGIN_LOG_LINES = 1_000;
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 
@@ -113,6 +119,8 @@ export class PluginService {
   private readonly pluginRoot: string;
   private readonly childScript: string;
   private readonly execPath: string;
+  private readonly startTimeoutMs: number;
+  private readonly requestTimeoutMs: number;
   private readonly children = new Map<string, ChildState>();
   private sequence = 0;
 
@@ -122,6 +130,8 @@ export class PluginService {
     pluginRoot: string;
     childScript?: string;
     execPath?: string;
+    startTimeoutMs?: number;
+    requestTimeoutMs?: number;
   }) {
     this.plugins = options.plugins;
     this.events = options.events;
@@ -130,11 +140,24 @@ export class PluginService {
       options.childScript ??
       path.join(process.cwd(), 'dist', 'main', 'plugin-child.cjs');
     this.execPath = options.execPath ?? process.execPath;
+    this.startTimeoutMs = options.startTimeoutMs ?? 10_000;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     mkdirSync(this.pluginRoot, { recursive: true });
     this.events.on('file.uploaded', (payload) => this.broadcast('file.uploaded', payload));
     this.events.on('file.deleted', (payload) => this.broadcast('file.deleted', payload));
     this.events.on('user.registered', (payload) => this.broadcast('user.registered', payload));
     this.events.on('user.created', (payload) => this.broadcast('user.created', payload));
+  }
+
+  private appendPluginLog(state: ChildState, name: string, data: unknown, isError: boolean): void {
+    for (const line of String(data).replace(/\u001b\[[0-9;]*m/g, '').split(/\r?\n/)) {
+      const text = line.trimEnd();
+      if (!text) continue;
+      state.logs.push(text);
+      if (state.logs.length > MAX_PLUGIN_LOG_LINES) state.logs.splice(0, state.logs.length - MAX_PLUGIN_LOG_LINES);
+      if (isError) console.error(`[plugin:${name}] ${text}`);
+      else console.log(`[plugin:${name}] ${text}`);
+    }
   }
 
   private broadcast(event: string, payload: Record<string, unknown>): void {
@@ -225,8 +248,16 @@ export class PluginService {
     const temp = path.join(this.pluginRoot, `.import-${Date.now()}-${this.sequence++}`);
     try {
       await mkdir(temp, { recursive: true });
+      const sourceSize = statSync(source).size;
+      if (sourceSize > MAX_PLUGIN_PACKAGE_BYTES) {
+        throw new Error(`插件 ZIP 超过 ${MAX_PLUGIN_PACKAGE_BYTES / 1024 / 1024}MB 上限`);
+      }
       const zip = new AdmZip(source);
-      for (const entry of zip.getEntries()) {
+      const entries = zip.getEntries();
+      if (entries.length > MAX_PLUGIN_PACKAGE_ENTRIES) {
+        throw new Error(`插件 ZIP 条目数超过 ${MAX_PLUGIN_PACKAGE_ENTRIES} 上限`);
+      }
+      for (const entry of entries) {
         safeRelativePath(entry.entryName);
       }
       zip.extractAllTo(temp, true);
@@ -294,14 +325,14 @@ export class PluginService {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
 
-    child.stdout?.on('data', (data) => console.log(`[plugin:${name}] ${String(data).trimEnd()}`));
-    child.stderr?.on('data', (data) => console.error(`[plugin:${name}] ${String(data).trimEnd()}`));
-
-    const state: ChildState = { child, ready: false, pending: new Map() };
+    const state: ChildState = { child, ready: false, pending: new Map(), logs: [] };
     this.children.set(name, state);
 
+    child.stdout?.on('data', (data) => this.appendPluginLog(state, name, data, false));
+    child.stderr?.on('data', (data) => this.appendPluginLog(state, name, data, true));
+
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('插件启动超时')), 10_000);
+      const timeout = setTimeout(() => reject(new Error('插件启动超时')), this.startTimeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
         child.off('message', onMessage);
@@ -409,7 +440,7 @@ export class PluginService {
       const timer = setTimeout(() => {
         state.pending.delete(id);
         reject(new Error('插件请求超时'));
-      }, 15_000);
+      }, this.requestTimeoutMs);
       state.pending.set(id, { resolve, reject, timer });
       state.child.send({ type: 'http', id, request });
     });

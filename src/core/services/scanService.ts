@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { ScanRepository, ScanStatus } from '../db/repositories/scanRepo.ts';
 import type { SessionUser } from '../types/models.ts';
@@ -31,8 +32,14 @@ export interface LocalScanResult {
   details?: unknown;
 }
 
+export interface LocalScanOptions {
+  maxFileBytes: number;
+  maxScanBytes: number;
+  timeoutMs: number;
+}
+
 export interface LocalScanner {
-  scan(filePath: string, localPath: string): Promise<LocalScanResult>;
+  scan(filePath: string, localPath: string, options?: LocalScanOptions): Promise<LocalScanResult>;
 }
 
 export interface ScanResult {
@@ -193,6 +200,25 @@ export class ScanService {
     });
     const mode = this.settings.get('scan.mode');
 
+    if (mode === 'local' && target.size > this.settings.get('scan.localMaxBytes')) {
+      const task = this.tasks.create(user.id, 'scan', 'skipped');
+      this.tasks.update(task.id, {
+        result: {
+          filePath: target.relativePath,
+          status: 'skipped',
+          reason: 'LOCAL_SCAN_FILE_TOO_LARGE',
+          maxBytes: this.settings.get('scan.localMaxBytes'),
+        },
+      });
+      this.audit.record({
+        actorType: 'user', actorId: user.id, action: 'file.scan', result: 'success',
+        targetType: 'file', targetPath: target.relativePath, ip: ctx.ip ?? null,
+        userAgent: ctx.userAgent ?? null, requestId: ctx.requestId ?? null,
+        detail: { status: 'skipped', reason: 'LOCAL_SCAN_FILE_TOO_LARGE', size: target.size },
+      });
+      return { taskId: task.id };
+    }
+
     if (mode === 'api' && target.size > SCAN_MAX_API_BYTES) {
       throw new FileServiceError(
         FILE_ERROR.FILE_TOO_LARGE,
@@ -231,7 +257,11 @@ export class ScanService {
       } else {
         const localPath = this.settings.get('scan.local_path').trim();
         if (!localPath) throw new Error('未配置 ClamAV 目录');
-        const local = await this.localScanner.scan(target.absolutePath, localPath);
+        const local = await this.localScanner.scan(target.absolutePath, localPath, {
+          maxFileBytes: this.settings.get('scan.localMaxBytes'),
+          maxScanBytes: this.settings.get('scan.localMaxBytes'),
+          timeoutMs: this.settings.get('scan.localTimeoutSeconds') * 1_000,
+        });
         result = {
           status: local.infected ? 'infected' : 'clean',
           sha256: await sha256File(target.absolutePath),

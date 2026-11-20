@@ -99,6 +99,8 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
     pluginRoot,
     childScript: options.pluginChildScript,
     execPath: options.pluginExecPath,
+    startTimeoutMs: settings.getLowLevel().pluginStartTimeoutMs,
+    requestTimeoutMs: settings.getLowLevel().pluginRequestTimeoutMs,
   });
   const auth = new AuthService({ users, sessions, settings, audit, loginIps, securityPolicy, now });
   const files = new FileService({

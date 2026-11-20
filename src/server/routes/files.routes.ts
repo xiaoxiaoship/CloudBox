@@ -24,7 +24,7 @@ const renameBody = z.object({
 });
 
 const deleteBody = z.object({
-  paths: z.array(z.string().min(1).max(900)).min(1).max(100),
+  paths: z.array(z.string().min(1).max(900)).min(1).max(10_000),
 });
 
 const transferBody = z.object({
@@ -224,6 +224,7 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
     try {
       const result = await services.files.runExclusive(user.id, async () => {
         const received = await receiveUpload(req, {
+          maxDrainBytes: services.settings.getLowLevel().uploadDrainBytes,
           tempDir: services.files.getTempDir(),
           onProgress: recordUploadBytes,
           prepare: (filename) => {
