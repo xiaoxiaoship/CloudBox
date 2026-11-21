@@ -214,7 +214,9 @@ GET /api/public/plugin-theme.css
 
 两种方式：
 
-1. `admin-ui/index.html`：管理端通过 `plugin-admin://{name}/index.html` 沙箱 iframe 加载。
+1. `admin-ui/index.html`：
+   - Electron GUI：通过 `plugin-admin://{name}/index.html` 沙箱 iframe 加载。
+   - Web 管理版：通过 `/api/admin/plugins/{name}/admin/index.html` 加载，受管理员 Session 保护。
 2. `manifest.adminUrl`：插件卡片右侧设置齿轮，调用系统浏览器打开 HTTP/HTTPS 页面。
 
 选择 `adminUrl` 时，插件需要自行提供可访问的 Web 服务与鉴权。
@@ -225,7 +227,8 @@ GET /api/public/plugin-theme.css
 - 子进程环境变量仅保留最小集合。
 - 插件路由请求经主进程鉴权和 CSRF。
 - 插件 storage 由主进程创建，不能访问其他插件/用户文件。
-- 导入 zip 会校验路径，拒绝 `../` 与绝对路径。
+- 导入 ZIP 会校验路径，拒绝 `../` 与绝对路径；ZIP 最大 20MB、最多 2000 条目。
+- Web 管理版当前只管理已安装插件，不支持从浏览器导入 ZIP/文件夹。
 - 启用/禁用、Web 接管、卸载都会写审计日志。
 - 只安装可信插件，尤其是需要 Web 接管的插件。
 
@@ -361,7 +364,9 @@ Plugins cannot read other plugins or user files through ctx.
 
 ## 9. Admin page
 
-1. `admin-ui/index.html` is loaded in a sandboxed iframe via `plugin-admin://{name}/index.html`.
+1. `admin-ui/index.html`:
+   - Electron GUI loads it in a sandboxed iframe via `plugin-admin://{name}/index.html`.
+   - Web Admin loads it through `/api/admin/plugins/{name}/admin/index.html`, protected by the admin session.
 2. `manifest.adminUrl` opens an HTTP/HTTPS page in the system browser from the plugin card gear.
 
 With `adminUrl`, the plugin must provide its own reachable Web service and authentication.

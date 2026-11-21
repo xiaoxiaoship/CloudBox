@@ -3,195 +3,323 @@
 > 适用版本：1.0.2  
 > Applies to: 1.0.2
 
-## 本文目录 / Contents
+## 目录 / Contents
 
 ```text
-架构与实现原理
-├── 1. 总览
-├── 2. 进程与目录
-├── 3. 主进程
-├── 4. HTTP 服务
-├── 5. 核心服务层
-├── 6. 数据模型与迁移
-├── 7. 请求与上传流程
-├── 8. 预览与并发控制
-├── 9. 安全策略引擎
-├── 10. frp、HTTPS 与 CA
-├── 11. 插件运行时
-├── 12. 前端
-├── 13. 测试、构建与发布
-└── 14. English
+1. 运行形态
+2. 进程与目录
+3. Electron 入口
+4. Headless / Web Admin 入口
+5. 管理员认证与安全边界
+6. 用户 Web
+7. 核心服务
+8. 数据模型与迁移
+9. 安全策略引擎
+10. 文件、预览、解压与查杀
+11. frp、HTTPS 与 CA
+12. 插件运行时
+13. 前端与 AdminApi
+14. 测试、构建与发布
+15. 已知限制
+16. English
 ```
 
 ---
 
 # 中文
 
-## 1. 总览
+## 1. 运行形态
 
-CloudBox 是 Electron 桌面应用 + 内嵌 Express 服务 + SQLite 数据库。
+CloudBox 1.0.2 有两种运行形态，共享 core/services 和 SQLite，但入口与部署不同。
 
 ```text
-Electron
-├── 主进程（Node.js）
-│   ├── IPC / 管理端窗口
-│   ├── Express HTTP 服务
-│   ├── SQLite
-│   ├── frpc / CA / 证书
-│   └── 插件子进程
-├── 管理端（React，file:// 或本地打包）
-└── Web 用户端（React，经 HTTP 提供）
+Electron GUI
+├── 主进程
+├── 桌面窗口 + preload IPC
+├── 用户 Web（由在线模式启停）
+└── 不启动管理员 Web
+
+Headless / Web Admin
+├── server-entry 单 Node 进程
+├── adminApp :1250（始终启动）
+├── userApp（由在线模式启停）
+├── frpc（可选）
+└── 浏览器通过 /api/admin/* 管理
 ```
+
+两者不共享管理员登录状态：
+
+- Electron 使用主进程内存 `AdminSession`。
+- Web 使用独立 `admin_sessions` 表和 Cookie。
 
 ## 2. 进程与目录
 
 ```text
 src/
-├── main/        Electron 主进程、IPC、窗口、托盘、服务控制
-├── core/        领域模型、数据库、服务、安全与业务逻辑
-├── server/      Express 路由、中间件、上传、下载、Cap、IPS
-├── preload/     contextBridge 暴露的 admin API
-├── shared/      IPC 类型、共享模型、i18n 文案
-admin/           管理端 React
-web/             Web 用户端 React
-tests/           单元/集成测试
-docs/            文档
-resources/       图标、二进制、示例插件
+├── core/         领域模型、服务、SQLite、安全
+├── server/       用户 Web 的 Express 路由与中间件
+├── admin-server/ Web Admin 的 Express 应用、路由、中间件
+├── server-entry/ headless 启动、初始化 token、服务控制
+├── main/         Electron 主进程、IPC、窗口、托盘
+├── preload/      contextBridge
+├── shared/       IPC 类型、共享模型、i18n、低层设置
+admin/            管理前端（GUI + Web 共用）
+web/              用户前端
+tests/            单元/集成测试
+installer/        WinSW + Inno Setup
 ```
 
-运行数据默认：
+运行数据：
 
-- `dataDir`：数据库、密钥、证书、frp 配置
-- `storageRoot`：用户文件
-- `pluginsDir`：插件与插件 storage
+| 形态 | 数据目录 |
+|---|---|
+| Electron | `%APPDATA%\cloudbox` |
+| Headless | `%PROGRAMDATA%\CloudBox` |
 
-## 3. 主进程
+Headless 目录布局：
+
+```text
+%PROGRAMDATA%\CloudBox\
+├── cloudbox.db
+├── ai-secret.key
+├── config\
+│   ├── admin-init-token.json
+│   ├── ssl\
+│   └── frpc.toml
+├── storage\
+├── plugins\
+├── logs\
+└── tmp\uploads\
+```
+
+## 3. Electron 入口
 
 `src/main/index.ts`：
 
 - 单实例锁
-- 创建主窗口/托盘
-- 初始化 `MainContext`
+- 创建窗口/托盘
+- `createMainContext()`
 - 注册 IPC
-- 启动 HTTP 服务和插件
-- 退出时停止插件、frp、HTTP
+- 启动用户 Web 和插件
+- 退出时停止服务
 
-`src/main/context.ts` 负责装配数据库、服务、密钥、路径。
-
-`src/main/ipc.ts` 是管理端与主进程的边界：
-
-- Zod 校验输入
-- 管理员鉴权
-- 调用服务
-- 写审计
-- 返回 `AdminSettings` / 状态对象
-
-## 4. HTTP 服务
-
-`src/server/app.ts` 是 Express 装配入口：
+`src/main/context.ts` 装配：
 
 ```text
-Helmet / requestId / body parser / traffic
-IPS 中间件
-健康检查
-API 全局 IP 守卫
+SQLite
+CoreServices
+AdminUserService
+AdminSession（内存）
+TlsManager
+CaManager
+FrpService
+ServerController
+```
+
+GUI 不创建 `adminApp`，不监听 1250。
+
+`src/main/ipc.ts` 是 Electron 适配层：
+
+- `isTrustedSender` 校验窗口与 `file://.../dist/admin/`
+- Zod 输入校验
+- 管理员 Session
+- 调用 core/admin 服务
+- 写入审计
+- 返回 `Result<T>`
+
+## 4. Headless / Web Admin 入口
+
+`src/server-entry/index.ts`：
+
+```text
+createHeadlessController()
+→ controller.start()
+   ├── startAdmin()
+   ├── startUser() if server.online
+   └── frp.start() if frp.enabled
+```
+
+### 4.1 Headless context
+
+`src/server-entry/context.ts` 创建：
+
+- SQLite
+- CoreServices
+- AdminUserService
+- AdminSessionRepository / AdminAuthService
+- InitTokenService
+- TlsManager / CaManager
+- ServerController
+- FrpService
+
+### 4.2 ServiceController
+
+`src/server-entry/serviceController.ts`：
+
+- 固定管理端口 1250
+- 启动前检查端口占用
+- 用户端口不能等于 1250
+- 管理 Web 先启动
+- 用户 Web 后启动
+- frp 最后启动
+- 管理端每小时清理过期 `admin_sessions`
+
+### 4.3 Admin app
+
+`src/admin-server/app.ts`：
+
+```text
+Helmet（独立 CSP）
+JSON 256KB
+intranetOnly
+/api/admin/app/info
+/api/admin/health
+/api/admin/auth/*
+/api/admin/setup
+/api/admin/users
+/api/admin/settings
+/api/admin/server
+/api/admin/system
+/api/admin/files
+/api/admin/plugins
+/api/admin/frp
+/api/admin/ca
+/api/admin/app/backup
+dist/admin 静态资源 + SPA 回退
+```
+
+管理端和用户端不使用同一个 Express 实例。
+
+## 5. 管理员认证与安全边界
+
+### 5.1 初始化 token
+
+无管理员时生成 32 字节随机 token：
+
+- 只保存 SHA-256 哈希
+- 24 小时有效
+- 控制台/日志输出 `/setup?token=...`
+- 建号后删除 token 文件
+- 丢失后删除文件重启重新生成
+
+### 5.2 管理员 Session
+
+表 `admin_sessions`：
+
+```text
+id_hash, user_id, created_at, last_seen_at, expires_at, ip, user_agent, revoked_at
+```
+
+Cookie：
+
+```text
+admin_sid   HttpOnly, SameSite=Strict, Secure when HTTPS
+admin_csrf  非 HttpOnly, SameSite=Strict, Secure when HTTPS
+```
+
+### 5.3 内网限制
+
+`createIntranetOnly` 直接读 socket 地址：
+
+- 不信任 `X-Forwarded-For`
+- 允许 loopback / RFC1918 / ULA / link-local
+- 拒绝时返回 403 并写审计
+- 可在设置中关闭，关闭需红色确认
+
+注意：frp 本机连接会显示 loopback，因此 **1250 不应映射 frp**。
+
+### 5.4 CSRF
+
+管理端独立 double-submit：
+
+- 登录后下发 `admin_csrf`
+- 非 GET/HEAD/OPTIONS 必须 Cookie 与 `x-csrf-token` 一致
+- 失败写审计
+
+### 5.5 能力差异
+
+Web Admin 不提供：
+
+- 目录迁移
+- 插件文件夹导入
+- 证书/私钥导入
+- CA 客户端证书导出
+- 桌面文件选择器
+
+数据库备份在 Web 端下载到浏览器设备。
+
+## 6. 用户 Web
+
+`src/server/app.ts` 装配：
+
+```text
+Helmet / requestId / JSON 1MB
+IPS
+/health
+全局 IP 守卫
 基础限流
 API 泛洪计数
-Cap 路由
-公开配置 / 证书 / 插件主题
-托管站点
-AI / 系统 / 插件 / 分享 / 认证 / 文件 / 任务路由
+Cap
+公开配置/证书/插件主题
+/api/admin（保留管理员命名空间守卫）
+/api/hosting、/api/ai、/api/system
+/api/plugins
+文件、分享、认证、任务
+插件 Web 资源、静态托管
+SPA
 错误处理
 ```
 
-安全顺序很重要：
+用户 Web 与管理员 Web 的 Session/Cookie/CSRF/CSP 完全分离。
 
-1. IPS 在鉴权前做攻击特征短路。
-2. `/api` 的 IP 全局封禁在路由前。
-3. Cap 在登录/注册内触发。
-4. `requireUser` 校验 Session、账户封禁、只读模式、CSRF。
-5. CSRF 中间件保护写请求。
-
-## 5. 核心服务层
+## 7. 核心服务
 
 `src/core/services/`：
 
-- `AuthService`：注册/登录/会话/密码/旧锁定
-- `RegistrationService`：公开注册、配额创建
-- `SecurityPolicyService`：高级策略、封禁、计数、重置
-- `FileService`：安全路径、列表、移动、预览、下载
-- `ExtractionService`：7-Zip 解压与路径校验
-- `ScanService`：ClamAV / VirusTotal
-- `ShareService`：分享令牌与有效期
-- `HostingService`：静态站点
-- `PluginService`：插件生命周期与 IPC
-- `MailService`：SMTP 事件与冷却
-- `SettingsService`：带 Schema 的设置读写
-- `AuditService`：审计日志
+- AuthService
+- RegistrationService
+- SecurityPolicyService
+- FileService
+- ExtractionService
+- ScanService
+- ShareService
+- HostingService
+- PluginService
+- MailService
+- SettingsService
+- AuditService
+- UpdateService
 
-## 6. 数据模型与迁移
+`src/core/services/admin/`：
 
-SQLite 迁移位于 `src/core/db/migrations/`，按编号执行并记录 `schema_migrations` 与 `user_version`。
+- AdminUserService
+- AdminAuthService
+- AdminSettingsService
+- AdminServerService
+- AdminFrpService
+- AdminCaService
+- AdminLogService
+
+Electron IPC 和 HTTP 路由只做适配，不直接实现业务规则。
+
+## 8. 数据模型与迁移
+
+迁移位于 `src/core/db/migrations/`，当前 014。
 
 主要表：
 
-- `users`、`sessions`、`quotas`
-- `shares`
-- `file_scans`
-- `audit_logs`
-- `plugins`
-- `settings`
-- `user_login_ips`
-- `security_bans`
-- `security_policy_resets`
-- `security_policy_counts`
-
-重置表用于“解封后旧计数不应立即重新触发”。
-
-## 7. 请求与上传流程
-
-上传：
-
 ```text
-POST /api/files/upload
-→ requireUser + CSRF
-→ busboy 流式解析
-→ 文件名/路径校验
-→ 配额检查
-→ 临时文件
-→ 原子移动到用户目录
-→ 审计
+users, sessions, quotas, shares, file_scans, audit_logs,
+plugins, settings, user_login_ips,
+security_bans, security_policy_resets, security_policy_counts,
+admin_sessions
 ```
 
-路径安全：
-
-- `normalizeRelativePath`
-- 拒绝 `..`、绝对路径、Windows 保留设备名
-- 解压后再次校验目标路径
-- 下载/预览/分享都通过 safePath
-
-## 8. 预览与并发控制
-
-`FileService` 根据扩展名 + 魔数识别类型：
-
-- 图片：PNG/JPEG/GIF/WebP/BMP
-- 视频：MP4/WebM/Ogg
-- 音频
-- PDF
-- Office：docx/xlsx/pptx
-- 文本/代码
-
-并发：
-
-- `heavyPreviewGate`：PDF/Office/大视频全局并发
-- 每用户预览信号量
-- 等待超过 3 秒返回 429 `PREVIEW_BUSY`
-- 普通图片/文本只受单用户并发限制
-- 解压/查杀使用独立并发门
+`user_version` 和 `schema_migrations` 记录版本；未知高版本拒绝启动。
 
 ## 9. 安全策略引擎
 
-策略保存在 `settings.security.policy`：
+策略存于 `settings.security.policy` JSON：
 
 ```json
 {
@@ -204,265 +332,214 @@ POST /api/files/upload
 }
 ```
 
-执行：
+作用域：
 
 ```text
-rule(feature, scope) → 读取配置
-→ 业务统计（审计/在线数/请求数/特征匹配）
-→ ban(scope, target, feature, minutes)
-→ security_bans
-→ 记录计数
-→ 达到记录值阈值升级为 global
+ip | account | global
 ```
-
-模式互斥：
-
-- `simple`：旧硬编码锁定/限流，不执行策略 JSON。
-- `advanced`：策略引擎 + IPS + 黑白名单，不执行旧锁定。
-
-模式切换会清除旧封禁/计数，避免互相污染。
 
 时间语义：
 
 - `0`：永久
-- 留空（内部 `-1`）：仅计数、不封禁
-- 可变封禁：`base × 2^次数`，受 `max` 限制
+- 空（内部 `-1`）：只计数，不封禁
+- 正数：固定时长
+- 可变：`base × 2^overflow`，受 max 限制
 
-## 10. frp、HTTPS 与 CA
+模式互斥：
 
-- `frpConfig.ts` 生成 frpc 配置。
-- HTTP/HTTPS 隧道保留真实 IP。
-- TCP 可选 PROXY Protocol v2。
-- `tcpMux` 写入顶层 `[transport]`。
-- `CaManager` 使用 `node-forge` / mkcert 生成 CA 与证书。
-- 网络变更失败时回滚端口/证书配置。
+- simple：旧版锁/IP 限流/注册/改名，不执行策略 JSON。
+- advanced：策略卡 + IPS + API flood + 黑白名单，不执行旧锁。
+- 切换模式清除封禁、计数、旧锁和内存限流。
 
-## 11. 插件运行时
+全局计数达到阈值停止用户 Web；恢复期间手动启动会取消本轮自动恢复。
+
+## 10. 文件、预览、解压与查杀
+
+文件操作统一经过 safePath：
+
+- 拒绝 `..`、绝对路径、UNC、控制字符、ADS、Windows 保留设备名
+- 拒绝符号链接/Junction
+- 路径段 255、相对路径 900
+
+上传：
 
 ```text
-主进程
-→ fork 插件 index.js
-→ IPC 请求转发
-→ 返回 {status, headers, body}
+busboy 单文件
+→ 临时文件
+→ 配额/大小/路径校验
+→ 原子移动
+→ 审计
 ```
 
-插件只看到受限 ctx；不能直接访问主进程对象或用户文件。
+预览：
 
-## 12. 前端
+- 图片/视频/音频/PDF 流式
+- 文本 512KB 截断
+- Office docx/xlsx/pptx 浏览器渲染
+- 重度预览/单用户并发门，3 秒等待上限
 
-- `admin/`：Electron 管理端，使用 preload 暴露的 IPC。
-- `web/`：用户端，使用 HTTP API + Cookie/CSRF。
-- 状态管理：Zustand（Web）。
-- i18n：i18next + 共享文案 + 历史字符串映射。
-- 文件上传：前端队列限制最多 10 个并发。
+解压：
 
-## 13. 测试、构建与发布
+- 最大 10000 文件
+- 解压后总大小 50GB
+- 7z 5 分钟超时
+- 符号链接拒绝
+
+查杀：
+
+- VirusTotal API，>32MB 拒绝
+- ClamAV 本地，>100MB 返回 skipped
+- `--max-filesize` / `--max-scansize`
+- infected 禁止下载/分享/解压
+
+## 11. frp、HTTPS 与 CA
+
+frp：
+
+- 自动生成 `frpc.toml`
+- TLS 到 frps
+- TCP 支持 PROXY v2/tcpMux
+- HTTP/HTTPS 保真实 IP
+- 健康检查 3s/3 次/10s 默认
+
+TLS：
+
+- 最低 TLS 1.2
+- mTLS 使用私有 CA
+
+CA：
+
+- node-forge/mkcert
+- rootCA + server 证书
+- 客户端 PKCS#12 密码 `changeit`
+- 卸载只移除系统信任，不删文件
+
+## 12. 插件运行时
+
+```text
+主进程 fork index.js
+→ IPC 请求转发
+→ {status, headers, body}
+```
+
+边界：
+
+- manifest 名称 2–64，小写字母/数字/短横线
+- ZIP 20MB、最多 2000 条目
+- 启动 10s、请求 15s、停止 1s
+- stdout/stderr 1000 行环形日志
+- 插件是独立 Node 子进程，不是强 OS 沙箱
+- adminUrl 无域名白名单
+
+## 13. 前端与 AdminApi
+
+`admin/src/api`：
+
+```text
+types.ts
+electron.ts
+http.ts
+AdminApiContext.tsx
+```
+
+运行时：
+
+```ts
+const api = window.cloudbox
+  ? new ElectronAdminApi()
+  : new HttpAdminApi();
+```
+
+组件通过 `useAdminApi()` 获取，不直接访问 preload。
+
+Web Admin 没有 Electron 文件选择器；相关操作隐藏或禁用。
+
+## 14. 测试、构建与发布
 
 ```bash
 npm run typecheck
 npm test
+npm run e2e:electron
 npm run build:web
-npm run build:desktop
-npm run dist:win
+npm run build:admin
+npm run build:headless
 ```
 
-测试：
+Windows：
 
-- `tests/integration/`：真实 Express + 临时 SQLite
-- 安全策略、IPS、API 泛洪、并发、上传、分享、托管、邮件
-- `scripts/pentest.ts`：本地 PTES 检查
+```text
+npm run dist:win           Electron 安装包/便携版
+installer\build-server.ps1 Windows Server 服务安装包
+```
 
-发布：
+Server 安装器：
 
-- `electron-builder.yml` 生成 NSIS 安装包与便携版
-- 未配置代码签名时 Windows 会提示未知发布者
-- `release/` 不提交到 Git
+- WinSW `CloudBoxService.exe` + `CloudBoxService.xml`
+- `node.exe`
+- `dist/headless/index.mjs`
+- `dist/admin`
+- `dist/web`
+- `node_modules`
+- `resources`
+
+输出：
+
+```text
+release\CloudBox-Server-<version>-x64.exe
+```
+
+## 15. 已知限制
+
+- 管理 Web 默认 HTTP，无内置 TLS。
+- 1250 不应映射 frp。
+- Web 端没有管理员登录失败锁定/TOTP/IP 白名单（按产品决策）。
+- GUI 空闲锁定是前端计时器，服务端 Session 仍有效。
+- Web 端部分桌面能力未实现。
+- 服务安装器未在实际 Windows Server 上完成安装/卸载回归。
+- 首次安装用户 Web 默认离线。
 
 ---
 
 # English
 
-## 1. Overview
+## 1. Runtime forms
 
-CloudBox is an Electron desktop app with an embedded Express server and SQLite.
+CloudBox 1.0.2 has an Electron GUI and a headless Web Admin. They share core services and SQLite but have separate admin authentication.
 
-```text
-Electron
-├── main process (Node.js)
-│   ├── IPC / admin window
-│   ├── Express HTTP server
-│   ├── SQLite
-│   ├── frpc / CA / certificates
-│   └── plugin child processes
-├── admin UI (React, local bundle)
-└── Web UI (React, served over HTTP)
-```
+The Electron GUI never starts the admin Web on 1250. The headless process starts `adminApp` on 1250, optionally starts the user Web and frpc, and serves the shared admin UI.
 
-## 2. Processes and directories
+## 2–4. Processes and entry points
 
-```text
-src/main/      Electron main, IPC, window, tray, service control
-src/core/      domain models, DB, services, security/business logic
-src/server/    Express routes, middleware, upload, download, Cap, IPS
-src/preload/   contextBridge admin API
-src/shared/    IPC types, shared models, i18n strings
-admin/         admin React UI
-web/           Web React UI
-tests/         unit/integration tests
-docs/          documentation
-resources/     icons, binaries, sample plugins
-```
+Electron: window/tray, IPC, user Web controlled by GUI. Data under `%APPDATA%\cloudbox`.
 
-Runtime data:
+Headless: `src/server-entry` creates the context, starts admin Web first, then user Web if online, then frp. Data under `%PROGRAMDATA%\CloudBox`.
 
-- `dataDir`: database, keys, certificates, frp config
-- `storageRoot`: user files
-- `pluginsDir`: plugins and plugin storage
+Admin routes include auth/setup, users, settings, server, system, files, plugins, frp, CA, app backup and health.
 
-## 3. Main process
+## 5. Admin security
 
-`src/main/index.ts` owns the single-instance lock, window/tray, context bootstrap, IPC, HTTP service, plugins and shutdown.
+- Independent `admin_sessions`
+- `admin_sid` / `admin_csrf`
+- 24-hour one-time setup token, stored as SHA-256
+- Socket-based LAN restriction, no XFF trust
+- CSRF double submit
+- No admin login lock/TOTP/IP allowlist by design
+- Never expose 1250 through frp
 
-`src/main/ipc.ts` is the admin boundary: Zod validation, admin authorization, service calls, audit and settings/status responses.
+## 6–9. User Web and core services
 
-## 4. HTTP service
+User Web has its own CSP/session/CSRF. Core services handle auth, files, scan, extraction, shares, hosting, plugins, mail, settings, audit and security policy. The security policy JSON uses IP/account/global scopes; time `0` means permanent, blank means count-only for fixed durations, variable durations start at 1.
 
-`src/server/app.ts` assembles:
+## 10–12. Files, frp/CA, plugins
 
-```text
-Helmet / requestId / body parser / traffic
-IPS middleware
-health
-global IP guard
-baseline rate limiting
-API flood counting
-Cap routes
-public settings / CA / plugin theme
-hosting
-AI / system / plugins / shares / auth / files / tasks
-error handler
-```
+safePath is the only file boundary. Uploads use busboy and quotas. Preview queues limit heavy formats. Extraction caps at 10000 files/50GB/5 minutes and ClamAV skips files over 100MB.
 
-Ordering matters:
+frp generates frpc TOML, TLS to frps, PROXY v2/tcpMux and health checks. TLS minimum is 1.2; private CA supports mTLS.
 
-1. IPS before authentication.
-2. Global IP bans before API routes.
-3. Cap inside login/registration.
-4. `requireUser` validates session, account bans, read-only mode and CSRF.
-5. CSRF protects mutations.
+Plugins run in child processes with 20MB ZIP/2000 entries, 10s start, 15s request, 1s stop and 1000 log lines. They are not a strong OS sandbox.
 
-## 5. Core services
+## 13–15. Frontend, tests, limits
 
-`src/core/services/` contains auth, registration, security policy, files, extraction, scanning, shares, hosting, plugins, mail, settings and audit.
+`AdminApi` has Electron and HTTP adapters; components use `useAdminApi()`. Tests include unit/integration, Electron E2E and Web E2E. Server installer scripts use WinSW + Inno Setup.
 
-## 6. Data model and migrations
-
-Migrations are numbered under `src/core/db/migrations/`, tracked in `schema_migrations` and `user_version`.
-
-Main tables:
-
-- `users`, `sessions`, `quotas`
-- `shares`
-- `file_scans`
-- `audit_logs`
-- `plugins`
-- `settings`
-- `user_login_ips`
-- `security_bans`
-- `security_policy_resets`
-- `security_policy_counts`
-
-Reset/count tables prevent old counters from immediately re-triggering after an unban.
-
-## 7. Request and upload flow
-
-```text
-POST /api/files/upload
-→ requireUser + CSRF
-→ busboy streaming
-→ filename/path validation
-→ quota check
-→ temp file
-→ atomic move into user directory
-→ audit
-```
-
-Path safety rejects `..`, absolute paths and Windows reserved device names; extraction and download/preview/share all use safePath.
-
-## 8. Preview and concurrency
-
-`FileService` detects type by extension + magic bytes:
-
-- images, video, audio, PDF, Office, text/code
-
-Concurrency:
-
-- global heavy-preview gate for PDF/Office/large video
-- per-user preview semaphore
-- 3-second wait then 429 `PREVIEW_BUSY`
-- images/text do not use the heavy queue
-- extraction and scanning use independent gates
-
-## 9. Security policy engine
-
-Policy JSON lives in `settings.security.policy` and contains `rules`, `savedRules`, IP/account/global ban settings and access lists.
-
-Execution:
-
-```text
-rule(feature, scope) → config
-→ business metric (audit/session/request/signature)
-→ ban(scope, target, feature, minutes)
-→ security_bans
-→ count
-→ record-value threshold promotes to global
-```
-
-Mode isolation:
-
-- `simple`: legacy locks/rate limits; no policy JSON.
-- `advanced`: policy engine + IPS + lists; no legacy locks.
-- Switching modes clears state to avoid cross-contamination.
-
-Time semantics:
-
-- `0`: permanent
-- blank (`-1` internally): count only, no ban
-- variable: `base × 2^count`, capped by `max`
-
-## 10. frp, HTTPS and CA
-
-- `frpConfig.ts` generates frpc config.
-- HTTP/HTTPS preserves real IP.
-- TCP supports PROXY Protocol v2.
-- `tcpMux` is written to top-level `[transport]`.
-- `CaManager` creates CA/certificates with node-forge/mkcert.
-- Failed network changes roll back.
-
-## 11. Plugin runtime
-
-```text
-main → fork index.js → IPC request forwarding → {status, headers, body}
-```
-
-Plugins only see the restricted ctx and cannot directly access main-process objects or user files.
-
-## 12. Frontend
-
-- `admin/`: Electron admin, uses preload IPC.
-- `web/`: user UI over HTTP with cookies/CSRF.
-- Zustand state (Web), i18next strings, upload queue limited to 10 concurrent uploads.
-
-## 13. Tests, build and release
-
-```bash
-npm run typecheck
-npm test
-npm run build:web
-npm run build:desktop
-npm run dist:win
-```
-
-Integration tests use a real Express server and temporary SQLite. `scripts/pentest.ts` provides local PTES checks.
-
-`electron-builder.yml` produces NSIS and portable builds. Without code signing Windows shows an unknown-publisher warning. `release/` is not committed.
+Known limits: admin Web is HTTP by default, no TLS built in; no admin login lock/TOTP; some desktop actions unavailable in Web; installer not yet tested on a clean Windows Server; user Web defaults offline on a fresh headless install.
