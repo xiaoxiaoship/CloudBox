@@ -1,9 +1,15 @@
 import type { CloudboxApi, Result } from '../../../src/shared/ipcTypes.ts';
+import { createElectronAdminApi } from './electron.ts';
+import { createHttpAdminApi } from './http.ts';
 
 const bridge = (window as unknown as { cloudbox?: CloudboxApi }).cloudbox;
+const servedOverHttp = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
 
-export const bridgeAvailable = typeof bridge !== 'undefined';
-export const api = bridge as CloudboxApi;
+export const bridgeAvailable = typeof bridge !== 'undefined' || servedOverHttp;
+export const isWebAdmin = typeof bridge === 'undefined' && servedOverHttp;
+export const api: CloudboxApi = typeof bridge !== 'undefined'
+  ? createElectronAdminApi(bridge)
+  : createHttpAdminApi();
 
 export class IpcError extends Error {
   readonly code: string;

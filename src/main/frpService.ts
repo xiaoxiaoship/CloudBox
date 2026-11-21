@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { app } from 'electron';
 import type { FrpConfig, FrpStatus } from '../shared/ipcTypes.ts';
 import { buildFrpConfig } from './frpConfig.ts';
 
@@ -26,16 +25,10 @@ export class FrpError extends Error {
 const MAX_LOG_LINES = 300;
 
 export function resolveFrpcBinary(): string | null {
-  const candidates = app.isPackaged
-    ? [
-        path.join(process.resourcesPath, 'bin', 'frpc.exe'),
-        path.join(app.getAppPath(), 'resources', 'bin', 'frpc.exe'),
-      ]
-    : [
-        path.join(app.getAppPath(), 'resources', 'bin', 'frpc.exe'),
-        path.join(process.cwd(), 'resources', 'bin', 'frpc.exe'),
-      ];
-
+  const candidates = [
+    path.join(process.resourcesPath ?? process.cwd(), 'bin', 'frpc.exe'),
+    path.join(process.cwd(), 'resources', 'bin', 'frpc.exe'),
+  ];
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 

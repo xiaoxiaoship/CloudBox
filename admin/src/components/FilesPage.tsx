@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FileEntryDto, FileListingDto, UserSummary } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import type { ToastState } from './Dialog.tsx';
 import {
   ChevronRightIcon,
@@ -19,6 +20,7 @@ interface FilesPageProps {
 }
 
 export function FilesPage({ notify }: FilesPageProps) {
+  const api = useAdminApi();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [path, setPath] = useState('');

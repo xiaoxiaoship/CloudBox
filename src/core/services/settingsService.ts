@@ -10,6 +10,7 @@ interface SettingDefinitions {
   'server.port': { schema: z.ZodType<number>; fallback: number };
   'server.bind': { schema: z.ZodType<string>; fallback: string };
   'server.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
+  'adminWeb.intranetOnly': { schema: z.ZodType<boolean>; fallback: boolean };
   'system.updateRepo': { schema: z.ZodType<string>; fallback: string };
   'startup.autoStart': { schema: z.ZodType<boolean>; fallback: boolean };
   'startup.startInTray': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -102,6 +103,7 @@ const DEFINITIONS: SettingDefinitions = {
   'server.port': { schema: z.number().int().min(1024).max(65_535), fallback: 8686 },
   'server.bind': { schema: z.string().min(1), fallback: '0.0.0.0' },
   'server.autoStart': { schema: z.boolean(), fallback: false },
+  'adminWeb.intranetOnly': { schema: z.boolean(), fallback: true },
   'system.updateRepo': { schema: z.string().min(3).max(200), fallback: 'xiaoxiaoship/CloudBox' },
   'startup.autoStart': { schema: z.boolean(), fallback: false },
   'startup.startInTray': { schema: z.boolean(), fallback: false },

@@ -13,7 +13,8 @@ import {
 import { z } from 'zod';
 import { clampLowLevelSecurity, type LowLevelSecurity } from '../shared/lowLevelSecurity.ts';
 import { PathSecurityError } from '../core/security/safePath.ts';
-import { ADMIN_ERROR, AdminError, type ManagedUser } from '../core/services/adminUserService.ts';
+import { ADMIN_ERROR, AdminError, type ManagedUser } from '../core/services/admin/adminUserService.ts';
+import { buildAdminSettings } from '../core/services/admin/adminSettingsService.ts';
 import { AUTH_ERROR, AuthError } from '../core/services/authService.ts';
 import { FileServiceError } from '../core/services/fileService.ts';
 import { toPublicUser, toSessionUser, type PublicUser } from '../core/types/models.ts';
@@ -690,79 +691,7 @@ export function registerIpc(context: IpcContext): void {
     return { imported: true, certificate };
   });
 
-  const adminSettings = () => {
-    const aiAdmin = context.services.ai.adminSettings() as {
-      enabled: boolean;
-      mode: 'admin' | 'user';
-      baseUrl: string;
-      model: string;
-      hasApiKey: boolean;
-      apiKeyMasked: string;
-      dailyLimit: number;
-    };
-    return {
-      allowPublicRegistration: context.services.settings.get('allow_public_registration'),
-      trustProxy: context.services.settings.get('network.trustProxy'),
-      security: {
-        mode: context.services.settings.get('security.mode'),
-        enabled: context.services.settings.get('security.lockEnabled'),
-        maxLoginFailures: context.services.settings.get('security.maxLoginFailures'),
-        lockBaseMinutes: context.services.settings.get('security.lockBaseMinutes'),
-        lockMaxMinutes: context.services.settings.get('security.lockMaxMinutes'),
-        ipLoginLimit: context.services.settings.get('security.ipLoginLimit'),
-        ipWindowMinutes: context.services.settings.get('security.ipWindowMinutes'),
-        ipLockMinutes: context.services.settings.get('security.ipLockMinutes'),
-        simpleRegisterLimit: context.services.settings.get('security.simpleRegisterLimit'),
-        renameEnabled: context.services.settings.get('security.renameEnabled'),
-        renameLimit: context.services.settings.get('security.renameLimit'),
-        renameWindowHours: context.services.settings.get('security.renameWindowHours'),
-        renameLockHours: context.services.settings.get('security.renameLockHours'),
-        capEnabled: context.services.settings.get('security.capEnabled'),
-        capLoginFailures: context.services.settings.get('security.capLoginFailures'),
-        capRegistrationLimit: context.services.settings.get('security.capRegistrationLimit'),
-        capShareLimit: context.services.settings.get('security.capShareLimit'),
-        policy: context.services.settings.get('security.policy'),
-        adminIdleEnabled: context.services.settings.get('security.adminIdleEnabled'),
-        adminIdleMinutes: context.services.settings.get('security.adminIdleMinutes'),
-        lowLevel: context.services.settings.getLowLevel(),
-      },
-      resources: {
-        maxConcurrentExtractions: context.services.settings.get('maxConcurrentExtractions'),
-        maxConcurrentScans: context.services.settings.get('maxConcurrentScans'),
-        maxConcurrentHeavyPreviews: context.services.settings.get('maxConcurrentHeavyPreviews'),
-        maxConcurrentPreviewsPerUser: context.services.settings.get('maxConcurrentPreviewsPerUser'),
-        maxLogSizeMB: context.services.settings.get('maxLogSizeMB'),
-      },
-      permissions: {
-        allowUserPreviewImage: context.services.settings.get('allow_user_preview_image'),
-        allowUserPreviewVideo: context.services.settings.get('allow_user_preview_video'),
-        allowUserPreviewPdf: context.services.settings.get('allow_user_preview_pdf'),
-        allowUserPreviewOffice: context.services.settings.get('allow_user_preview_office'),
-        allowUserExtract: context.services.settings.get('allow_user_extract'),
-        allowUserScan: context.services.settings.get('allow_user_scan'),
-      },
-      scan: {
-        enabled: context.services.settings.get('scan.enabled'),
-        mode: context.services.settings.get('scan.mode'),
-        apiKey: context.services.settings.get('scan.api_key'),
-        localPath: context.services.settings.get('scan.local_path'),
-      },
-      ai: {
-        enabled: aiAdmin.enabled,
-        mode: aiAdmin.mode,
-        baseUrl: aiAdmin.baseUrl,
-        model: aiAdmin.model,
-        hasApiKey: aiAdmin.hasApiKey,
-        apiKeyMasked: aiAdmin.apiKeyMasked,
-        dailyLimit: aiAdmin.dailyLimit,
-      },
-      hosting: {
-        enabled: context.services.settings.get('hosting.enabled'),
-        baseUrl: context.services.settings.get('hosting.base_url'),
-      },
-      mail: context.services.mail.adminSettings() as AdminSettings['mail'],
-    };
-  };
+  const adminSettings = () => buildAdminSettings(context.services);
 
   register(IPC.settingsGet, z.undefined(), () => adminSettings());
 
@@ -818,6 +747,13 @@ export function registerIpc(context: IpcContext): void {
       return adminSettings();
     },
   );
+
+  register(IPC.settingsSetAdminWeb, z.object({ intranetOnly: z.boolean() }), (input) => {
+    const admin = actor();
+    context.services.settings.set('adminWeb.intranetOnly', input.intranetOnly, admin.id);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'settings.admin-web', result: 'success', targetType: 'settings', detail: input });
+    return adminSettings();
+  });
 
   register(IPC.settingsSetSecurity, z.object({
     mode: z.enum(['simple', 'advanced']),

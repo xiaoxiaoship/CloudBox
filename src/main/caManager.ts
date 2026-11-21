@@ -13,7 +13,6 @@ import {
 import { X509Certificate } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { app } from 'electron';
 import * as mkcert from '@mkcert/node';
 import forge from 'node-forge';
 import type { SettingsService } from '../core/services/settingsService.ts';
@@ -69,14 +68,18 @@ export class CaManager {
 
   private readonly tls: TlsManager;
   private readonly settings: SettingsService;
+  private readonly isPackaged: boolean;
+  private readonly appPath: string;
 
-  constructor(options: { dataDir: string; tls: TlsManager; settings: SettingsService }) {
+  constructor(options: { dataDir: string; tls: TlsManager; settings: SettingsService; isPackaged?: boolean; appPath?: string }) {
     this.caDir = path.join(options.dataDir, 'config', 'ssl', 'ca');
     this.serverDir = path.join(options.dataDir, 'config', 'ssl', 'server');
     this.caCertPath = path.join(this.caDir, 'rootCA.pem');
     this.caKeyPath = path.join(this.caDir, 'rootCA-key.pem');
     this.tls = options.tls;
     this.settings = options.settings;
+    this.isPackaged = options.isPackaged ?? false;
+    this.appPath = options.appPath ?? process.cwd();
   }
 
   getCAInfo(): CaInfo {
@@ -317,7 +320,7 @@ export class CaManager {
   }
 
   private async generate(options: GenerateOptions, caroot: string): Promise<void> {
-    if (!app.isPackaged) {
+    if (!this.isPackaged) {
       await mkcert.generate({
         hosts: options.hosts,
         certFile: options.certFile,
@@ -343,7 +346,7 @@ export class CaManager {
   }
 
   private async runInstall(): Promise<void> {
-    if (!app.isPackaged) {
+    if (!this.isPackaged) {
       await this.withCaroot(async () => mkcert.install());
       return;
     }
@@ -351,7 +354,7 @@ export class CaManager {
   }
 
   private async runUninstall(): Promise<void> {
-    if (!app.isPackaged) {
+    if (!this.isPackaged) {
       await this.withCaroot(async () => mkcert.uninstall());
       return;
     }
@@ -373,7 +376,7 @@ export class CaManager {
   }
 
   private async runBinary(args: string[], caroot: string): Promise<void> {
-    const binary = resolveMkcertBinary();
+    const binary = resolveMkcertBinary(this.appPath);
     if (binary === null) {
       throw new Error(
         '未找到 mkcert 可执行文件。请将 mkcert.exe 放入 resources/bin/ 后重新打包。',
@@ -444,9 +447,10 @@ function parseExtraHosts(raw: string): string[] {
   return result;
 }
 
-function resolveMkcertBinary(): string | null {  const candidates = [
-    path.join(process.resourcesPath, 'bin', 'mkcert.exe'),
-    path.join(app.getAppPath(), 'resources', 'bin', 'mkcert.exe'),
+function resolveMkcertBinary(appPath: string): string | null {
+  const candidates = [
+    path.join(process.resourcesPath ?? process.cwd(), 'bin', 'mkcert.exe'),
+    path.join(appPath, 'resources', 'bin', 'mkcert.exe'),
   ];
 
   for (const candidate of candidates) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { AdminUserService } from '../../src/core/services/adminUserService.ts';
+import { AdminUserService } from '../../src/core/services/admin/adminUserService.ts';
 import { createTestServer, TestClient, type TestServer } from '../helpers/testServer.ts';
 
 describe('admin unlock user', () => {

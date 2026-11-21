@@ -114,6 +114,7 @@ export interface ClientCertExport {
 export interface AdminSettings {
   allowPublicRegistration: boolean;
   trustProxy: boolean;
+  adminWeb: { intranetOnly: boolean };
   security: {
     mode: 'simple' | 'advanced';
     enabled: boolean;
@@ -274,7 +275,7 @@ export type Result<T> = { ok: true; data: T } | { ok: false; code: string; messa
 export interface CloudboxApi {
   auth: {
     status: () => Promise<Result<AdminStatus>>;
-    setup: (input: { username: string; password: string }) => Promise<Result<AdminUser>>;
+    setup: (input: { username: string; password: string; token?: string }) => Promise<Result<AdminUser>>;
     login: (input: { username: string; password: string }) => Promise<Result<AdminUser>>;
     logout: () => Promise<Result<null>>;
     changePassword: (input: {
@@ -333,6 +334,7 @@ export interface CloudboxApi {
       input: { enabled: boolean },
     ) => Promise<Result<AdminSettings>>;
     setTrustProxy: (input: { enabled: boolean }) => Promise<Result<AdminSettings>>;
+    setAdminWeb: (input: { intranetOnly: boolean }) => Promise<Result<AdminSettings>>;
     setSecurity: (input: AdminSettings['security']) => Promise<Result<AdminSettings>>;
     setResources: (input: AdminSettings['resources']) => Promise<Result<AdminSettings>>;
     resetDefaults: () => Promise<Result<AdminSettings>>;
@@ -466,6 +468,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSetPublicRegistration: 'settings:set-public-registration',
   settingsSetTrustProxy: 'settings:set-trust-proxy',
+  settingsSetAdminWeb: 'settings:set-admin-web',
   settingsSetSecurity: 'settings:set-security',
   settingsSetResources: 'settings:set-resources',
   settingsResetDefaults: 'settings:reset-defaults',

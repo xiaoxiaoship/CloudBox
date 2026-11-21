@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AdminApiProvider } from './api/AdminApiContext.tsx';
 import './styles.css';
 import './i18n.ts';
 
@@ -9,6 +10,8 @@ if (!container) throw new Error('缺少 #root 挂载点');
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <AdminApiProvider>
+      <App />
+    </AdminApiProvider>
   </StrictMode>,
 );

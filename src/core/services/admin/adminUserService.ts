@@ -1,24 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
-import type { Db } from '../db/connection.ts';
-import type { QuotaRepository } from '../db/repositories/quotaRepo.ts';
-import type { SessionRepository } from '../db/repositories/sessionRepo.ts';
-import type { UserRepository } from '../db/repositories/userRepo.ts';
+import type { Db } from '../../db/connection.ts';
+import type { QuotaRepository } from '../../db/repositories/quotaRepo.ts';
+import type { SessionRepository } from '../../db/repositories/sessionRepo.ts';
+import type { UserRepository } from '../../db/repositories/userRepo.ts';
 import {
   checkPasswordStrength,
   hashPassword,
-} from '../security/password.ts';
+} from '../../security/password.ts';
 import {
   toPublicUser,
   type PublicUser,
   type UserRecord,
   type UserStatus,
-} from '../types/models.ts';
-import type { AuthService } from './authService.ts';
-import type { AuditService } from './auditService.ts';
-import type { SettingsService } from './settingsService.ts';
-import type { UserIpRepository, UserIpRecord } from '../db/repositories/userIpRepo.ts';
+} from '../../types/models.ts';
+import type { AuthService } from '../authService.ts';
+import type { AuditService } from '../auditService.ts';
+import type { SettingsService } from '../settingsService.ts';
+import type { UserIpRepository, UserIpRecord } from '../../db/repositories/userIpRepo.ts';
 
 export interface ManagedUser extends PublicUser {
   quotaBytes: number | null;

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PluginInfo } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { Modal, type ToastState } from './Dialog.tsx';
 import { AlertIcon, PlugIcon, SettingsIcon, Spinner, TrashIcon } from './Icons.tsx';
 
@@ -12,6 +13,7 @@ interface PluginsPageProps {
 const CARD = 'rounded-2xl border border-slate-800 bg-slate-900/60 p-4';
 
 export function PluginsPage({ notify }: PluginsPageProps) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +112,8 @@ export function PluginsPage({ notify }: PluginsPageProps) {
           <button
             type="button"
             onClick={() => void importPlugin()}
-            disabled={pending !== null}
+            disabled={pending !== null || isWebAdmin}
+            title={isWebAdmin ? 'Web 管理端请将插件放入服务器插件目录' : undefined}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60"
           >
             {pending === 'import' ? <Spinner className="h-4 w-4" /> : null}

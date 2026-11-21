@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type { FrpStatus, UserIpHistoryEntry, UserSummary, UserStatus } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
 import {
   HardDriveIcon,
@@ -30,6 +31,7 @@ interface UsersPageProps {
 }
 
 export function UsersPage({ notify }: UsersPageProps) {
+  const api = useAdminApi();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -498,6 +500,7 @@ const PRIMARY_BUTTON =
   'inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60';
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> }) {
+  const api = useAdminApi();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [unlimited, setUnlimited] = useState(false);
@@ -620,6 +623,7 @@ function QuotaDialog({
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
+  const api = useAdminApi();
   const initial = bytesToInput(user.quotaBytes);
   const [unlimited, setUnlimited] = useState(user.quotaBytes === null);
   const [value, setValue] = useState(initial.value || '5');
@@ -717,6 +721,7 @@ function ResetPasswordDialog({
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
+  const api = useAdminApi();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [pending, setPending] = useState(false);
@@ -801,6 +806,7 @@ function DeleteUserDialog({
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
+  const api = useAdminApi();
   const [deleteFiles, setDeleteFiles] = useState(true);
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);

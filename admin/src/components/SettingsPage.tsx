@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { autoT as t } from '../i18n.ts';
 import { CollapsibleSection } from './CollapsibleSection.tsx';
-import type { FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import type { AdminSettings, FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
+import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
 import { SecurityPolicyPanel } from './SecurityPolicyPanel.tsx';
 import { LowLevelSecurityPanel } from './LowLevelSecurityPanel.tsx';
@@ -29,6 +30,7 @@ export function SettingsPage({
   notify,
   onPasswordChanged,
 }: SettingsPageProps) {
+  const api = useAdminApi();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,6 +80,8 @@ export function SettingsPage({
     adminIdleMinutes: 30,
     lowLevel: { ...DEFAULT_LOW_LEVEL_SECURITY },
   });
+  const [adminWeb, setAdminWeb] = useState<AdminSettings['adminWeb']>({ intranetOnly: true });
+  const [adminWebConfirmOpen, setAdminWebConfirmOpen] = useState(false);
   const [securityPending, setSecurityPending] = useState(false);
   const [securityModeSnapshot, setSecurityModeSnapshot] = useState<'simple' | 'advanced'>('simple');
   const [modeChangeConfirm, setModeChangeConfirm] = useState(false);
@@ -168,6 +172,7 @@ export function SettingsPage({
         setPermissions(settings.permissions);
         setSecurity(settings.security);
         setSecurityModeSnapshot(settings.security.mode);
+        setAdminWeb(settings.adminWeb);
         setScan(settings.scan);
         setAi(settings.ai);
         setHosting(settings.hosting);
@@ -627,6 +632,23 @@ export function SettingsPage({
           <label className="mt-3 block text-[11px] text-slate-500">空闲超时（分钟）
             <input type="number" min={1} max={1440} value={security.adminIdleMinutes} disabled={!security.adminIdleEnabled} onChange={(event) => setSecurity((current) => ({ ...current, adminIdleMinutes: Math.max(1, Math.min(1440, Number(event.target.value) || 30)) }))} className={`${INPUT_CLASS} max-w-48 disabled:opacity-50`} />
           </label>
+        </div>
+        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-slate-200">管理 Web 仅限内网访问</p>
+              <p className="mt-1 text-xs text-slate-500">关闭后 1250 管理端将允许非内网地址访问，存在较高暴露风险。</p>
+            </div>
+            <button type="button" role="switch" aria-checked={adminWeb.intranetOnly} onClick={() => {
+              if (adminWeb.intranetOnly) { setAdminWebConfirmOpen(true); return; }
+              void (async () => {
+                try { const next = await call(api.settings.setAdminWeb({ intranetOnly: true })); setAdminWeb(next.adminWeb); notify('success', '管理端已恢复仅内网访问'); }
+                catch (cause) { notify('error', errorMessage(cause)); }
+              })();
+            }} className={`relative h-7 w-12 shrink-0 rounded-full transition ${adminWeb.intranetOnly ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${adminWeb.intranetOnly ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
         </div>
       </CollapsibleSection>
 
@@ -1168,6 +1190,8 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('data')}
+            disabled={isWebAdmin}
+            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1182,7 +1206,7 @@ export function SettingsPage({
         <button
           type="button"
           onClick={() =>
-            void call(api.app.openDataDir()).catch((error: unknown) =>
+            isWebAdmin ? undefined : void call(api.app.openDataDir()).catch((error: unknown) =>
               notify('error', errorMessage(error)),
             )
           }
@@ -1201,6 +1225,8 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('storage')}
+            disabled={isWebAdmin}
+            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1215,7 +1241,7 @@ export function SettingsPage({
         <button
           type="button"
           onClick={() =>
-            void call(api.app.openStorageDir()).catch((error: unknown) =>
+            isWebAdmin ? undefined : void call(api.app.openStorageDir()).catch((error: unknown) =>
               notify('error', errorMessage(error)),
             )
           }
@@ -1234,6 +1260,8 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('plugins')}
+            disabled={isWebAdmin}
+            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1248,7 +1276,7 @@ export function SettingsPage({
         <button
           type="button"
           onClick={() =>
-            void call(api.app.openPluginsDir()).catch((error: unknown) =>
+            isWebAdmin ? undefined : void call(api.app.openPluginsDir()).catch((error: unknown) =>
               notify('error', errorMessage(error)),
             )
           }
@@ -1258,6 +1286,16 @@ export function SettingsPage({
         </button>
       </section>
 
+      {adminWebConfirmOpen ? (
+        <ConfirmDialog
+          title="关闭管理 Web 内网限制？"
+          description="关闭后，任何能访问 1250 端口的设备都可以打开管理员登录页。请确认已配置防火墙、HTTPS 或可信反向代理；否则强烈不建议继续。"
+          confirmLabel="我了解风险，关闭限制"
+          danger
+          onClose={() => setAdminWebConfirmOpen(false)}
+          onConfirm={async () => { const next = await call(api.settings.setAdminWeb({ intranetOnly: false })); setAdminWeb(next.adminWeb); setAdminWebConfirmOpen(false); notify('success', '管理端已允许非内网访问'); }}
+        />
+      ) : null}
       {resetConfirm ? (
         <ConfirmDialog title="恢复默认设置？" description="将重置安全、查杀、权限、邮件、资源配布等配置，并清除当前封禁和计数；不会删除用户、文件或数据库。" confirmLabel="确认恢复" danger onClose={() => setResetConfirm(false)} onConfirm={async () => { try { const next = await call(api.settings.resetDefaults()); setSecurity(next.security); setSecurityModeSnapshot(next.security.mode); setResources(next.resources); setPermissions(next.permissions); setScan(next.scan); setResetConfirm(false); notify('success','已恢复默认设置'); } catch (cause) { notify('error', errorMessage(cause)); } }} />
       ) : null}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { Modal } from './Dialog.tsx';
 
 interface CountEntry {
@@ -11,6 +12,7 @@ interface CountEntry {
 }
 
 export function SecurityCountsDialog({ onClose, notify }: { onClose: () => void; notify: (kind: 'success' | 'error', message: string) => void }) {
+  const api = useAdminApi();
   const [counts, setCounts] = useState<CountEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const load = async (): Promise<void> => {

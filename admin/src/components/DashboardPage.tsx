@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ServerStatus, UserSummary } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import type { ToastState } from './Dialog.tsx';
 import {
   AlertIcon,
@@ -22,6 +23,7 @@ interface DashboardPageProps {
 }
 
 export function DashboardPage({ server, dataDir, refreshServer, notify }: DashboardPageProps) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [portInput, setPortInput] = useState('');

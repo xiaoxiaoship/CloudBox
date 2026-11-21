@@ -12,7 +12,7 @@ function invoke<T>(channel: string, payload?: unknown): Promise<Result<T>> {
 const api: CloudboxApi = {
   auth: {
     status: () => invoke(IPC.authStatus),
-    setup: (input) => invoke(IPC.authSetup, input),
+    setup: (input) => invoke(IPC.authSetup, { username: input.username, password: input.password }),
     login: (input) => invoke(IPC.authLogin, input),
     logout: () => invoke(IPC.authLogout),
     changePassword: (input) => invoke(IPC.authChangePassword, input),
@@ -53,6 +53,7 @@ const api: CloudboxApi = {
     get: () => invoke(IPC.settingsGet),
     setPublicRegistration: (input) => invoke(IPC.settingsSetPublicRegistration, input),
     setTrustProxy: (input) => invoke(IPC.settingsSetTrustProxy, input),
+    setAdminWeb: (input) => invoke(IPC.settingsSetAdminWeb, input),
     setSecurity: (input) => invoke(IPC.settingsSetSecurity, input),
     setResources: (input) => invoke(IPC.settingsSetResources, input),
     resetDefaults: () => invoke(IPC.settingsResetDefaults),

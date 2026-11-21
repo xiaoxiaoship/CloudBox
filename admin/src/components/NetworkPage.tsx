@@ -8,7 +8,8 @@ import type {
   FrpStatus,
   ServerStatus,
 } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { ConfirmDialog, type ToastState } from './Dialog.tsx';
 import {
   AlertIcon,
@@ -36,6 +37,7 @@ const SECONDARY_BUTTON =
   'inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50';
 
 export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps) {
+  const api = useAdminApi();
   const [protocol, setProtocol] = useState<'http' | 'https'>('http');
   const [portInput, setPortInput] = useState('');
   const [applying, setApplying] = useState(false);

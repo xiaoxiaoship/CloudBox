@@ -39,12 +39,13 @@ describe('database connection & migrations', () => {
         '011_security_bans.sql',
         '012_policy_resets.sql',
         '013_policy_counts.sql',
+        '014_admin_sessions.sql',
       ]);
-      assert.equal(first.version, 13);
+      assert.equal(first.version, 14);
 
       const second = migrate(db);
       assert.deepEqual(second.applied, []);
-      assert.equal(second.version, 13);
+      assert.equal(second.version, 14);
 
       const tables = db
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -62,6 +63,7 @@ describe('database connection & migrations', () => {
         'user_ai_settings',
         'user_hosting',
         'schema_migrations',
+        'admin_sessions',
       ]) {
         assert.ok(names.includes(expected), `缺少表 ${expected}`);
       }
@@ -82,7 +84,7 @@ describe('database connection & migrations', () => {
       assert.equal(map.get('server.online'), 'false');
       assert.equal(map.get('server.port'), '8686');
       assert.equal(map.get('upload.maxFileBytes'), '2147483648');
-      assert.equal(db.pragma('user_version', { simple: true }), 13);
+      assert.equal(db.pragma('user_version', { simple: true }), 14);
     } finally {
       closeDatabase(db);
     }

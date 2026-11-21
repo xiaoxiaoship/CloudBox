@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdminStatus, AdminUser, ServerStatus } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import type { PageKey } from '../App.tsx';
 import { applyAdminTheme, readAdminTheme, saveAdminTheme, type AdminTheme } from '../lib/theme.ts';
 import type { ToastState } from './Dialog.tsx';
@@ -53,6 +54,7 @@ interface ShellProps {
 }
 
 export function Shell({ status, user, page, onNavigate, onLogout, notify }: ShellProps) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [server, setServer] = useState<ServerStatus | null>(null);
   const [speed, setSpeed] = useState({ up: 0, down: 0 });

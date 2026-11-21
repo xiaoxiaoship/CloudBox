@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AdminStatus } from '../../src/shared/ipcTypes.ts';
-import { api, bridgeAvailable, call, errorMessage } from './api/ipc.ts';
+import { bridgeAvailable, call, errorMessage } from './api/ipc.ts';
+import { useAdminApi } from './api/AdminApiContext.tsx';
 import { autoT as t } from './i18n.ts';
 import { installAdminTextFallback } from './i18nText.ts';
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -12,6 +13,7 @@ import { AlertIcon, CloudIcon, Spinner } from './components/Icons.tsx';
 export type PageKey = 'dashboard' | 'users' | 'files' | 'network' | 'plugins' | 'settings';
 
 export default function App() {
+  const api = useAdminApi();
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [booting, setBooting] = useState(true);
   const [fatal, setFatal] = useState<string | null>(null);

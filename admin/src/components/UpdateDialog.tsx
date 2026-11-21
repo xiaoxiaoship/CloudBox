@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UpdateCheckResult } from '../../../src/shared/ipcTypes.ts';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { Modal } from './Dialog.tsx';
 import { Spinner } from './Icons.tsx';
 
@@ -19,6 +20,7 @@ interface AppEnvironment {
 const REPO_URL = 'https://github.com/xiaoxiaoship/CloudBox';
 
 export function UpdateDialog({ currentVersion, onClose, onFoundUpdate }: UpdateDialogProps) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<UpdateCheckResult | null>(null);

@@ -4,7 +4,7 @@ import { app } from 'electron';
 import { createCoreServices, type CoreServices } from '../core/container.ts';
 import { closeDatabase, openDatabase } from '../core/db/connection.ts';
 import { migrate } from '../core/db/migrator.ts';
-import { AdminUserService } from '../core/services/adminUserService.ts';
+import { AdminUserService } from '../core/services/admin/adminUserService.ts';
 import { AdminSession } from './adminSession.ts';
 import { CaManager } from './caManager.ts';
 import { FrpService } from './frpService.ts';
@@ -79,7 +79,7 @@ export function createMainContext(): MainContext {
 
   const session = new AdminSession(services.auth);
   const tls = new TlsManager(dataDir);
-  const ca = new CaManager({ dataDir, tls, settings: services.settings });
+  const ca = new CaManager({ dataDir, tls, settings: services.settings, isPackaged: app.isPackaged, appPath: app.getAppPath() });
 
   // “在线模式”只是运行时状态：每次启动都从离线开始，只有显式打开才监听端口。
   const configuredPort = services.settings.get('server.port');

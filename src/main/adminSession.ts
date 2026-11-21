@@ -1,4 +1,4 @@
-import { ADMIN_ERROR, AdminError } from '../core/services/adminUserService.ts';
+import { ADMIN_ERROR, AdminError } from '../core/services/admin/adminUserService.ts';
 import { AUTH_ERROR, AuthError, type AuthService } from '../core/services/authService.ts';
 import { toPublicUser, type PublicUser } from '../core/types/models.ts';
 

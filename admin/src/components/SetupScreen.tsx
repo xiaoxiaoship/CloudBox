@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { CloudIcon, Spinner } from './Icons.tsx';
 
 const INPUT_CLASS =
   'mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-950';
 
 export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
@@ -29,7 +31,8 @@ export function SetupScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
     setPending(true);
     setError(null);
     try {
-      await call(api.auth.setup({ username: username.trim(), password }));
+      const token = new URLSearchParams(window.location.search).get('token') ?? undefined;
+      await call(api.auth.setup({ username: username.trim(), password, token }));
       await onSuccess();
     } catch (cause) {
       setError(errorMessage(cause));

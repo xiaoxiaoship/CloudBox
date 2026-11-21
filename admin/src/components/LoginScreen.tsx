@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage } from '../api/ipc.ts';
+import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { CloudIcon, EyeIcon, EyeOffIcon, Spinner } from './Icons.tsx';
 
 const INPUT_CLASS =
@@ -9,6 +10,7 @@ const INPUT_CLASS =
 const LABEL_CLASS = 'block text-sm font-medium text-slate-300';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => Promise<void> }) {
+  const api = useAdminApi();
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
