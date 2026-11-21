@@ -20,6 +20,7 @@ try {
   $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
   if ($null -eq $iscc) {
     $iscc = Get-ChildItem 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' -ErrorAction SilentlyContinue
+    if ($null -eq $iscc) { $iscc = Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe') -ErrorAction SilentlyContinue }
   }
   if ($null -eq $iscc) { throw 'Inno Setup 6 ISCC.exe not found' }
 

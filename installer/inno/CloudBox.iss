@@ -40,7 +40,7 @@ Source: "..\..\node_modules\*"; DestDir: "{app}\node_modules"; Flags: recursesub
 Source: "..\..\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs
 Source: "..\..\package.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\node.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\winsw\CloudBox.xml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\winsw\CloudBoxService.xml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\winsw\CloudBoxService.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

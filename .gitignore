@@ -34,3 +34,7 @@ Desktop.ini
 /*.gif
 /*.bmp
 
+
+# generated/external installer prerequisites
+/node.exe
+/installer/winsw/CloudBoxService.exe
