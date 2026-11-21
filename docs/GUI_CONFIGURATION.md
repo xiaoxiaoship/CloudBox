@@ -1,7 +1,7 @@
 # CloudBox GUI 配置指南 / GUI Configuration Guide
 
-> 适用版本：1.0.1  
-> Applies to: 1.0.1
+> 适用版本：1.0.2  
+> Applies to: 1.0.2
 
 ## 本文目录 / Contents
 

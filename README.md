@@ -2,7 +2,7 @@
 
 CloudBox 是一个运行在 Windows 本机的小型私有网盘与控制台：文件保存在自己的电脑或服务器上，局域网用户通过浏览器访问，需要公网访问时可在 GUI 内配置 frp。
 
-当前版本：**1.0.1**
+当前版本：**1.0.2**
 
 ## 功能亮点
 
@@ -179,7 +179,7 @@ CloudBox 的运行不依赖 DSH。DSH 是本项目开发阶段使用的开源智
 
 CloudBox is a small private network drive and control panel for Windows. Files stay on your own computer or server, LAN users access them through a browser, and frp can be configured from the GUI when public access is needed.
 
-Current version: **1.0.1**
+Current version: **1.0.2**
 
 ## Highlights
 
