@@ -85,7 +85,9 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 
 - 检查到新版本后，管理端会后台下载匹配的安装包并显示进度。
 - 下载完成后自动执行静默覆盖安装，随后重启 GUI 或 Windows 服务。
+- **当前 v1.0.2 的自动更新只完成了下载/进度/SHA/状态机测试，真实旧版本到新版本的安装/重启尚未端到端验证。**
 - Server 更新使用 `CloudBox-Server` 安装包；GUI 使用 `CloudBox-Setup` 安装包。
+- Server 版支持 CLI 静默卸载：默认保留数据；加 `/DELETEAPPDATA` 才删除默认目录和 `cloudbox-paths.json` 记录的自定义目录。
 - 卸载时系统会询问是否删除用户数据：
   - 选择“否”：只移除程序、快捷方式和注册表项，保留 `%APPDATA%\cloudbox` / `%PROGRAMDATA%\CloudBox`。
   - 选择“是”：同时删除账号、文件与配置。
@@ -163,6 +165,7 @@ npm run e2e:electron
 - [架构与实现原理](docs/ARCHITECTURE.md)
 - [Windows Server 安装说明](installer/README.md)
 - [第三方组件声明](THIRD_PARTY_NOTICES.md)
+- [开发与交接指南](docs/HANDOVER.md)
 - [v1.0.2 静态审计报告](docs/AUDIT-v1.0.2.md)
 
 ## 开源项目与致谢
@@ -330,7 +333,9 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 
 - When an update is available, the admin downloads the matching installer in the background with progress.
 - After verification the installer runs silently and the GUI/service restarts.
+- **The v1.0.2 auto-updater has unit coverage for download/progress/SHA/state, but a real old-version-to-new-version install/restart has not yet been verified end-to-end.**
 - Server updates use the `CloudBox-Server` package; GUI updates use `CloudBox-Setup`.
+- Server supports CLI uninstall: default keeps data; `/DELETEAPPDATA` deletes defaults and custom paths recorded in `cloudbox-paths.json`.
 - The uninstaller asks whether to delete user data:
   - No: remove only the program, shortcuts and registry entries; keep `%APPDATA%\cloudbox` / `%PROGRAMDATA%\CloudBox`.
   - Yes: also delete accounts, files and configuration.
@@ -408,6 +413,7 @@ npm run e2e:electron
 - [Architecture and implementation](docs/ARCHITECTURE.md)
 - [Windows Server installation](installer/README.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [Development and handover guide](docs/HANDOVER.md)
 - [v1.0.2 static audit](docs/AUDIT-v1.0.2.md)
 
 ## Open-source projects
