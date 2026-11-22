@@ -1,9 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const root = process.cwd();
-const stage = path.join(root, 'release', 'server-stage');
+const stage = process.env.CLOUDBOX_SERVER_STAGE
+  ? path.resolve(process.env.CLOUDBOX_SERVER_STAGE)
+  : path.join(os.tmpdir(), 'CloudBoxStage');
 const required = ['dist/headless/index.mjs', 'dist/admin/index.html', 'dist/web/index.html', 'package.json'];
 for (const item of required) {
   if (!existsSync(path.join(root, item))) throw new Error(`missing build artifact: ${item}`);

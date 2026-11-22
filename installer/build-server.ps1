@@ -13,6 +13,9 @@ try {
   if (-not (Test-Path $winsw)) {
     throw "Missing WinSW binary: $winsw"
   }
+  $stage = Join-Path $env:TEMP 'CloudBoxStage'
+  $env:CLOUDBOX_SERVER_STAGE = $stage
+  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
   node scripts\prepare-server-stage.mjs
   if ($LASTEXITCODE -ne 0) { throw 'server staging failed' }
 
@@ -24,7 +27,7 @@ try {
   if ($null -eq $iscc) { throw 'Inno Setup 6 ISCC.exe not found' }
 
   $compiler = if ($iscc.Source) { $iscc.Source } else { $iscc.FullName }
-  & $compiler (Join-Path $PSScriptRoot 'inno\CloudBox.iss')
+  & $compiler "/DStageDir=$stage" (Join-Path $PSScriptRoot 'inno\CloudBox.iss')
   if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compile failed' }
 } finally {
   Pop-Location

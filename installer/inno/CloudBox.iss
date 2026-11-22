@@ -33,15 +33,15 @@ UninstallDisplayName=CloudBox Server
 WizardStyle=modern
 
 [Files]
-Source: "..\..\release\server-stage\dist\headless\*"; DestDir: "{app}\dist\headless"; Flags: recursesubdirs createallsubdirs
-Source: "..\..\release\server-stage\dist\admin\*"; DestDir: "{app}\dist\admin"; Flags: recursesubdirs createallsubdirs
-Source: "..\..\release\server-stage\dist\web\*"; DestDir: "{app}\dist\web"; Flags: recursesubdirs createallsubdirs
-Source: "..\..\release\server-stage\node_modules\*"; DestDir: "{app}\node_modules"; Flags: recursesubdirs createallsubdirs
-Source: "..\..\release\server-stage\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs
-Source: "..\..\release\server-stage\package.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\release\server-stage\node.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\release\server-stage\CloudBoxService.xml"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\..\release\server-stage\CloudBoxService.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\dist\headless\*"; DestDir: "{app}\dist\headless"; Flags: recursesubdirs createallsubdirs
+Source: "{#StageDir}\dist\admin\*"; DestDir: "{app}\dist\admin"; Flags: recursesubdirs createallsubdirs
+Source: "{#StageDir}\dist\web\*"; DestDir: "{app}\dist\web"; Flags: recursesubdirs createallsubdirs
+Source: "{#StageDir}\node_modules\*"; DestDir: "{app}\node_modules"; Flags: recursesubdirs createallsubdirs
+Source: "{#StageDir}\resources\*"; DestDir: "{app}\resources"; Flags: recursesubdirs createallsubdirs
+Source: "{#StageDir}\package.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\node.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\CloudBoxService.xml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\CloudBoxService.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\CloudBox 管理端"; Filename: "http://127.0.0.1:1250/"

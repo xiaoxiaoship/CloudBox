@@ -8,7 +8,7 @@
 
 | 项目 | 证据 | 结论 |
 |---|---|---|
-| `installer/winsw/CloudBox.xml` | Inno Setup 引用的是 `CloudBoxService.xml`；构建脚本也只复制 `CloudBoxService.xml` | 旧配置副本，可删除候选 |
+| `installer/winsw/CloudBox.xml` | 已确认无引用，已删除 | 已清理 |
 | `installer/winsw/CloudBoxService.xml` | 被 `installer/inno/CloudBox.iss` 引用 | 保留 |
 | `admin/src/components/*.tsx` | 逐个检查 `admin/src` 引用 | 未发现完全无引用的组件 |
 | `src/admin-server/routes/*.ts` | 全部由 `src/admin-server/app.ts` 挂载 | 保留 |
@@ -102,8 +102,8 @@ security.capSecret           Cap 签名密钥
 
 | 依赖 | 证据 | 建议 |
 |---|---|---|
-| `mime-types` | 当前源码未发现直接 `import` / `require` | 删除候选；先确认没有间接动态引用 |
-| `@types/mime-types` | 仅服务于 `mime-types` 类型 | 随 `mime-types` 一起评估 |
+| `mime-types` | 已确认无直接引用，已从 `package.json` / lock 删除 | 已清理；`express` 等的传递依赖仍可能存在于 node_modules |
+| `@types/mime-types` | 已随 `mime-types` 删除 | 已清理 |
 
 ### 4.2 扫描误报，不应删除
 
@@ -178,8 +178,8 @@ admin/src/api/http.ts (错误信息)
 
 ## 7. 建议清理范围（待确认）
 
-1. 删除 `installer/winsw/CloudBox.xml` 旧副本。
-2. 评估移除 `mime-types` / `@types/mime-types`。
+1. ~~删除 `installer/winsw/CloudBox.xml` 旧副本~~（已完成）。
+2. ~~移除 `mime-types` / `@types/mime-types`~~（已完成）。
 3. 统一 `security.sessionTtlHours` 命名或文档说明。
 4. 另开 i18n 专项，覆盖 Settings/Network/Files/LowLevelSecurityPanel 的存量硬编码。
 5. 清理 `admin/src/api/http.ts` 中已废弃的 notImplemented 包装（只保留真正桌面专属项）。
