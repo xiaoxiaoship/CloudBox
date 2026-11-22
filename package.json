@@ -41,7 +41,7 @@
     "e2e:electron:network": "node scripts/e2e-electron-network.ts",
     "e2e:electron:directories": "node scripts/e2e-electron-directories.ts",
     "e2e:electron:plugins": "node scripts/e2e-electron-plugins.ts",
-    "dist:win": "npm run build:web && npm run build:desktop && electron-builder --win"
+    "dist:win": "npm run build:web && npm run build:desktop && node scripts/patch-nsis-uninstaller.mjs && electron-builder --win"
   },
   "dependencies": {
     "@cap.js/widget": "^0.1.63",
