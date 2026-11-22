@@ -26,9 +26,11 @@ if (!source.includes(anchor)) throw new Error('NSIS uninstaller anchor not found
 const prompt = `  !insertmacro setLinkVars
 
   ; CloudBox data-preservation prompt. A /S update skips it and keeps data.
+  ClearErrors
   \${GetParameters} $R9
   \${GetOptions} $R9 "/S" $R8
   \${If} \${Errors}
+    SetSilent normal
     MessageBox MB_YESNO|MB_ICONQUESTION "是否同时删除所有用户数据（账号、文件、配置）？$\\r$\\nDelete all user data (accounts, files, configuration)?" IDNO CloudBoxKeepDataDirect
     RMDir /r "$APPDATA\\cloudbox"
     ReadEnvStr $0 "PROGRAMDATA"
