@@ -32,8 +32,9 @@ const prompt = `  !insertmacro setLinkVars
   \${If} \${Errors}
     SetSilent normal
     MessageBox MB_YESNO|MB_ICONQUESTION "是否同时删除所有用户数据（账号、文件、配置）？$\\r$\\nDelete all user data (accounts, files, configuration)?" IDNO CloudBoxKeepDataDirect
-    RMDir /r "$APPDATA\\cloudbox"
     ReadEnvStr $0 "PROGRAMDATA"
+    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\\resources\\uninstall-cleanup.ps1" -GuiPaths "$APPDATA\\cloudbox\\cloudbox-paths.json" -DefaultAppData "$APPDATA\\cloudbox" -DefaultProgramData "$0\\CloudBox" -AppRoot "$INSTDIR" -DeleteDefaults'
+    RMDir /r "$APPDATA\\cloudbox"
     RMDir /r "$0\\CloudBox"
   \${EndIf}
   CloudBoxKeepDataDirect:

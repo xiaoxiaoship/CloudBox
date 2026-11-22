@@ -76,12 +76,27 @@ begin
   Result := '';
 end;
 
+procedure DeleteCloudBoxData;
+var
+  ResultCode: Integer;
+begin
+  Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{app}\resources\uninstall-cleanup.ps1') + '"' +
+    ' -GuiPaths "' + ExpandConstant('{userappdata}\cloudbox\cloudbox-paths.json') + '"' +
+    ' -ServerPaths "' + ExpandConstant('{commonappdata}\CloudBox\cloudbox-paths.json') + '"' +
+    ' -DefaultAppData "' + ExpandConstant('{userappdata}\cloudbox') + '"' +
+    ' -DefaultProgramData "' + ExpandConstant('{commonappdata}\CloudBox') + '"' +
+    ' -AppRoot "' + ExpandConstant('{app}') + '" -DeleteDefaults',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
+  DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if DeleteUserData and (CurUninstallStep = usPostUninstall) then
   begin
-    DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
-    DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+    DeleteCloudBoxData;
   end;
 end;
 
@@ -99,8 +114,7 @@ begin
     begin
       Exec('sc.exe', 'stop CloudBox', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(3000);
-      DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
-      DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+      DeleteCloudBoxData;
     end;
   end
   else
@@ -113,8 +127,7 @@ begin
       DeleteUserData := True;
       Exec('sc.exe', 'stop CloudBox', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       Sleep(3000);
-      DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
-      DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+      DeleteCloudBoxData;
     end;
   end;
 end;
