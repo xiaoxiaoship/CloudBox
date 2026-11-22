@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { UpdateService } from '../../src/core/services/updateService.ts';
 import { UpdateManager } from '../../src/core/services/updateManager.ts';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
 import type { SettingsService } from '../../src/core/services/settingsService.ts';
@@ -109,6 +112,42 @@ describe('system update route', () => {
       await manager.install();
       assert.equal(manager.status().phase, 'restarting');
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('downloads an installer locally with progress and verifies SHA-256', async () => {
+    const payload = Buffer.from('cloudbox-update-payload');
+    const digest = 'sha256:' + createHash('sha256').update(payload).digest('hex');
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': payload.length });
+      res.end(payload);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cloudbox-download-test-'));
+    try {
+      const update = new UpdateService({ settings: { get: () => 'owner/repo' } as unknown as SettingsService });
+      const destination = path.join(dir, 'setup.exe');
+      let last = 0;
+      await update.downloadAsset(
+        { url: `http://127.0.0.1:${port}/setup.exe`, size: payload.length, digest },
+        destination,
+        (done) => { last = done; },
+      );
+      assert.equal(last, payload.length);
+      assert.deepEqual(readFileSync(destination), payload);
+      await assert.rejects(
+        () => update.downloadAsset(
+          { url: `http://127.0.0.1:${port}/setup.exe`, size: payload.length, digest: 'sha256:' + '0'.repeat(64) },
+          path.join(dir, 'bad.exe'), () => {},
+        ),
+        /SHA-256/,
+      );
+    } finally {
+      server.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });
