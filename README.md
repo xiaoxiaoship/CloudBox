@@ -163,6 +163,7 @@ npm run e2e:electron
 - [架构与实现原理](docs/ARCHITECTURE.md)
 - [Windows Server 安装说明](installer/README.md)
 - [第三方组件声明](THIRD_PARTY_NOTICES.md)
+- [v1.0.2 静态审计报告](docs/AUDIT-v1.0.2.md)
 
 ## 开源项目与致谢
 
@@ -407,6 +408,7 @@ npm run e2e:electron
 - [Architecture and implementation](docs/ARCHITECTURE.md)
 - [Windows Server installation](installer/README.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [v1.0.2 static audit](docs/AUDIT-v1.0.2.md)
 
 ## Open-source projects
 
