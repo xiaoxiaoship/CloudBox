@@ -1,5 +1,7 @@
 # CloudBox v1.0.2 静态审计报告（只读）
 
+> [中文](AUDIT-v1.0.2.md) | [English](en/AUDIT-v1.0.2.md)
+
 - 审计日期：2026-11-22
 - 范围：`src/`、`admin/src/`、`web/src/`、`tests/`、`scripts/`、`installer/`、`build/`
 - 原则：**只扫描，不删除代码、不修改依赖**

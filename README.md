@@ -160,13 +160,13 @@ npm run e2e:electron
 
 ## 文档
 
-- [配置指南（GUI 与 Web 管理）](docs/GUI_CONFIGURATION.md)
-- [插件开发与 API](docs/PLUGIN_API.md)
-- [架构与实现原理](docs/ARCHITECTURE.md)
+- [配置指南（GUI 与 Web 管理）](docs/GUI_CONFIGURATION.md) / [English](docs/en/GUI_CONFIGURATION.md)
+- [插件开发与 API](docs/PLUGIN_API.md) / [English](docs/en/PLUGIN_API.md)
+- [架构与实现原理](docs/ARCHITECTURE.md) / [English](docs/en/ARCHITECTURE.md)
 - [Windows Server 安装说明](installer/README.md)
 - [第三方组件声明](THIRD_PARTY_NOTICES.md)
-- [开发与交接指南](docs/HANDOVER.md)
-- [v1.0.2 静态审计报告](docs/AUDIT-v1.0.2.md)
+- [开发与交接指南](docs/HANDOVER.md) / [English](docs/en/HANDOVER.md)
+- [v1.0.2 静态审计报告](docs/AUDIT-v1.0.2.md) / [English](docs/en/AUDIT-v1.0.2.md)
 
 ## 开源项目与致谢
 
@@ -408,13 +408,13 @@ npm run e2e:electron
 
 ## Documentation
 
-- [Configuration guide (GUI and Web Admin)](docs/GUI_CONFIGURATION.md)
-- [Plugin development and API](docs/PLUGIN_API.md)
-- [Architecture and implementation](docs/ARCHITECTURE.md)
+- [Configuration guide (GUI and Web Admin)](docs/en/GUI_CONFIGURATION.md)
+- [Plugin development and API](docs/en/PLUGIN_API.md)
+- [Architecture and implementation](docs/en/ARCHITECTURE.md)
 - [Windows Server installation](installer/README.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
-- [Development and handover guide](docs/HANDOVER.md)
-- [v1.0.2 static audit](docs/AUDIT-v1.0.2.md)
+- [Development and handover guide](docs/en/HANDOVER.md)
+- [v1.0.2 static audit](docs/en/AUDIT-v1.0.2.md)
 
 ## Open-source projects
 

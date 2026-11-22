@@ -1,5 +1,7 @@
 # CloudBox 架构与实现原理 / Architecture & Implementation
 
+> [中文](ARCHITECTURE.md) | [English](en/ARCHITECTURE.md)
+
 > 适用版本：1.0.2  
 > Applies to: 1.0.2
 

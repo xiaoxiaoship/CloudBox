@@ -1,5 +1,7 @@
 # CloudBox 配置指南 / Configuration Guide
 
+> [中文](GUI_CONFIGURATION.md) | [English](en/GUI_CONFIGURATION.md)
+
 > 适用版本：1.0.2  
 > Applies to: 1.0.2
 

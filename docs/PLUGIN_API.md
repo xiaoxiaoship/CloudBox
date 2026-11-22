@@ -1,5 +1,7 @@
 # CloudBox 插件开发与 API / Plugin Development & API
 
+> [中文](PLUGIN_API.md) | [English](en/PLUGIN_API.md)
+
 > 适用版本：1.0.2  
 > Applies to: 1.0.2
 
