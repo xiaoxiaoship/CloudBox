@@ -2,7 +2,12 @@ import { createRequire } from 'node:module';
 import type { Request, RequestHandler, Response } from 'express';
 import type { CoreServices } from '../../core/container.ts';
 
-const require = createRequire(process.cwd() + '/package.json');
+// In Electron the bundle lives inside app.asar, while process.cwd() may be the
+// portable extraction directory. Resolve from the bundle first; headless ESM
+// falls back to the install directory (which contains package.json).
+const require = createRequire(
+  typeof __filename === 'string' ? __filename : `${process.cwd()}/package.json`,
+);
 
 interface BuiltinRule {
   id: string;
