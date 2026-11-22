@@ -58,22 +58,48 @@ Filename: "{app}\CloudBoxService.exe"; Parameters: "stop"; Flags: runhidden wait
 Filename: "{app}\CloudBoxService.exe"; Parameters: "uninstall"; Flags: runhidden waituntilterminated
 
 [Code]
+var
+  DeleteUserData: Boolean;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
 
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  // Stop the existing WinSW service before replacing locked native modules.
+  Exec('sc.exe', 'stop CloudBox', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(3000);
+  Result := '';
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if DeleteUserData and (CurUninstallStep = usPostUninstall) then
+  begin
+    DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
+    DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+  end;
+end;
+
 function InitializeUninstall(): Boolean;
+var
+  ResultCode: Integer;
 begin
   Result := True;
-  // Silent update/uninstall must preserve data.
-  if not UninstallSilent then
+  // Always ask on an interactive system uninstall.
   begin
     if MsgBox('是否同时删除所有用户数据（账号、文件、配置）？' + #13#10 +
       'Delete all user data (accounts, files, configuration)?' + #13#10 +
       '选择“否”将保留 %APPDATA%\cloudbox 和 %PROGRAMDATA%\CloudBox，重装后可恢复。',
       mbConfirmation, MB_YESNO) = IDYES then
     begin
+      DeleteUserData := True;
+      Exec('sc.exe', 'stop CloudBox', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(3000);
       DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
       DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
     end;

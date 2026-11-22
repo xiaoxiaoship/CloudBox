@@ -6,7 +6,7 @@
  * and are shipped beside dist/headless by the Windows Server installer.
  */
 import { build } from 'esbuild';
-import { mkdirSync } from 'node:fs';
+import { cpSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 mkdirSync('dist/headless', { recursive: true });
@@ -21,4 +21,5 @@ await build({
   sourcemap: false,
   logLevel: 'info',
 });
+cpSync('src/core/db/migrations', 'dist/headless/migrations', { recursive: true });
 console.log(`headless bundle: ${path.resolve('dist/headless/index.mjs')}`);

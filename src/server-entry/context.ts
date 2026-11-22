@@ -55,7 +55,8 @@ export function createHeadlessContext(): HeadlessContext {
   mkdirSync(tempDir, { recursive: true });
 
   const db = openDatabase({ file: path.join(dataDir, 'cloudbox.db') });
-  migrate(db);
+  const bundledMigrations = path.join(process.cwd(), 'dist', 'headless', 'migrations');
+  migrate(db, existsSync(bundledMigrations) ? bundledMigrations : path.resolve('src/core/db/migrations'));
   const pluginChildScript = existsSync(path.resolve('dist/main/plugin-child.cjs'))
     ? path.resolve('dist/main/plugin-child.cjs')
     : path.resolve('src/plugin-runtime/child.cjs');
