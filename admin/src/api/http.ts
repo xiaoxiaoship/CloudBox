@@ -1,7 +1,9 @@
 import type {
   AdminStatus,
   AdminUser,
+  CertificateInfo,
   CloudboxApi,
+  PluginInfo,
   Result,
 } from '../../../src/shared/ipcTypes.ts';
 import type { AdminApi } from './types.ts';
@@ -97,18 +99,22 @@ interface AppInfo {
 export function createHttpAdminApi(): AdminApi {
   const auth: AdminApi['auth'] = {
     status: () => resultOf(async (): Promise<AdminStatus> => {
-      const info = await request<AppInfo>('/api/admin/app/info');
+      const health = await request<{ version: string }>('/api/admin/health');
       const status = await request<{ needsSetup: boolean; authenticated: boolean; user: AdminUser | null }>('/api/admin/auth/status');
+      const info = status.authenticated
+        ? await request<AppInfo>('/api/admin/app/info').catch(() => null)
+        : null;
       return {
         needsSetup: status.needsSetup,
         authenticated: status.authenticated,
         user: status.user,
-        version: info.version,
-        dataDir: info.dataDir,
-        storageDir: info.storageDir,
-        pluginsDir: info.pluginsDir,
+        version: health.version,
+        dataDir: info?.dataDir ?? '',
+        storageDir: info?.storageDir ?? '',
+        pluginsDir: info?.pluginsDir ?? '',
       };
     }),
+
     setup: (input) => resultOf(async () => {
       const payload = await request<{ user: AdminUser }>('/api/admin/setup', {
         method: 'POST',
@@ -127,7 +133,9 @@ export function createHttpAdminApi(): AdminApi {
       await request('/api/admin/auth/logout', { method: 'POST' });
       return null;
     }),
-    changePassword: () => notImplemented('auth.changePassword'),
+    changePassword: (input) => resultOf(() => request('/api/admin/auth/password', { method: 'POST', body: JSON.stringify(input) })),
+    sessions: () => resultOf(() => request('/api/admin/auth/sessions')),
+    revokeAllSessions: () => resultOf(() => request('/api/admin/auth/sessions', { method: 'DELETE' })),
   };
 
   const app: AdminApi['app'] = {
@@ -152,7 +160,7 @@ export function createHttpAdminApi(): AdminApi {
       return { saved: true, fileName };
     }),
     chooseDirectory: () => Promise.resolve({ ok: true, data: { selected: false } }),
-    changeDirectory: () => notImplemented('app.changeDirectory'),
+    changeDirectory: (input) => resultOf(() => request('/api/admin/app/directory', { method: 'POST', body: JSON.stringify(input) })),
     getStartup: () => Promise.resolve({ ok: true, data: { autoStart: false, startInTray: false } }),
     setStartup: () => Promise.resolve({ ok: true, data: { autoStart: false, startInTray: false } }),
   };
@@ -219,18 +227,25 @@ export function createHttpAdminApi(): AdminApi {
         await request(`/api/admin/users/${input.userId}`, { method: 'DELETE', body: JSON.stringify({ deleteFiles: input.deleteFiles }) });
         return null;
       }),
-      renameSelf: () => notImplemented('users.renameSelf'),
+      renameSelf: (input) => resultOf(() => request('/api/admin/users/me', { method: 'PATCH', body: JSON.stringify(input) })),
     },
     server: {
       status: () => resultOf(() => request('/api/admin/server/status')),
       setOnline: (input) => resultOf(() => request('/api/admin/server/online', { method: 'POST', body: JSON.stringify(input) })),
       setAutoStart: (input) => resultOf(() => request('/api/admin/server/auto-start', { method: 'POST', body: JSON.stringify(input) })),
-      getSchedule: () => notImplemented('server.getSchedule'),
-      setSchedule: () => notImplemented('server.setSchedule'),
+      getSchedule: () => resultOf(() => request('/api/admin/server/schedule')),
+      setSchedule: (input) => resultOf(() => request('/api/admin/server/schedule', { method: 'POST', body: JSON.stringify(input) })),
       setPort: (input) => resultOf(() => request('/api/admin/server/port', { method: 'POST', body: JSON.stringify(input) })),
       applyNetwork: (input) => resultOf(() => request('/api/admin/server/network', { method: 'POST', body: JSON.stringify(input) })),
       certificate: () => resultOf(() => request('/api/admin/ca/certificate')),
-      importCertificate: () => notImplemented('server.importCertificate'),
+      importCertificate: (input) => resultOf(async () => {
+        if (!input.content || !input.fileName) throw new HttpAdminError('ADMIN_FILE_REQUIRED', '请选择证书或私钥文件');
+        const certificate = await request<CertificateInfo>('/api/admin/ca/import', {
+          method: 'POST',
+          body: JSON.stringify({ kind: input.kind, fileName: input.fileName, content: input.content }),
+        });
+        return { imported: true, certificate };
+      }),
     },
     ca: {
       info: () => resultOf(() => request('/api/admin/ca/info')),
@@ -238,7 +253,16 @@ export function createHttpAdminApi(): AdminApi {
       install: () => resultOf(() => request('/api/admin/ca/install', { method: 'POST' })),
       uninstall: () => resultOf(() => request('/api/admin/ca/uninstall', { method: 'POST' })),
       issueServerCert: (input) => resultOf(() => request('/api/admin/ca/issue-server-cert', { method: 'POST', body: JSON.stringify(input) })),
-      exportClientCert: () => notImplemented('ca.exportClientCert'),
+      exportClientCert: () => resultOf(async () => {
+        const response = await fetch('/api/admin/ca/client-cert', { method: 'POST', credentials: 'same-origin', headers: { 'x-csrf-token': readCookie('admin_csrf') } });
+        if (!response.ok) throw new HttpAdminError('CA_EXPORT_FAILED', `导出失败（HTTP ${response.status}）`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url; anchor.download = 'cloudbox-client.p12'; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5_000);
+        return { saved: true, fileName: 'cloudbox-client.p12', password: 'changeit' };
+      }),
     },
     settings: {
       get: () => resultOf(() => request('/api/admin/settings')),
@@ -289,7 +313,25 @@ export function createHttpAdminApi(): AdminApi {
     app,
     plugins: {
       list: () => resultOf(() => request('/api/admin/plugins')),
-      import: () => notImplemented('plugins.import'),
+      import: (input) => resultOf(async () => {
+        if (!input?.content || !input.fileName) throw new HttpAdminError('ADMIN_FILE_REQUIRED', '请选择插件 ZIP');
+        const binary = atob(input.content);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        const response = await fetch('/api/admin/plugins/import', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/zip', 'x-plugin-filename': input.fileName, 'x-csrf-token': readCookie('admin_csrf') },
+          body: new Blob([bytes], { type: 'application/zip' }),
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          let message = `插件导入失败（HTTP ${response.status}）`;
+          try { const parsed = JSON.parse(text) as { message?: string }; if (parsed.message) message = parsed.message; } catch { /* ignore */ }
+          throw new HttpAdminError('PLUGIN_IMPORT_FAILED', message);
+        }
+        return JSON.parse(text) as PluginInfo[];
+      }),
       setEnabled: (input) => resultOf(() => request(`/api/admin/plugins/${input.name}/enabled`, { method: 'POST', body: JSON.stringify({ enabled: input.enabled }) })),
       setAllowWebOverride: (input) => resultOf(() => request(`/api/admin/plugins/${input.name}/web-override`, { method: 'POST', body: JSON.stringify({ allowed: input.allowed }) })),
       remove: (input) => resultOf(() => request(`/api/admin/plugins/${input.name}`, { method: 'DELETE' })),

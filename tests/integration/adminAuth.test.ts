@@ -45,6 +45,17 @@ function adminServices(t: TestServer) {
   return { auth, adminUsers, sessions };
 }
 
+function cookiesOf(response: Response): { cookie: string; csrf: string } {
+  const parts = (response.headers.get('set-cookie') ?? '')
+    .split(/,(?=\s*[^;]+=)/)
+    .map((part) => part.split(';')[0]!.trim())
+    .filter(Boolean);
+  return {
+    cookie: parts.join('; '),
+    csrf: parts.find((part) => part.startsWith('admin_csrf='))?.split('=')[1] ?? '',
+  };
+}
+
 describe('admin web authentication', () => {
   let t: TestServer | null = null;
   let server: import('node:http').Server | null = null;
@@ -106,10 +117,14 @@ describe('admin web authentication', () => {
         body: JSON.stringify({ token: ctx.token, username: 'webadmin', password: 'Passw0rd!' }),
       });
       assert.equal(setupResponse.status, 201);
+      const setupBody = (await setupResponse.json()) as { expiresAt: number };
+      const ttl = setupBody.expiresAt - Date.now();
+      assert.ok(ttl > 3.9 * 3_600_000 && ttl <= 4 * 3_600_000, 'admin session TTL should be 4 hours');
+      const setupCookies = cookiesOf(setupResponse);
 
       const login = await fetch(`${ctx.baseUrl}/api/admin/auth/login`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', cookie: setupCookies.cookie, 'x-csrf-token': setupCookies.csrf },
         body: JSON.stringify({ username: 'webadmin', password: 'Passw0rd!' }),
       });
       assert.equal(login.status, 200);
@@ -150,9 +165,18 @@ describe('admin web authentication', () => {
       });
       assert.equal(invalid.status, 403);
 
-      const login = await fetch(`${ctx.baseUrl}/api/admin/auth/login`, {
+      const noCsrf = await fetch(`${ctx.baseUrl}/api/admin/auth/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'alice', password: 'Passw0rd!' }),
+      });
+      assert.equal(noCsrf.status, 403);
+
+      const status = await fetch(`${ctx.baseUrl}/api/admin/auth/status`);
+      const statusCookies = cookiesOf(status);
+      const login = await fetch(`${ctx.baseUrl}/api/admin/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: statusCookies.cookie, 'x-csrf-token': statusCookies.csrf },
         body: JSON.stringify({ username: 'alice', password: 'Passw0rd!' }),
       });
       assert.equal(login.status, 401);

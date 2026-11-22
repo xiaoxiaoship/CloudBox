@@ -4,6 +4,7 @@ import { createAdminApp } from '../admin-server/app.ts';
 import { AdminServerService, type AdminServerRuntime } from '../core/services/admin/adminServerService.ts';
 import { AdminFrpService } from '../core/services/admin/adminFrpService.ts';
 import { AdminCaService } from '../core/services/admin/adminCaService.ts';
+import { AdminDirectoryService } from '../core/services/admin/adminDirectoryService.ts';
 import { isPortAvailable, type ServerController } from '../main/serverController.ts';
 import { logger } from '../shared/logger.ts';
 import {
@@ -39,6 +40,7 @@ export class ServiceController implements AdminServerRuntime {
   private readonly adminServerService: AdminServerService;
   private readonly adminFrpService: AdminFrpService;
   private readonly adminCaService: AdminCaService;
+  private readonly adminDirectoryService: AdminDirectoryService;
   private sessionCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(context: HeadlessContext, options: { adminPort?: number } = {}) {
@@ -47,6 +49,17 @@ export class ServiceController implements AdminServerRuntime {
     this.adminServerService = new AdminServerService({ settings: context.services.settings, runtime: this });
     this.adminFrpService = new AdminFrpService({ frp: context.frp, settings: context.services.settings });
     this.adminCaService = new AdminCaService({ ca: context.ca, tls: context.tls });
+    this.adminDirectoryService = new AdminDirectoryService({
+      services: context.services,
+      audit: context.services.audit,
+      paths: { dataDir: context.dataDir, storageDir: context.storageRoot, pluginsDir: context.pluginsDir },
+      runtime: {
+        stopUser: () => this.stopUser(),
+        startUser: () => this.startUser(),
+        getUserRunning: () => this.context.userServer.getStatus().running,
+        restartProcess: () => { void this.close().finally(() => process.exit(1)); },
+      },
+    });
   }
 
   getAdminPort(): number { return this.adminPort; }
@@ -56,6 +69,15 @@ export class ServiceController implements AdminServerRuntime {
   configureHttps(enabled: boolean): void { this.context.userServer.configureHttps(enabled); }
 
   configureMtls(enabled: boolean): void { this.context.userServer.configureMtls(enabled); }
+
+  getSchedule() { return this.context.automation.getSchedule(); }
+
+  setSchedule(input: { enabled: boolean; start: string; end: string }) {
+    this.context.services.settings.set('server.scheduleEnabled', input.enabled, null);
+    this.context.services.settings.set('server.scheduleStart', input.start, null);
+    this.context.services.settings.set('server.scheduleEnd', input.end, null);
+    return this.context.automation.getSchedule();
+  }
 
   get userServer(): ServerController {
     return this.context.userServer;
@@ -132,6 +154,7 @@ export class ServiceController implements AdminServerRuntime {
         storageDir: this.context.storageRoot,
         pluginsDir: this.context.pluginsDir,
       },
+      adminDirectory: this.adminDirectoryService,
     });
 
     const server = await new Promise<Server>((resolve, reject) => {

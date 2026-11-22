@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { FrpConfig, FrpStatus } from '../shared/ipcTypes.ts';
+import { ADMIN_WEB_PORT } from '../shared/admin.ts';
 import { buildFrpConfig } from './frpConfig.ts';
 
 export const FRP_ERROR = {

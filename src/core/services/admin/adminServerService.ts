@@ -1,5 +1,6 @@
 import type { ServerStatus } from '../../../main/serverController.ts';
 import type { SettingsService } from '../settingsService.ts';
+import type { ServerScheduleConfig } from '../../../shared/ipcTypes.ts';
 
 export interface AdminServerRuntime {
   getAdminPort(): number;
@@ -9,6 +10,8 @@ export interface AdminServerRuntime {
   restartUser(): Promise<void>;
   configureHttps(enabled: boolean): void;
   configureMtls(enabled: boolean): void;
+  getSchedule(): ServerScheduleConfig;
+  setSchedule(input: ServerScheduleConfig): ServerScheduleConfig;
 }
 
 /** Shared user-Web lifecycle adapter for Electron IPC and the headless HTTP API. */
@@ -38,6 +41,14 @@ export class AdminServerService {
     this.settings.set('server.port', port, null);
     if (this.status().running) await this.runtime.restartUser();
     return this.status();
+  }
+
+  getSchedule(): ServerScheduleConfig {
+    return this.runtime.getSchedule();
+  }
+
+  setSchedule(input: ServerScheduleConfig): ServerScheduleConfig {
+    return this.runtime.setSchedule(input);
   }
 
   setAutoStart(enabled: boolean): ServerStatus {

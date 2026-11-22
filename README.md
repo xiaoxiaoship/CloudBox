@@ -14,7 +14,7 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 | 数据目录 | `%APPDATA%\cloudbox` | `%PROGRAMDATA%\CloudBox` |
 | 安装方式 | NSIS 安装包 / 便携版 | WinSW + Inno Setup 服务安装包 |
 | 用户 Web | 由 GUI「在线模式」启停 | 管理 Web 始终开启，用户 Web 由在线开关控制 |
-| 桌面专属能力 | 文件选择器、目录迁移、插件文件夹导入、证书导入、CA 客户端证书导出 | 不提供这些桌面专属操作 |
+| 桌面专属能力 | 原生文件选择器、开机自启/托盘 | 目录迁移改为绝对路径输入；证书、插件、CA 导出改用浏览器文件流 |
 
 > Web 管理端的 1250 端口默认仅允许内网访问。**不要把 1250 映射到 frp 或公网端口转发**；frp 只应映射用户 Web 端口。
 
@@ -23,7 +23,7 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 ### 两种管理形态
 
 - **Electron GUI**：服务状态、端口、HTTPS、frp、用户、文件、插件、安全策略、日志全部图形化。
-- **Web 管理端**：独立 1250 管理服务，支持内网浏览器管理、初始化 token、独立 Session/CSRF、日志、用户、设置、frp、CA 和数据库备份下载。
+- **Web 管理端**：独立 1250 管理服务，支持内网浏览器管理、初始化 token、独立 Session/CSRF、4 小时管理会话、Session 列表/全部注销、日志、用户、设置、frp、CA、目录迁移、插件 ZIP 导入和数据库备份下载。
 - 两个入口共用同一套 `admin/src` 页面和 `core/services` 业务层；Web 版通过 `/api/admin/*`，GUI 通过 Electron IPC。
 - GUI 默认离线启动，避免安装后自动监听端口；Web 管理端始终启动，用户 Web 由「在线模式」控制。
 
@@ -78,8 +78,14 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 - 可选 AI 文件助手。
 - 插件系统：独立子进程、manifest、HTTP 路由、事件、私有 storage、Web 主题、自定义预览、Web 接管、管理页面。
 - GitHub Releases 更新检查，只提示不静默覆盖。
-- SQLite 在线备份；GUI 支持数据/网盘/插件目录迁移；Web 支持备份下载到浏览器设备。
+- SQLite 在线备份；GUI 和 Web 均支持数据/网盘/插件目录迁移；Web 备份直接下载到浏览器设备。
 - 中文 / English 双语界面。
+
+## 安全提示
+
+- 管理 Web 的 1250 端口默认仅限内网，且没有内置 HTTPS；不要通过 frp 或公网端口转发暴露。
+- 管理员 Session 固定 4 小时；登录接口使用 double-submit CSRF。
+- Windows 安装包未配置代码签名，SmartScreen 可能提示“未知发布者”。
 
 ## 快速开始
 
@@ -242,7 +248,7 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 | Data directory | `%APPDATA%\cloudbox` | `%PROGRAMDATA%\CloudBox` |
 | Installation | NSIS installer / portable | WinSW + Inno Setup service installer |
 | User Web | Toggled by GUI online mode | Admin Web always on; user Web toggled separately |
-| Desktop-only actions | File picker, directory migration, plugin folder import, certificate import, CA client export | Not available |
+| Desktop-only actions | Native file picker, startup/tray | Directory migration uses an absolute path; certificates, plugins and CA export use browser file streams |
 
 > The admin Web port 1250 is LAN-only by default. **Do not map 1250 through frp or public port forwarding.** frp should only expose the user Web port.
 
@@ -251,7 +257,7 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 ### Two management forms
 
 - **Electron GUI**: graphical control of service, port, HTTPS, frp, users, files, plugins, security and logs.
-- **Web Admin**: independent 1250 service with setup token, separate Session/CSRF, logs, users, settings, frp, CA and browser-side database backup.
+- **Web Admin**: independent 1250 service with setup token, separate Session/CSRF, 4-hour admin sessions, session list/revoke-all, logs, users, settings, frp, CA, directory migration, plugin ZIP import and browser-side database backup.
 - Both use the same `admin/src` pages and `core/services`; Web uses `/api/admin/*`, GUI uses Electron IPC.
 - GUI starts offline to avoid listening immediately after installation. Web Admin always starts; user Web is controlled by online mode.
 
@@ -306,8 +312,14 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 - Optional AI assistant.
 - Plugins: isolated child process, manifest, HTTP routes, events, private storage, Web theme, custom preview, Web takeover and admin page.
 - GitHub Releases update check without silent replacement.
-- SQLite online backup; GUI directory migration; Web browser download.
+- SQLite online backup; GUI and Web directory migration; Web browser download.
 - Chinese / English UI.
+
+## Security notes
+
+- Admin Web 1250 is LAN-only by default and has no built-in HTTPS; never expose it through frp or public port forwarding.
+- Admin sessions are fixed at 4 hours; login uses double-submit CSRF.
+- Windows installers are unsigned; SmartScreen may warn about an unknown publisher.
 
 ## Quick start
 

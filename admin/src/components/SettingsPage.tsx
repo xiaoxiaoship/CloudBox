@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { autoT as t } from '../i18n.ts';
 import { CollapsibleSection } from './CollapsibleSection.tsx';
-import type { AdminSettings, FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
+import type { AdminSessionInfo, AdminSettings, FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
 import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
 import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
@@ -82,6 +82,8 @@ export function SettingsPage({
   });
   const [adminWeb, setAdminWeb] = useState<AdminSettings['adminWeb']>({ intranetOnly: true });
   const [adminWebConfirmOpen, setAdminWebConfirmOpen] = useState(false);
+  const [adminSessions, setAdminSessions] = useState<AdminSessionInfo[] | null>(null);
+  const [sessionsPending, setSessionsPending] = useState(false);
   const [securityPending, setSecurityPending] = useState(false);
   const [securityModeSnapshot, setSecurityModeSnapshot] = useState<'simple' | 'advanced'>('simple');
   const [modeChangeConfirm, setModeChangeConfirm] = useState(false);
@@ -484,6 +486,13 @@ export function SettingsPage({
   };
 
   const chooseDirectory = async (kind: 'data' | 'storage' | 'plugins'): Promise<void> => {
+    if (isWebAdmin) {
+      setDirectoryError(null);
+      setMigrate(true);
+      setDeleteOld(false);
+      setDirectoryChange({ kind, targetPath: '' });
+      return;
+    }
     try {
       const result = await call(api.app.chooseDirectory({ kind }));
       if (!result.selected || !result.path) return;
@@ -498,6 +507,10 @@ export function SettingsPage({
 
   const confirmDirectoryChange = async (): Promise<void> => {
     if (!directoryChange) return;
+    if (isWebAdmin && !/^[A-Za-z]:[\\/]|^\\\\/.test(directoryChange.targetPath.trim())) {
+      setDirectoryError('请输入服务器上的绝对路径，例如 C:\\ProgramData\\CloudBox');
+      return;
+    }
     setDirectoryPending(true);
     setDirectoryError(null);
     try {
@@ -517,6 +530,30 @@ export function SettingsPage({
       setDirectoryPending(false);
     }
   };
+
+  const refreshAdminSessions = async (): Promise<void> => {
+    if (!api.auth.sessions) return;
+    setSessionsPending(true);
+    try { setAdminSessions(await call(api.auth.sessions())); }
+    catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setSessionsPending(false); }
+  };
+
+  const revokeAllAdminSessions = async (): Promise<void> => {
+    if (!api.auth.revokeAllSessions) return;
+    setSessionsPending(true);
+    try {
+      await call(api.auth.revokeAllSessions());
+      setAdminSessions([]);
+      notify('success', '已注销全部管理会话，请重新登录');
+      await onPasswordChanged();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setSessionsPending(false); }
+  };
+
+  useEffect(() => {
+    if (api.auth.sessions) void refreshAdminSessions();
+  }, [api.auth.sessions]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -650,6 +687,44 @@ export function SettingsPage({
             </button>
           </div>
         </div>
+        {api.auth.sessions ? (
+          <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-200">管理会话</p>
+                <p className="mt-1 text-xs text-slate-500">查看当前管理员的浏览器会话，并可一次注销全部会话。</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => void refreshAdminSessions()} disabled={sessionsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-60">
+                  {sessionsPending ? <Spinner className="h-3.5 w-3.5" /> : null}
+                  刷新
+                </button>
+                <button type="button" onClick={() => void revokeAllAdminSessions()} disabled={sessionsPending} className="rounded-lg border border-rose-800/60 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-950/30 disabled:opacity-60">
+                  全部注销
+                </button>
+              </div>
+            </div>
+            {adminSessions === null ? null : adminSessions.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">暂无有效会话。</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-400">
+                  <thead><tr className="border-b border-slate-800 text-slate-500"><th className="px-2 py-2">IP</th><th className="px-2 py-2">设备</th><th className="px-2 py-2">最后活动</th><th className="px-2 py-2">到期</th></tr></thead>
+                  <tbody>
+                    {adminSessions.map((session, index) => (
+                      <tr key={index} className="border-b border-slate-900/60">
+                        <td className="px-2 py-2">{session.ip ?? '-'}{session.current ? ' (当前)' : ''}</td>
+                        <td className="max-w-64 truncate px-2 py-2" title={session.userAgent ?? ''}>{session.userAgent ?? '-'}</td>
+                        <td className="px-2 py-2">{new Date(session.lastSeenAt).toLocaleString('zh-CN')}</td>
+                        <td className="px-2 py-2">{new Date(session.expiresAt).toLocaleString('zh-CN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
       </CollapsibleSection>
 
             <div className="pt-2">
@@ -1190,8 +1265,6 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('data')}
-            disabled={isWebAdmin}
-            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1225,8 +1298,6 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('storage')}
-            disabled={isWebAdmin}
-            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1260,8 +1331,6 @@ export function SettingsPage({
           <button
             type="button"
             onClick={() => void chooseDirectory('plugins')}
-            disabled={isWebAdmin}
-            title={isWebAdmin ? 'Web 管理端不支持修改服务器目录' : undefined}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
             更改目录
@@ -1320,9 +1389,21 @@ export function SettingsPage({
                 : '更改插件目录'
           }
           description={
-            <span className="break-all font-mono text-[11px]">
-              {directoryChange.targetPath}
-            </span>
+            <div className="space-y-2">
+              {isWebAdmin ? (
+                <>
+                  <input
+                    value={directoryChange.targetPath}
+                    onChange={(event) => setDirectoryChange({ ...directoryChange, targetPath: event.target.value })}
+                    placeholder="例如 C:\\ProgramData\\CloudBox"
+                    className={`${INPUT_CLASS} font-mono`}
+                  />
+                  <p className="text-[11px] text-slate-500">请输入服务器上的绝对路径；目标目录必须为空。Web 管理端不会打开本机文件夹选择器。</p>
+                </>
+              ) : (
+                <span className="break-all font-mono text-[11px]">{directoryChange.targetPath}</span>
+              )}
+            </div>
           }
           width="lg"
           onClose={directoryPending ? () => {} : () => setDirectoryChange(null)}

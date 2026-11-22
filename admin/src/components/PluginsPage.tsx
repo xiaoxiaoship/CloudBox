@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PluginInfo } from '../../../src/shared/ipcTypes.ts';
 import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
@@ -21,6 +21,7 @@ export function PluginsPage({ notify }: PluginsPageProps) {
   const [uninstallName, setUninstallName] = useState<string | null>(null);
   const [overrideName, setOverrideName] = useState<string | null>(null);
   const [previewPlugin, setPreviewPlugin] = useState<PluginInfo | null>(null);
+  const pluginFileRef = useRef<HTMLInputElement>(null);
 
   const load = async (): Promise<void> => {
     setLoading(true);
@@ -38,6 +39,7 @@ export function PluginsPage({ notify }: PluginsPageProps) {
   }, []);
 
   const importPlugin = async (): Promise<void> => {
+    if (isWebAdmin) { pluginFileRef.current?.click(); return; }
     setPending('import');
     try {
       const result = await call(api.plugins.import());
@@ -50,6 +52,21 @@ export function PluginsPage({ notify }: PluginsPageProps) {
     } finally {
       setPending(null);
     }
+  };
+
+  const importPluginFile = async (file: File): Promise<void> => {
+    setPending('import');
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => { const value = String(reader.result ?? ''); resolve(value.slice(value.indexOf(',') + 1)); };
+        reader.onerror = () => reject(reader.error ?? new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+      });
+      const result = await call(api.plugins.import({ fileName: file.name, content }));
+      if (result !== null) { setPlugins(result); notify('success', t('admin.pluginsPage.imported')); }
+    } catch (error) { notify('error', errorMessage(error)); }
+    finally { setPending(null); if (pluginFileRef.current) pluginFileRef.current.value = ''; }
   };
 
   const setEnabled = async (plugin: PluginInfo, enabled: boolean): Promise<void> => {
@@ -95,6 +112,7 @@ export function PluginsPage({ notify }: PluginsPageProps) {
 
   return (
     <div className="space-y-4">
+      <input ref={pluginFileRef} type="file" accept=".zip,application/zip" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importPluginFile(file); }} />
       <section className={CARD}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -112,8 +130,7 @@ export function PluginsPage({ notify }: PluginsPageProps) {
           <button
             type="button"
             onClick={() => void importPlugin()}
-            disabled={pending !== null || isWebAdmin}
-            title={isWebAdmin ? 'Web 管理端请将插件放入服务器插件目录' : undefined}
+            disabled={pending !== null}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60"
           >
             {pending === 'import' ? <Spinner className="h-4 w-4" /> : null}

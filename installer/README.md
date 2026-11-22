@@ -3,22 +3,24 @@
 This directory contains the service and installer scaffolding for the headless
 Web admin build. It is not used by the Electron release.
 
+## Signing and SmartScreen
+
+Installers are unsigned by default. Windows SmartScreen may display
+"Windows protected your PC" / unknown publisher. Configure a code-signing
+certificate before public distribution if this is not acceptable.
+
 ## Build prerequisites
 
 1. `npm run build:web`
 2. `npm run build:admin`
 3. `npm run build:headless`
 4. Copy `node.exe` to the repository root for packaging.
-5. Put WinSW x64 as:
+5. WinSW x64 is included at `installer\winsw\CloudBoxService.exe`; its matching
+   XML is `CloudBoxService.xml`. If updating WinSW, keep the executable and XML
+   file names identical.
 
-   ```text
-   installer\winsw\CloudBoxService.exe
-   ```
-
-   WinSW is distributed separately by the WinSW project. The executable must
-   be renamed to `CloudBoxService.exe`; its matching XML is `CloudBox.xml`.
-
-6. Install Inno Setup 6 and run `ISCC.exe installer\inno\CloudBox.iss`.
+6. Install Inno Setup 6 and run `installer\build-server.ps1` (or `ISCC.exe installer\inno\CloudBox.iss`).
+   The build prepares `release\server-stage`, runs `npm prune --omit=dev`, then compiles.
 
 ## Service behavior
 

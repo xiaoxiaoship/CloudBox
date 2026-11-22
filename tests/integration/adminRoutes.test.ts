@@ -100,4 +100,63 @@ describe('admin web management routes', () => {
     });
     assert.equal(create.status, 201);
   });
+
+  it('protects app info and supports own account/session management', async () => {
+    t = await createTestServer();
+    const { adminUsers, auth } = adminServices(t);
+    const tokenService = new InitTokenService(t.dataDir);
+    const token = tokenService.ensure(true, 1250).token!;
+    const app = createAdminApp({
+      services: t.services,
+      version: '1.0.2-test',
+      adminAuth: auth,
+      adminUsers,
+      initToken: tokenService,
+    });
+    server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as AddressInfo;
+    const base = `http://127.0.0.1:${port}`;
+
+    const setup = await fetch(`${base}/api/admin/setup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, username: 'webadmin', password: 'Passw0rd!' }),
+    });
+    assert.equal(setup.status, 201);
+    const { cookie, csrf } = cookieHeader(setup);
+
+    assert.equal((await fetch(`${base}/api/admin/app/info`)).status, 401);
+    const info = await fetch(`${base}/api/admin/app/info`, { headers: { cookie } });
+    assert.equal(info.status, 200);
+
+    const sessions = await fetch(`${base}/api/admin/auth/sessions`, { headers: { cookie } });
+    assert.equal(sessions.status, 200);
+    assert.equal(((await sessions.json()) as unknown[]).length, 1);
+
+    const renamed = await fetch(`${base}/api/admin/users/me`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': csrf },
+      body: JSON.stringify({ username: 'webadmin2' }),
+    });
+    assert.equal(renamed.status, 200);
+    assert.equal(((await renamed.json()) as { username: string }).username, 'webadmin2');
+
+    const wrongPassword = await fetch(`${base}/api/admin/auth/password`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': csrf },
+      body: JSON.stringify({ currentPassword: 'wrong', newPassword: 'Passw0rd!2' }),
+    });
+    assert.equal(wrongPassword.status, 400);
+
+    const changed = await fetch(`${base}/api/admin/auth/password`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': csrf },
+      body: JSON.stringify({ currentPassword: 'Passw0rd!', newPassword: 'Passw0rd!2' }),
+    });
+    assert.equal(changed.status, 204);
+
+    const oldSession = await fetch(`${base}/api/admin/auth/me`, { headers: { cookie } });
+    assert.equal(oldSession.status, 401);
+  });
 });

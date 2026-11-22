@@ -65,6 +65,24 @@ export function createAdminServerRouter(
     }
   });
 
+  router.get('/schedule', (_req, res) => {
+    res.json(server.getSchedule());
+  });
+
+  router.post('/schedule', csrf, (req, res) => {
+    try {
+      const input = z.object({
+        enabled: z.boolean(),
+        start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      }).parse(req.body);
+      actor(res);
+      res.json(server.setSchedule(input));
+    } catch (error) {
+      res.status(400).json({ code: 'INVALID_INPUT', message: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   router.post('/auto-start', csrf, (req, res) => {
     try {
       const input = z.object({ enabled: z.boolean() }).parse(req.body);

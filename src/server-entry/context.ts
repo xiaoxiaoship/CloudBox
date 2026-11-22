@@ -4,6 +4,7 @@ import { closeDatabase, openDatabase } from '../core/db/connection.ts';
 import { migrate } from '../core/db/migrator.ts';
 import { createCoreServices, type CoreServices } from '../core/container.ts';
 import { getAppVersion } from '../shared/version.ts';
+import { ADMIN_WEB_PORT } from '../shared/admin.ts';
 import { AdminSessionRepository } from '../core/db/repositories/adminSessionRepo.ts';
 import { AdminAuthService } from '../core/services/admin/adminAuthService.ts';
 import { AdminUserService } from '../core/services/admin/adminUserService.ts';
@@ -12,8 +13,10 @@ import { TlsManager } from '../main/tlsManager.ts';
 import { ServerController } from '../main/serverController.ts';
 import { FrpService } from '../main/frpService.ts';
 import { CaManager } from '../main/caManager.ts';
+import { ServiceAutomation } from '../main/serviceAutomation.ts';
+import { loadHeadlessPaths } from './paths.ts';
 
-export const ADMIN_WEB_PORT = 1250;
+export { ADMIN_WEB_PORT } from '../shared/admin.ts';
 
 export interface HeadlessContext {
   services: CoreServices;
@@ -27,6 +30,7 @@ export interface HeadlessContext {
   tls: TlsManager;
   ca: CaManager;
   frp: FrpService;
+  automation: ServiceAutomation;
   userServer: ServerController;
   adminUsers: AdminUserService;
   adminAuth: AdminAuthService;
@@ -34,21 +38,14 @@ export interface HeadlessContext {
 }
 
 export function defaultDataDir(): string {
-  if (process.env.CLOUDBOX_DATA_DIR) return path.resolve(process.env.CLOUDBOX_DATA_DIR);
-  if (process.platform === 'win32') {
-    return path.join(process.env.PROGRAMDATA ?? 'C:\\ProgramData', 'CloudBox');
-  }
-  return path.resolve(process.cwd(), 'data');
+  return loadHeadlessPaths().dataDir;
 }
 
 export function createHeadlessContext(): HeadlessContext {
-  const dataDir = defaultDataDir();
-  const storageRoot = process.env.CLOUDBOX_STORAGE_DIR
-    ? path.resolve(process.env.CLOUDBOX_STORAGE_DIR)
-    : path.join(dataDir, 'storage');
-  const pluginsDir = process.env.CLOUDBOX_PLUGINS_DIR
-    ? path.resolve(process.env.CLOUDBOX_PLUGINS_DIR)
-    : path.join(dataDir, 'plugins');
+  const paths = loadHeadlessPaths();
+  const dataDir = paths.dataDir;
+  const storageRoot = paths.storageDir;
+  const pluginsDir = paths.pluginsDir;
   const tempDir = path.join(dataDir, 'tmp', 'uploads');
 
   mkdirSync(dataDir, { recursive: true });
@@ -134,6 +131,12 @@ export function createHeadlessContext(): HeadlessContext {
     healthCheckIntervalSeconds: services.settings.getLowLevel().frpHealthIntervalSeconds,
   });
 
+  const automation = new ServiceAutomation({
+    server: userServer,
+    frp,
+    settings: services.settings,
+  });
+
   return {
     services,
     version,
@@ -146,6 +149,7 @@ export function createHeadlessContext(): HeadlessContext {
     tls,
     ca,
     frp,
+    automation,
     userServer,
     adminUsers,
     adminAuth,
@@ -154,5 +158,6 @@ export function createHeadlessContext(): HeadlessContext {
 }
 
 export function disposeHeadlessContext(context: HeadlessContext): void {
+  context.automation.dispose();
   closeDatabase(context.services.db);
 }

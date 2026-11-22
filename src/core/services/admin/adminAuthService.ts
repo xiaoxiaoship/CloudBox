@@ -3,7 +3,7 @@ import type { AdminSessionRepository } from '../../db/repositories/adminSessionR
 import type { UserRepository } from '../../db/repositories/userRepo.ts';
 import type { SettingsService } from '../settingsService.ts';
 import type { AdminUserService } from './adminUserService.ts';
-import { hashPassword, needsRehash, verifyPassword } from '../../security/password.ts';
+import { checkPasswordStrength, hashPassword, needsRehash, verifyPassword } from '../../security/password.ts';
 import {
   generateSessionToken,
   hashSessionToken,
@@ -11,6 +11,7 @@ import {
 } from '../../security/sessionToken.ts';
 import { toPublicUser, type PublicUser, type UserRecord } from '../../types/models.ts';
 import { AdminError, ADMIN_ERROR } from './adminUserService.ts';
+import { ADMIN_SESSION_TTL_MS } from '../../../shared/admin.ts';
 
 export const ADMIN_AUTH_ERROR = {
   INVALID_CREDENTIALS: 'ADMIN_INVALID_CREDENTIALS',
@@ -41,6 +42,15 @@ export interface AdminAuthContext {
 export interface AdminLoginResult {
   user: PublicUser;
   token: string;
+  expiresAt: number;
+}
+
+export interface AdminSessionView {
+  current: boolean;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: number;
+  lastSeenAt: number;
   expiresAt: number;
 }
 
@@ -162,10 +172,52 @@ export class AdminAuthService {
     return this.sessions.deleteExpired(this.now());
   }
 
+  listSessions(userId: number, currentHash: string | null): Array<{
+    current: boolean; ip: string | null; userAgent: string | null;
+    createdAt: number; lastSeenAt: number; expiresAt: number;
+  }> {
+    return this.sessions.listForUser(userId, this.now()).map((session) => ({
+      current: currentHash !== null && session.idHash === currentHash,
+      ip: session.ip,
+      userAgent: session.userAgent,
+      createdAt: session.createdAt,
+      lastSeenAt: session.lastSeenAt,
+      expiresAt: session.expiresAt,
+    }));
+  }
+
+  revokeAllSessions(userId: number): number {
+    return this.sessions.revokeAllForUser(userId, this.now());
+  }
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string): Promise<void> {
+    const user = this.users.findById(userId);
+    if (user === null || user.role !== 'admin') {
+      throw new AdminAuthError(ADMIN_AUTH_ERROR.FORBIDDEN, '管理员账户不存在', 403);
+    }
+    if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+      throw new AdminAuthError(ADMIN_AUTH_ERROR.INVALID_CREDENTIALS, '当前密码错误', 400);
+    }
+    const strength = checkPasswordStrength(newPassword);
+    if (!strength.ok) {
+      throw new AdminAuthError('ADMIN_WEAK_PASSWORD', `密码强度不足：${strength.issues.join('；')}`, 400);
+    }
+    this.users.updatePasswordHash(user.id, await hashPassword(newPassword), this.now());
+    this.sessions.revokeAllForUser(user.id, this.now());
+    this.audit.record({
+      actorType: 'admin',
+      actorId: user.id,
+      action: 'admin.password.change',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(user.id),
+    });
+  }
+
   private issueSession(user: UserRecord, ctx: AdminAuthContext): AdminLoginResult {
     const now = this.now();
     const token = generateSessionToken();
-    const expiresAt = now + this.settings.get('security.sessionTtlHours') * 3_600_000;
+    const expiresAt = now + ADMIN_SESSION_TTL_MS;
     const tokenHash = hashSessionToken(token);
     this.sessions.create({
       idHash: tokenHash,

@@ -1,4 +1,5 @@
 import type { FrpConfig } from '../shared/ipcTypes.ts';
+import { ADMIN_WEB_PORT } from '../shared/admin.ts';
 
 /** Generate the frpc TOML for both the CLI and the desktop service. */
 export function buildFrpConfig(
@@ -7,6 +8,9 @@ export function buildFrpConfig(
   protocol: 'http' | 'https',
   health: { timeoutSeconds?: number; intervalSeconds?: number } = {},
 ): string {
+  if (localPort === ADMIN_WEB_PORT) {
+    throw new Error('frp 不允许映射管理 Web 端口 1250');
+  }
   const lines = [
     '# 由 CloudBox 管理端自动生成，请勿手工修改',
     `serverAddr = ${JSON.stringify(config.serverAddr.trim())}`,

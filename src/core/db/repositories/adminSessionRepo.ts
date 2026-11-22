@@ -77,6 +77,23 @@ export class AdminSessionRepository {
     return row ? mapRow(row) : null;
   }
 
+  listForUser(userId: number, now: number): AdminSessionRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT ${COLUMNS} FROM admin_sessions
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?
+         ORDER BY last_seen_at DESC`,
+      )
+      .all(userId, now) as AdminSessionRow[];
+    return rows.map(mapRow);
+  }
+
+  revokeAllForUser(userId: number, now: number): number {
+    return this.db
+      .prepare('UPDATE admin_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL')
+      .run(now, userId).changes;
+  }
+
   touch(idHash: string, now: number): void {
     this.db
       .prepare('UPDATE admin_sessions SET last_seen_at = ? WHERE id_hash = ? AND revoked_at IS NULL')

@@ -74,6 +74,8 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
   const [schedulePending, setSchedulePending] = useState(false);
   const frpLoaded = useRef(false);
+  const certFileRef = useRef<HTMLInputElement>(null);
+  const [certImportKind, setCertImportKind] = useState<'cert' | 'key'>('cert');
 
   useEffect(() => {
     if (!server) return;
@@ -291,17 +293,45 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   };
 
   const importCertificate = async (kind: 'cert' | 'key'): Promise<void> => {
+    if (isWebAdmin) {
+      setCertImportKind(kind);
+      certFileRef.current?.click();
+      return;
+    }
     setCertPending(kind);
     try {
       const result = await call(api.server.importCertificate({ kind }));
       if (!result.imported) return;
-      // 单独导入证书或私钥时可能暂时不匹配；文件已写入，卡片会展示校验错误。
       notify('success', kind === 'cert' ? '证书已导入' : '私钥已导入');
       await refreshServer();
     } catch (error) {
       notify('error', errorMessage(error));
     } finally {
       setCertPending(null);
+    }
+  };
+
+  const importCertificateFile = async (file: File): Promise<void> => {
+    setCertPending(certImportKind);
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const value = String(reader.result ?? '');
+          resolve(value.slice(value.indexOf(',') + 1));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+      });
+      const result = await call(api.server.importCertificate({ kind: certImportKind, fileName: file.name, content }));
+      if (!result.imported) return;
+      notify('success', certImportKind === 'cert' ? '证书已导入' : '私钥已导入');
+      await refreshServer();
+    } catch (error) {
+      notify('error', errorMessage(error));
+    } finally {
+      setCertPending(null);
+      if (certFileRef.current) certFileRef.current.value = '';
     }
   };
 
@@ -424,6 +454,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
+      <input ref={certFileRef} type="file" accept=".crt,.pem,.cer,.key" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importCertificateFile(file); }} />
       <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -66,6 +66,13 @@ export function createAdminUsersRouter(
     res.json(adminUsers.list());
   });
 
+  router.patch('/me', csrf, (req, res) => {
+    try {
+      const input = z.object({ username: z.string().min(1).max(64) }).parse(req.body);
+      res.json(adminUsers.renameSelf(actor(res), input.username));
+    } catch (error) { failure(error, res); }
+  });
+
   router.post('/', csrf, async (req, res) => {
     try {
       const input = createSchema.parse(req.body);

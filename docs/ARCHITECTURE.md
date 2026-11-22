@@ -162,7 +162,9 @@ createHeadlessController()
 - 管理 Web 先启动
 - 用户 Web 后启动
 - frp 最后启动
+- 管理 Session 固定 4 小时
 - 管理端每小时清理过期 `admin_sessions`
+- Web 管理端可列出/全部注销管理会话
 
 ### 4.3 Admin app
 
@@ -210,6 +212,8 @@ dist/admin 静态资源 + SPA 回退
 id_hash, user_id, created_at, last_seen_at, expires_at, ip, user_agent, revoked_at
 ```
 
+管理员 Session TTL：`4 * 60 * 60 * 1000`，不读取用户 Web 的 `security.sessionTtlHours`。
+
 Cookie：
 
 ```text
@@ -238,15 +242,15 @@ admin_csrf  非 HttpOnly, SameSite=Strict, Secure when HTTPS
 
 ### 5.5 能力差异
 
-Web Admin 不提供：
+Web Admin 通过浏览器文件流提供：
 
-- 目录迁移
-- 插件文件夹导入
-- 证书/私钥导入
-- CA 客户端证书导出
-- 桌面文件选择器
+- 目录迁移（手动输入服务器绝对路径）
+- 插件 ZIP 导入
+- 证书/私钥上传
+- CA 客户端证书下载
+- 数据库备份下载
 
-数据库备份在 Web 端下载到浏览器设备。
+桌面原生文件选择器、开机自启和托盘仍仅 GUI 支持。管理 Web 没有内置 HTTPS，1250 不应映射 frp。
 
 ## 6. 用户 Web
 
@@ -472,6 +476,8 @@ npm run dist:win           Electron 安装包/便携版
 installer\build-server.ps1 Windows Server 服务安装包
 ```
 
+Server 构建先由 `scripts/prepare-server-stage.mjs` 复制产物到 `release/server-stage`，执行 `npm prune --omit=dev` 裁剪依赖，再由 Inno Setup 编译；WinSW 已纳入 `installer/winsw/CloudBoxService.exe`。
+
 Server 安装器：
 
 - WinSW `CloudBoxService.exe` + `CloudBoxService.xml`
@@ -493,9 +499,9 @@ release\CloudBox-Server-<version>-x64.exe
 - 管理 Web 默认 HTTP，无内置 TLS。
 - 1250 不应映射 frp。
 - Web 端没有管理员登录失败锁定/TOTP/IP 白名单（按产品决策）。
-- GUI 空闲锁定是前端计时器，服务端 Session 仍有效。
-- Web 端部分桌面能力未实现。
-- 服务安装器未在实际 Windows Server 上完成安装/卸载回归。
+- GUI 空闲锁定是前端计时器，服务端 Session 仍按 4 小时 TTL 有效。
+- 管理 Web 没有内置 HTTPS；1250 不应映射 frp。
+- 服务安装器未在实际干净 Windows Server 上完成安装/卸载回归。
 - 首次安装用户 Web 默认离线。
 
 ---
@@ -542,4 +548,4 @@ Plugins run in child processes with 20MB ZIP/2000 entries, 10s start, 15s reques
 
 `AdminApi` has Electron and HTTP adapters; components use `useAdminApi()`. Tests include unit/integration, Electron E2E and Web E2E. Server installer scripts use WinSW + Inno Setup.
 
-Known limits: admin Web is HTTP by default, no TLS built in; no admin login lock/TOTP; some desktop actions unavailable in Web; installer not yet tested on a clean Windows Server; user Web defaults offline on a fresh headless install.
+Known limits: admin Web is HTTP by default with no built-in TLS; no admin login lock/TOTP; installer not yet tested on a clean Windows Server; user Web defaults offline on a fresh headless install. Native desktop pickers, startup and tray remain GUI-only.

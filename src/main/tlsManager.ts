@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync } from 'node:fs';
-import { chmod, copyFile, rename } from 'node:fs/promises';
+import { chmod, copyFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { X509Certificate } from 'node:crypto';
 import { createSecureContext } from 'node:tls';
@@ -71,6 +71,25 @@ export class TlsManager {
     await rename(temporary, target);
     await chmod(target, 0o600).catch(() => {});
 
+    return this.getInfo();
+  }
+
+  async importContent(source: Buffer, kind: 'cert' | 'key', fileName: string): Promise<CertificateInfo> {
+    const extension = path.extname(fileName).toLowerCase();
+    const allowed = kind === 'cert' ? ['.crt', '.pem', '.cer'] : ['.key', '.pem'];
+    if (!allowed.includes(extension)) {
+      throw new TlsError(TLS_ERROR.INVALID_FILE, kind === 'cert'
+        ? '证书文件必须是 .crt / .pem / .cer'
+        : '私钥文件必须是 .key / .pem');
+    }
+    if (source.length === 0 || source.length > 1024 * 1024) {
+      throw new TlsError(TLS_ERROR.INVALID_FILE, '证书或私钥文件大小必须在 1MB 以内');
+    }
+    const target = kind === 'cert' ? this.certPath : this.keyPath;
+    const temporary = `${target}.${Date.now()}.tmp`;
+    await writeFile(temporary, source, { mode: 0o600 });
+    await rename(temporary, target);
+    await chmod(target, 0o600).catch(() => {});
     return this.getInfo();
   }
 

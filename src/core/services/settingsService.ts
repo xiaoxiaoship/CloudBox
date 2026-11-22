@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { DEFAULT_LOW_LEVEL_SECURITY, parseLowLevelSecurity, type LowLevelSecurity } from '../../shared/lowLevelSecurity.ts';
 import { randomBytes } from 'node:crypto';
 import type { SettingsRepository } from '../db/repositories/settingsRepo.ts';
+import type { AuditService } from './auditService.ts';
 
 interface SettingDefinitions {
   'server.online': { schema: z.ZodType<boolean>; fallback: boolean };
@@ -200,9 +201,12 @@ export class SettingsService {
   private readonly repo: SettingsRepository;
   private readonly now: () => number;
 
-  constructor(repo: SettingsRepository, now: () => number = Date.now) {
+  private readonly audit: AuditService | null;
+
+  constructor(repo: SettingsRepository, now: () => number = Date.now, audit: AuditService | null = null) {
     this.repo = repo;
     this.now = now;
+    this.audit = audit;
     // Persist the Cap signing secret once; otherwise a restart would invalidate
     // every challenge/token generated with the random fallback.
     if (this.repo.get('security.capSecret') === null) {
@@ -233,6 +237,16 @@ export class SettingsService {
       throw new Error(`设置项 ${key} 的值非法：${parsed.error.issues[0]?.message ?? '未知错误'}`);
     }
     this.repo.set(key, JSON.stringify(parsed.data), updatedBy, this.now());
+    if (updatedBy !== null && this.audit !== null) {
+      this.audit.record({
+        actorType: 'admin',
+        actorId: updatedBy,
+        action: 'settings.update',
+        result: 'success',
+        targetType: 'setting',
+        targetId: key,
+      });
+    }
   }
 
   /** 供管理端展示全部设置（原始值） */

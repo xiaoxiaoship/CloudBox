@@ -20,4 +20,9 @@ export class AdminCaService {
     return this.ca.issueServerCert(extraHosts);
   }
   certificate(): CertificateInfo { return this.tls.getInfo(); }
+  async importCertificate(kind: 'cert' | 'key', fileName: string, content: string): Promise<CertificateInfo> {
+    const buffer = Buffer.from(content, 'base64');
+    return this.tls.importContent(buffer, kind, fileName);
+  }
+  async exportClientCert(destinationPath: string) { return this.ca.issueClientCert(destinationPath); }
 }

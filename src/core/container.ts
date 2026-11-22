@@ -87,9 +87,9 @@ export function createCoreServices(options: CreateCoreServicesOptions): CoreServ
   const sessions = new SessionRepository(db);
   const loginIps = new UserIpRepository(db);
   const scans = new ScanRepository(db);
-  const settings = new SettingsService(new SettingsRepository(db), now);
-  const securityPolicy = new SecurityPolicyService(db, settings, now);
   const audit = new AuditService(new AuditRepository(db), now);
+  const settings = new SettingsService(new SettingsRepository(db), now, audit);
+  const securityPolicy = new SecurityPolicyService(db, settings, now);
   const tasks = new TaskService({ now });
   const events = new EventBus();
   const pluginRoot = options.pluginRoot ?? path.join(storageRoot, '.plugins');

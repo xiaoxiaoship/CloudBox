@@ -8,6 +8,7 @@ import type { InitTokenService } from '../server-entry/initToken.ts';
 import { createIntranetOnly } from './middleware/intranetOnly.ts';
 import { createAdminCsrf, createRequireAdmin } from './middleware/adminAuth.ts';
 import { createAdminAuthRouter } from './routes/auth.routes.ts';
+import { createAdminWriteAudit } from './middleware/adminAudit.ts';
 import { createAdminUsersRouter } from './routes/users.routes.ts';
 import { createAdminServerRouter } from './routes/server.routes.ts';
 import { createAdminSettingsRouter } from './routes/settings.routes.ts';
@@ -20,6 +21,7 @@ import { createAdminAppRouter } from './routes/app.routes.ts';
 import type { AdminFrpService } from '../core/services/admin/adminFrpService.ts';
 import type { AdminCaService } from '../core/services/admin/adminCaService.ts';
 import type { AdminUserService } from '../core/services/admin/adminUserService.ts';
+import type { AdminDirectoryService } from '../core/services/admin/adminDirectoryService.ts';
 import type { ServiceController } from '../server-entry/serviceController.ts';
 import type { AdminServerService } from '../core/services/admin/adminServerService.ts';
 
@@ -35,6 +37,7 @@ export interface AdminAppOptions {
   adminCa?: AdminCaService;
   adminDist?: string;
   appInfo?: { dataDir: string; storageDir: string; pluginsDir: string };
+  adminDirectory?: AdminDirectoryService;
 }
 
 /**
@@ -62,20 +65,21 @@ export function createAdminApp(options: AdminAppOptions): Express {
   app.use(express.json({ limit: '256kb' }));
   app.use(createIntranetOnly(options.services.settings, options.services.audit));
 
-  app.get('/api/admin/app/info', (_req, res) => {
-    res.json({
-      version: options.version,
-      dataDir: options.appInfo?.dataDir ?? '',
-      storageDir: options.appInfo?.storageDir ?? '',
-      pluginsDir: options.appInfo?.pluginsDir ?? '',
-      isPackaged: true,
-      isPortable: false,
-    });
-  });
-
   if (options.adminAuth !== undefined && options.initToken !== undefined) {
     const csrf = createAdminCsrf(options.services.audit);
+    const requireAdmin = createRequireAdmin(options.adminAuth);
+    app.get('/api/admin/app/info', requireAdmin, (_req, res) => {
+      res.json({
+        version: options.version,
+        dataDir: options.appInfo?.dataDir ?? '',
+        storageDir: options.appInfo?.storageDir ?? '',
+        pluginsDir: options.appInfo?.pluginsDir ?? '',
+        isPackaged: true,
+        isPortable: false,
+      });
+    });
     app.use('/api/admin', createAdminAuthRouter(options.adminAuth, options.initToken, csrf));
+    app.use('/api/admin', createAdminWriteAudit(options.services.audit));
     if (options.adminUsers !== undefined) {
       const requireAdmin = createRequireAdmin(options.adminAuth);
       app.use('/api/admin/users', requireAdmin, createAdminUsersRouter(options.adminUsers, csrf));
@@ -97,7 +101,7 @@ export function createAdminApp(options: AdminAppOptions): Express {
         app.use('/api/admin/ca', requireAdmin, createAdminCaRouter(options.adminCa, csrf));
       }
       if (options.appInfo !== undefined) {
-        app.use('/api/admin/app', requireAdmin, createAdminAppRouter(options.services, options.appInfo.dataDir, csrf));
+        app.use('/api/admin/app', requireAdmin, createAdminAppRouter(options.services, options.appInfo.dataDir, options.adminDirectory!, csrf));
       }
     }
   }

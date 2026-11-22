@@ -105,6 +105,15 @@ export interface CaInfo {
   error: string | null;
 }
 
+export interface AdminSessionInfo {
+  current: boolean;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: number;
+  lastSeenAt: number;
+  expiresAt: number;
+}
+
 export interface ClientCertExport {
   saved: boolean;
   fileName?: string;
@@ -282,6 +291,8 @@ export interface CloudboxApi {
       currentPassword: string;
       newPassword: string;
     }) => Promise<Result<null>>;
+    sessions?: () => Promise<Result<AdminSessionInfo[]>>;
+    revokeAllSessions?: () => Promise<Result<null>>;
   };
   users: {
     list: () => Promise<Result<UserSummary[]>>;
@@ -318,6 +329,8 @@ export interface CloudboxApi {
     certificate: () => Promise<Result<CertificateInfo>>;
     importCertificate: (input: {
       kind: 'cert' | 'key';
+      fileName?: string;
+      content?: string;
     }) => Promise<Result<{ imported: boolean; certificate: CertificateInfo }>>;
   };
   ca: {
@@ -418,7 +431,7 @@ export interface CloudboxApi {
   };
   plugins: {
     list: () => Promise<Result<PluginInfo[]>>;
-    import: () => Promise<Result<PluginInfo[] | null>>;
+    import: (input?: { fileName?: string; content?: string }) => Promise<Result<PluginInfo[] | null>>;
     setEnabled: (input: { name: string; enabled: boolean }) => Promise<Result<PluginInfo[]>>;
     setAllowWebOverride: (input: {
       name: string;

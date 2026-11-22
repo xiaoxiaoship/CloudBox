@@ -9,13 +9,12 @@ try {
   npm run build:headless
   if ($LASTEXITCODE -ne 0) { throw 'build:headless failed' }
 
-  $nodeExe = (Get-Command node).Source
-  Copy-Item $nodeExe (Join-Path $root 'node.exe') -Force
-
   $winsw = Join-Path $PSScriptRoot 'winsw\CloudBoxService.exe'
   if (-not (Test-Path $winsw)) {
     throw "Missing WinSW binary: $winsw"
   }
+  node scripts\prepare-server-stage.mjs
+  if ($LASTEXITCODE -ne 0) { throw 'server staging failed' }
 
   $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
   if ($null -eq $iscc) {

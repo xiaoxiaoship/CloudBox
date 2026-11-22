@@ -46,10 +46,10 @@ This guide covers both the **Electron GUI** and the **Web Admin**. Business sett
 | 用户 Web 开关 | GUI 在线模式 | Web 管理端在线模式 |
 | 管理 Web 自身 | 不启动 | 固定 1250，始终启动 |
 | 桌面文件选择器 | 支持 | 不支持 |
-| 目录迁移 | 支持 | 不支持 |
-| 插件文件夹导入 | 支持 | 不支持 |
-| 证书/私钥导入 | 支持 | 不支持 |
-| CA 客户端证书导出 | 支持 | 暂不支持 |
+| 目录迁移 | 支持原生选择器 | 支持手动输入绝对路径 |
+| 插件导入 | 文件夹/ZIP | 浏览器上传 ZIP |
+| 证书/私钥导入 | 原生文件选择器 | 浏览器上传 |
+| CA 客户端证书导出 | 保存到本机 | 下载到浏览器设备 |
 | 数据库备份 | 保存到本机 | 下载到浏览器设备 |
 | 管理 Web 内网限制 | 不适用 | 默认开启，可关闭 |
 
@@ -115,7 +115,7 @@ token 文件：
 
 修改后旧管理员会话失效，需要重新登录。
 
-> Web 管理版当前 `auth.changePassword` HTTP 适配尚未实现；Web 端修改密码会返回未实现错误，请在 GUI 修改。
+> Web 管理版通过 `POST /api/admin/auth/password` 修改密码；修改后所有管理会话立即失效，需要重新登录。
 
 ### 管理员 GUI 空闲锁定
 
@@ -124,6 +124,13 @@ token 文件：
 - 取值范围 1–1440 分钟。
 - 无操作后管理员前端自动退出，需要重新登录。
 - 该锁定是前端计时器；服务端 Session 仍按 Session TTL 失效。
+
+### 管理 Session
+
+- 管理 Session 固定 **4 小时**，独立于用户 Web 的 `security.sessionTtlHours`。
+- Web 管理端可查看当前管理会话列表（IP、UA、最后活动、到期时间）。
+- `全部注销` 会撤销当前管理员的所有管理会话并清空 Cookie。
+- 登录接口使用 double-submit CSRF；登录前需先访问 `/api/admin/auth/status` 获取 `admin_csrf`。
 
 ### 管理 Web 仅限内网访问
 
@@ -347,7 +354,7 @@ token 文件：
 
 | 字段 | 默认值 | 单位 |
 |---|---:|---|
-| Session 有效期 | 168 | 小时 |
+| 用户 Session 有效期 | 168 | 小时 |
 | 在线判定窗口 | 300 | 秒 |
 | PROXY 等待超时 | 3000 | 毫秒 |
 | frp 健康检查超时 | 3 | 秒 |
@@ -477,7 +484,9 @@ Web 管理版没有托盘/自启动设置，由 Windows 服务负责。
 包含数据库、证书、CA、frp 配置、加密密钥。
 
 - GUI 可更改并迁移。
-- Web 管理版只读，不支持修改服务器目录。
+- Web 管理版可输入服务器绝对路径修改目录；目标目录必须为空。
+- 修改数据目录时会复制 `cloudbox.db`、`config` 和 `ai-secret.key`，然后服务自动重启；为避免路径指针丢失，数据库旧目录不会自动删除。
+- 网盘/插件目录迁移完成并勾选删除旧文件后会清理旧目录。
 
 ### 6.4 网盘文件目录
 
@@ -509,7 +518,8 @@ Web 管理版没有托盘/自启动设置，由 Windows 服务负责。
 - HTTP 仅建议在可信局域网使用。
 - HTTPS 需要证书与私钥。
 - GUI 可导入 `.crt/.pem/.cer` 和 `.key/.pem`。
-- Web 管理版暂不支持证书导入。
+- Web 管理版通过浏览器上传 `.crt/.pem/.cer` 和 `.key/.pem`。
+- CA 客户端证书由浏览器下载，PKCS#12 密码为 `changeit`。
 - mTLS 开启后浏览器必须导入客户端证书。
 
 ### 7.4 frp
@@ -623,10 +633,10 @@ frp token 留空表示不启用 token 认证，仅建议在可信 frps 使用。
 | Data dir | `%APPDATA%\cloudbox` | `%PROGRAMDATA%\CloudBox` |
 | User Web | GUI online switch | Web online switch; admin Web always on |
 | File picker | Yes | No |
-| Directory migration | Yes | No |
-| Plugin folder import | Yes | No |
-| Certificate import | Yes | No |
-| CA client export | Yes | Not yet |
+| Directory migration | Native picker | Absolute path input |
+| Plugin import | Folder/ZIP | Browser ZIP upload |
+| Certificate import | Native file picker | Browser upload |
+| CA client export | Save locally | Browser download |
 | DB backup | Save locally | Download to browser |
 | Admin LAN restriction | N/A | On by default, can be disabled |
 
@@ -644,7 +654,9 @@ Token file: `%PROGRAMDATA%\CloudBox\config\admin-init-token.json`. Delete it and
 - Password: at least 8 chars, letter + digit.
 - GUI idle lock: default 30 minutes, 1–1440.
 - Web Admin LAN-only: default on; disable requires a red confirmation.
-- Web Admin password change / self rename are not implemented in the HTTP adapter; use the GUI.
+- Web Admin supports password change and self rename through the admin HTTP API.
+- Admin sessions are fixed at 4 hours and can be listed or revoked from the admin settings page.
+- Login requires double-submit CSRF; fetch `/api/admin/auth/status` first.
 
 ## 4. Security
 
@@ -687,7 +699,7 @@ extract 10/min; scan 10/min; registration 2/hour
 file 2GiB; list 5000; batch 100; text preview 512KiB;
 extract/scan concurrency 10; ClamAV 100MiB/300s;
 upload queue 10; drain 16MiB; share max 7200s
-session 168h; online window 300s; PROXY 3000ms;
+user session 168h; admin session 4h; online window 300s; PROXY 3000ms;
 frp health 3s/10s; TLS 1.2; headers 60000ms; request 300000ms
 plugin start 10000ms; plugin request 15000ms
 ```
@@ -700,11 +712,11 @@ Registration, user permissions, ClamAV/VirusTotal, AI, hosting, mail. Mail passw
 
 ## 6. System and storage
 
-GUI can migrate data/drive/plugin directories and save database backups locally. Web can download a backup to the browser, but cannot change server directories.
+GUI and Web can migrate data/drive/plugin directories; Web uses an absolute path input and downloads backups to the browser. A data-directory migration keeps the old directory because it holds the headless path pointer.
 
 ## 7. Network
 
-User Web port 1024–65535, never 1250. GUI supports certificate import; Web does not yet. frp fields: server, port, token, user, proxy name, tunnel type, remote port/custom domain, PROXY v2, tcpMux. frp is for user Web only.
+User Web port 1024–65535, never 1250. GUI and Web support certificate import (Web via browser upload). frp fields: server, port, token, user, proxy name, tunnel type, remote port/custom domain, PROXY v2, tcpMux. frp is for user Web only.
 
 ## 8–10. Users, files, plugins, common blanks
 

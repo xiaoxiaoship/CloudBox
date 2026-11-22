@@ -1,5 +1,7 @@
-import { Router, type RequestHandler } from 'express';
+import express, { Router, type RequestHandler } from 'express';
 import path from 'node:path';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import { z } from 'zod';
 import type { CoreServices } from '../../core/container.ts';
 
@@ -9,6 +11,27 @@ export function createAdminPluginsRouter(
 ): Router {
   const router = Router();
   const nameOf = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] ?? '' : (value ?? '');
+
+  router.post('/import', csrf, express.raw({ type: 'application/zip', limit: '21mb' }), async (req, res) => {
+    const fileName = req.get('x-plugin-filename') ?? '';
+    if (!/^[^/\\]+\.zip$/i.test(fileName) || !Buffer.isBuffer(req.body)) {
+      res.status(400).json({ code: 'INVALID_PLUGIN_PACKAGE', message: '请上传 ZIP 插件包' });
+      return;
+    }
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'cloudbox-plugin-'));
+    const file = path.join(temporary, fileName);
+    try {
+      await writeFile(file, req.body);
+      const result = await services.plugins.importZip(file);
+      const user = res.locals.adminUser as { id: number };
+      services.audit.record({ actorType: 'admin', actorId: user.id, action: 'plugin.import', result: 'success', targetType: 'plugin', detail: { fileName } });
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ code: 'PLUGIN_IMPORT_FAILED', message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  });
 
   router.get('/', (_req, res) => {
     res.json(services.plugins.list());

@@ -5,7 +5,6 @@
   <executable>node.exe</executable>
   <arguments>dist\headless\index.mjs</arguments>
   <workingdirectory>%BASE%</workingdirectory>
-  <env name="CLOUDBOX_DATA_DIR" value="%PROGRAMDATA%\CloudBox" />
   <logpath>%PROGRAMDATA%\CloudBox\logs</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>

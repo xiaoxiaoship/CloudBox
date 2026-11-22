@@ -79,7 +79,7 @@ export function createAdminAuthRouter(
     res.json({ user: adminUser(res) });
   });
 
-  router.post('/auth/login', async (req, res) => {
+  router.post('/auth/login', csrf, async (req, res) => {
     try {
       const body = loginSchema.parse(req.body);
       const result = await auth.login(body.username, body.password, {
@@ -90,6 +90,33 @@ export function createAdminAuthRouter(
       const csrfToken = createAdminCsrfToken();
       setAdminCookies(req, res, result.token, csrfToken, result.expiresAt - Date.now());
       res.json({ user: result.user, expiresAt: result.expiresAt, csrfToken });
+    } catch (error) {
+      if (!authError(error, res)) throw error;
+    }
+  });
+
+  router.get('/auth/sessions', requireAdmin, (_req, res) => {
+    const user = adminUser(res);
+    res.json(auth.listSessions(user.id, (res.locals.adminTokenHash as string | undefined) ?? null));
+  });
+
+  router.delete('/auth/sessions', requireAdmin, csrf, (_req, res) => {
+    const user = adminUser(res);
+    auth.revokeAllSessions(user.id);
+    clearAdminCookies(_req, res);
+    res.status(204).end();
+  });
+
+  router.post('/auth/password', requireAdmin, csrf, async (req, res) => {
+    try {
+      const input = z.object({
+        currentPassword: z.string().min(1).max(1_024),
+        newPassword: z.string().min(8).max(128),
+      }).parse(req.body);
+      const user = adminUser(res);
+      await auth.changePassword(user.id, input.currentPassword, input.newPassword);
+      clearAdminCookies(req, res);
+      res.status(204).end();
     } catch (error) {
       if (!authError(error, res)) throw error;
     }
