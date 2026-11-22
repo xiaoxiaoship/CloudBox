@@ -90,7 +90,20 @@ var
   ResultCode: Integer;
 begin
   Result := True;
-  // Always ask on an interactive system uninstall.
+  // CLI: /VERYSILENT keeps data unless /DELETEAPPDATA is explicit.
+  // Interactive: ask the user.
+  if UninstallSilent then
+  begin
+    DeleteUserData := Pos('/DELETEAPPDATA', Uppercase(GetCmdTail)) > 0;
+    if DeleteUserData then
+    begin
+      Exec('sc.exe', 'stop CloudBox', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(3000);
+      DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
+      DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+    end;
+  end
+  else
   begin
     if MsgBox('是否同时删除所有用户数据（账号、文件、配置）？' + #13#10 +
       'Delete all user data (accounts, files, configuration)?' + #13#10 +
