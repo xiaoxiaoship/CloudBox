@@ -1,7 +1,5 @@
 # CloudBox 插件开发与 API / Plugin Development & API
 
-> [中文](PLUGIN_API.md) | [English](en/PLUGIN_API.md)
-
 > 适用版本：1.0.2  
 > Applies to: 1.0.2
 
@@ -20,12 +18,9 @@
 ├── 9. 管理员设置页面
 ├── 10. 安全边界
 ├── 11. 示例
-└── 12. English
 ```
 
 ---
-
-# 中文
 
 ## 1. 运行模型
 
@@ -249,13 +244,48 @@ npm run electron:start
 
 ---
 
+---
+
 # English
 
-## 1. Runtime model
+## CloudBox Plugin Development & API
 
-Plugins run in a **separate child process**. The main process forwards HTTP requests, events and logs over IPC and never `require`s plugin code.
+> Applies to version: 1.0.2  
 
-## 2. Directory layout
+### Contents
+
+```text
+Plugin Development & API
+├── 1. Runtime model
+├── 2. Directory layout
+├── 3. manifest.json
+├── 4. index.js and ctx
+├── 5. HTTP routes
+├── 6. Events
+├── 7. Private storage
+├── 8. Web theme and Web takeover
+├── 9. Admin settings page
+├── 10. Security boundaries
+├── 11. Examples
+```
+
+---
+
+### 1. Runtime model
+
+Plugins run in a **separate child process**. The main process forwards requests, events and logs over IPC and never `require`s plugin code.
+
+```text
+CloudBox main process
+  └── child_process.fork(plugin index.js)
+        ├── HTTP route requests
+        ├── core events
+        └── plugin logs
+```
+
+A plugin crash does not directly bring down the main process; disabling a plugin sends shutdown and terminates the child process.
+
+### 2. Directory layout
 
 ```text
 plugins/
@@ -263,55 +293,77 @@ plugins/
     ├── manifest.json          # required
     ├── index.js               # required, exports activate(ctx)
     ├── admin-ui/
-    │   └── index.html         # optional admin page
-    ├── web-theme.css          # optional Web theme
+    │   └── index.html         # optional, admin settings page
+    ├── web-theme.css          # optional, injects a Web theme
     └── web-override/
-        ├── index.html         # optional Web takeover
+        ├── index.html         # optional, takes over the Web home page
         └── assets...
 ```
 
-## 3. manifest.json
+The plugin installation directory defaults to "System Settings → Plugin Directory".
+
+### 3. manifest.json
 
 ```json
 {
   "name": "ai-summary",
   "version": "1.0.0",
-  "description": "External AI summary",
+  "description": "Generate summaries with an external AI",
   "author": "CloudBox",
   "previews": [".json"],
   "adminUrl": "https://example.com/plugin-settings"
 }
 ```
 
-- `name`: lowercase letters/digits/hyphens, 2–64 chars.
-- `version`: non-empty string.
-- `description`, `author`: optional.
-- `previews`: optional custom preview extensions.
-- `adminUrl`: optional HTTP/HTTPS settings page; the plugin card shows a gear that opens the system browser.
-- `admin-ui/index.html` also marks the plugin as having an admin page.
+Fields:
 
-## 4. index.js and ctx
+- `name`: lowercase letters/digits/hyphens, 2–64 characters, used as the directory name and as part of the URL.
+- `version`: non-empty string.
+- `description` / `author`: optional.
+- `previews`: optional, declares custom preview extensions.
+- `adminUrl`: optional HTTP/HTTPS settings page; once configured, the plugin card shows a settings gear and calls the system browser to open it.
+- If `admin-ui/index.html` exists, the plugin is also considered to have a settings page.
+
+### 4. index.js and ctx
 
 ```js
 module.exports = async function activate(ctx) {
   const router = ctx.createRouter();
-  router.post('/generate', async (req) => ({
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-    body: { ok: true, input: req.body },
-  }));
+
+  router.post('/generate', async (req) => {
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: { ok: true, input: req.body },
+    };
+  });
+
   ctx.registerRouter('', router);
-  ctx.on('file.uploaded', (payload) => ctx.logger.info('uploaded', payload.path));
+
+  ctx.on('file.uploaded', (payload) => {
+    ctx.logger.info('uploaded', payload.path);
+  });
 };
 ```
 
-Available: `ctx.createRouter()`, `ctx.registerRouter()`, `ctx.on()`, `ctx.storage`, `ctx.logger`, `ctx.manifest`.
+#### What ctx provides
 
-## 5. HTTP routes
+- `ctx.createRouter()`
+- `ctx.registerRouter(prefix, router)`
+- `ctx.on(event, handler)`
+- `ctx.storage`
+- `ctx.logger`
+- `ctx.manifest`
 
-Mounted at `/api/plugins/{name}/{prefix}`.
+### 5. HTTP routes
 
-Request:
+Routes are mounted at:
+
+```text
+/api/plugins/{name}/{prefix}
+```
+
+Request object:
 
 ```ts
 {
@@ -324,29 +376,54 @@ Request:
 }
 ```
 
-Response: `{ status?, headers?, body? }`.
+Response:
 
-Requirements:
+```ts
+{
+  status?: number;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+```
 
-- A valid CloudBox session.
-- CSRF token for non-GET/HEAD.
-- 404 `PLUGIN_NOT_RUNNING` when disabled/not running.
-- `PLUGIN_ERROR` for plugin exceptions; the main service stays up.
+Example:
 
-## 6. Events
+```http
+POST /api/plugins/ai-summary/generate
+Content-Type: application/json
+Cookie: cloudbox_session=...
+X-CSRF-Token: ...
+
+{"text":"text to summarize"}
+```
+
+Constraints:
+
+- A CloudBox login session is required.
+- Non-GET/HEAD requests require a CSRF token.
+- If the plugin is not enabled/not running, returns 404 `PLUGIN_NOT_RUNNING`.
+- Plugin exceptions return `PLUGIN_ERROR` and do not affect the main service.
+
+### 6. Events
+
+Available events:
 
 - `file.uploaded`
 - `file.deleted`
 - `user.registered`
 - `user.created`
 
-Subscribe only; arbitrary event emission is not exposed.
+Plugins can only subscribe; sending arbitrary events to the main process is not supported.
 
-## 7. Private storage
+### 7. Private storage
+
+Each plugin has its own directory:
 
 ```text
 plugins/.storage/{name}
 ```
+
+API:
 
 ```js
 ctx.storage.get('apiKey', '');
@@ -356,35 +433,60 @@ ctx.storage.write('data.json', '{}');
 ctx.storage.dir;
 ```
 
-Plugins cannot read other plugins or user files through ctx.
+Plugins cannot read other plugins' or users' files through ctx.
 
-## 8. Web theme and takeover
+### 8. Web theme and Web takeover
 
-- `web-theme.css` is concatenated by `GET /api/public/plugin-theme.css` and injected into the Web `<head>`.
-- `web-override/index.html` takes over `/` after enabling “allow this plugin to take over the Web UI” and confirming the warning.
-- Hosted pages only communicate via `/api/*` with session + CSRF; CSP is set by CloudBox. Assets live in `web-override/` and are served through `/plugin-web/{name}/...`.
+#### Theme
 
-## 9. Admin page
+Place `web-theme.css`; once enabled, it is served by:
+
+```http
+GET /api/public/plugin-theme.css
+```
+
+The route returns the concatenation of all enabled themes and injects it into the Web `<head>`.
+
+#### Web takeover
+
+1. The plugin contains `web-override/index.html`.
+2. Enable the plugin.
+3. On the plugin page, turn on "Allow this plugin to take over the Web UI" and confirm the red warning.
+4. When a user visits `/`, that HTML is returned.
+
+Takeover pages can only communicate with the backend through standard `/api/*` (session + CSRF) and cannot access the local file system. CSP is set by CloudBox; assets go in `web-override/` and are referenced through `/plugin-web/{name}/...`.
+
+### 9. Admin settings page
+
+Two ways:
 
 1. `admin-ui/index.html`:
-   - Electron GUI loads it in a sandboxed iframe via `plugin-admin://{name}/index.html`.
-   - Web Admin loads it through `/api/admin/plugins/{name}/admin/index.html`, protected by the admin session.
-2. `manifest.adminUrl` opens an HTTP/HTTPS page in the system browser from the plugin card gear.
+   - Electron GUI: loaded in a sandboxed iframe via `plugin-admin://{name}/index.html`.
+   - Web Admin edition: loaded via `/api/admin/plugins/{name}/admin/index.html`, protected by the admin session.
+2. `manifest.adminUrl`: the settings gear on the right side of the plugin card calls the system browser to open the HTTP/HTTPS page.
 
-With `adminUrl`, the plugin must provide its own reachable Web service and authentication.
+When choosing `adminUrl`, the plugin must provide its own reachable Web service and authentication.
 
-## 10. Security boundary
+### 10. Security boundaries
 
 - Separate child process, not VM-level isolation.
-- Minimal environment variables.
-- Main-process authentication and CSRF for plugin routes.
-- Private storage per plugin.
-- Zip imports reject `../` and absolute paths.
-- Enable/disable, takeover and uninstall write audit logs.
-- Install only trusted plugins, especially takeover plugins.
+- The child process keeps only a minimal set of environment variables.
+- Plugin route requests go through the main process's authentication and CSRF checks.
+- Plugin storage is created by the main process and cannot access other plugins' or users' files.
+- Importing a ZIP validates paths and rejects `../` and absolute paths; ZIPs are at most 20MB with at most 2000 entries.
+- The Web Admin edition supports uploading a ZIP from the browser; folder import is still supported only in the GUI.
+- Enabling/disabling, Web takeover and uninstalling all write audit logs.
+- Install only trusted plugins, especially those that need Web takeover.
 
-## 11. Examples
+### 11. Examples
 
-- `resources/plugins/ai-summary`: external AI summary + admin UI.
+- `resources/plugins/ai-summary`: external AI summary + admin-ui.
 - `resources/plugins/dark-neon-theme`: CSS theme injection.
-- Development: `npm run build:desktop && npm run electron:start`; main logs show `[plugin:name]` output.
+- Plugin development and debugging:
+
+```bash
+npm run build:desktop
+npm run electron:start
+```
+
+The main process logs print the `[plugin:name]` stdout/stderr and logger.
