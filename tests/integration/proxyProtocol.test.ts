@@ -16,13 +16,13 @@ function proxyHeader(ip: string): Buffer {
   header[12] = 0x21; // v2, PROXY
   header[13] = 0x11; // IPv4, STREAM
   header.writeUInt16BE(12, 14);
-  header.writeUInt16BE(12345, 16);
-  header.writeUInt16BE(443, 18);
-  for (const [index, octet] of ip.split('.').entries()) header[20 + index] = Number(octet);
-  header[24] = 127;
-  header[25] = 0;
-  header[26] = 0;
-  header[27] = 1;
+  for (const [index, octet] of ip.split('.').entries()) header[16 + index] = Number(octet);
+  header[20] = 127;
+  header[21] = 0;
+  header[22] = 0;
+  header[23] = 1;
+  header.writeUInt16BE(12345, 24);
+  header.writeUInt16BE(443, 26);
   return header;
 }
 

@@ -3,6 +3,28 @@ import type { Server as HttpServer } from 'node:http';
 
 const SIGNATURE = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a]);
 
+/** Parse the source address from a complete PROXY protocol v2 header. */
+export function parseProxyV2Source(buffer: Buffer): string | null {
+  if (buffer.length < 16 || !buffer.subarray(0, 12).equals(SIGNATURE)) return null;
+  const versionCommand = buffer[12] ?? 0;
+  if ((versionCommand >> 4) !== 2 || (versionCommand & 0x0f) !== 1) return null;
+  const family = buffer[13] ?? 0;
+  const length = buffer.readUInt16BE(14);
+  if (buffer.length < 16 + length) return null;
+  if (family === 0x11 && length >= 12) {
+    return `${buffer[16]}.${buffer[17]}.${buffer[18]}.${buffer[19]}`;
+  }
+  if (family === 0x21 && length >= 36) {
+    const bytes = buffer.subarray(16, 32);
+    const groups: string[] = [];
+    for (let index = 0; index < 16; index += 2) {
+      groups.push(bytes.readUInt16BE(index).toString(16));
+    }
+    return groups.join(':');
+  }
+  return null;
+}
+
 export interface ProxySocket extends Socket {
   realIp?: string;
 }
@@ -125,7 +147,6 @@ export class ProxyProtocolServer {
         finish(remote, buffer);
         return;
       }
-      const family = buffer[13] ?? 0;
       const length = buffer.readUInt16BE(14);
       if (length > 65_535) {
         finish(remote, buffer);
@@ -133,20 +154,7 @@ export class ProxyProtocolServer {
       }
       if (buffer.length < 16 + length) return;
 
-      const command = versionCommand & 0x0f;
-      let realIp = remote;
-      if (command === 1) {
-        if (family === 0x11 && length >= 12) {
-          realIp = `${buffer[20]}.${buffer[21]}.${buffer[22]}.${buffer[23]}`;
-        } else if (family === 0x21 && length >= 36) {
-          const bytes = buffer.subarray(20, 36);
-          const groups: string[] = [];
-          for (let index = 0; index < 16; index += 2) {
-            groups.push(bytes.readUInt16BE(index).toString(16));
-          }
-          realIp = groups.join(':');
-        }
-      }
+      const realIp = parseProxyV2Source(buffer) ?? remote;
       finish(realIp, buffer.subarray(16 + length));
     };
 
