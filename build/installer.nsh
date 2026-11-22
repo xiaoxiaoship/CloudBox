@@ -3,6 +3,12 @@
 ; electron-builder's default uninstaller does not remove that value.
 
 !macro customUnInstall
+  ; Manual uninstall asks whether data should be deleted. Silent updates keep data.
+  IfSilent CloudBoxKeepData
+  MessageBox MB_YESNO|MB_ICONQUESTION "是否同时删除所有用户数据（账号、文件、配置）？$\r$\nDelete all user data (accounts, files, configuration)?" IDNO CloudBoxKeepData
+  RMDir /r "$APPDATA\cloudbox"
+  RMDir /r "$PROGRAMDATA\CloudBox"
+  CloudBoxKeepData:
   ; Current value name (explicitly set by src/main/loginItem.ts)
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CloudBox"
 

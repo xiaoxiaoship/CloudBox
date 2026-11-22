@@ -13,6 +13,8 @@ import { ServerController } from './serverController.ts';
 import { ServiceAutomation } from './serviceAutomation.ts';
 import { logger } from '../shared/logger.ts';
 import { TlsManager } from './tlsManager.ts';
+import { UpdateManager } from '../core/services/updateManager.ts';
+import { scheduleGuiUpdate } from './updateInstaller.ts';
 
 export interface MainContext {
   services: CoreServices;
@@ -23,6 +25,7 @@ export interface MainContext {
   ca: CaManager;
   frp: FrpService;
   automation: ServiceAutomation;
+  updateManager: UpdateManager;
   version: string;
   dataDir: string;
   storageRoot: string;
@@ -127,6 +130,22 @@ export function createMainContext(): MainContext {
     healthCheckIntervalSeconds: services.settings.getLowLevel().frpHealthIntervalSeconds,
   });
 
+  const version = app.getVersion();
+  const updateManager = new UpdateManager({
+    update: services.update,
+    currentVersion: version,
+    mode: 'gui',
+    downloadDir: path.join(app.getPath('temp'), 'cloudbox-update'),
+    install: async (installerPath) => {
+      scheduleGuiUpdate({
+        installerPath,
+        executablePath: app.getPath('exe'),
+        tempDir: path.join(app.getPath('temp'), 'cloudbox-update'),
+      });
+      setTimeout(() => app.quit(), 1_200).unref();
+    },
+  });
+
   const automation = new ServiceAutomation({
     server,
     frp,
@@ -150,7 +169,8 @@ export function createMainContext(): MainContext {
     ca,
     frp,
     automation,
-    version: app.getVersion(),
+    updateManager,
+    version,
     dataDir,
     storageRoot,
     pluginsDir,

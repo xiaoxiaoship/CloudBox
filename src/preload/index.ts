@@ -70,6 +70,9 @@ const api: CloudboxApi = {
   },
   system: {
     checkUpdate: () => invoke(IPC.systemCheckUpdate),
+    updateStatus: () => invoke(IPC.systemUpdateStatus),
+    downloadUpdate: () => invoke(IPC.systemDownloadUpdate),
+    installUpdate: () => invoke(IPC.systemInstallUpdate),
     openExternal: (input) => invoke(IPC.systemOpenExternal, input),
     rateLimits: () => invoke(IPC.systemRateLimits),
     clearRateLimit: (input) => invoke(IPC.systemClearRateLimit, input),

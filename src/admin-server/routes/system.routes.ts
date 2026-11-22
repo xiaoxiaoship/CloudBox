@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { CoreServices } from '../../core/container.ts';
 import { clearLimitedIp, listLimitedIps } from '../../server/middleware/rateLimit.ts';
 import { getAdminLogView } from '../../core/services/admin/adminLogService.ts';
+import type { UpdateManager } from '../../core/services/updateManager.ts';
 
 const countKey = z.object({
   scope: z.enum(['ip', 'account', 'global']),
@@ -14,6 +15,7 @@ export function createAdminSystemRouter(
   services: CoreServices,
   version: string,
   csrf: RequestHandler,
+  updateManager?: UpdateManager,
 ): Router {
   const router = Router();
 
@@ -61,7 +63,33 @@ export function createAdminSystemRouter(
   });
 
   router.get('/check-update', async (_req, res) => {
-    res.json(await services.update.check(version));
+    res.json(updateManager ? await updateManager.check() : await services.update.check(version, 'server'));
+  });
+
+  router.get('/update/status', (_req, res) => {
+    if (updateManager === undefined) {
+      res.status(501).json({ code: 'UPDATE_NOT_AVAILABLE', message: '自动更新未启用' });
+      return;
+    }
+    res.json(updateManager.status());
+  });
+
+  router.post('/update/download', csrf, (_req, res) => {
+    if (updateManager === undefined) {
+      res.status(501).json({ code: 'UPDATE_NOT_AVAILABLE', message: '自动更新未启用' });
+      return;
+    }
+    void updateManager.download().catch(() => { /* status exposes the error */ });
+    res.status(202).json(updateManager.status());
+  });
+
+  router.post('/update/install', csrf, (_req, res) => {
+    if (updateManager === undefined) {
+      res.status(501).json({ code: 'UPDATE_NOT_AVAILABLE', message: '自动更新未启用' });
+      return;
+    }
+    void updateManager.install().catch(() => { /* status exposes the error */ });
+    res.status(202).json(updateManager.status());
   });
 
   router.get('/logs', (req, res) => {

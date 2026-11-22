@@ -5,6 +5,9 @@ import { AdminServerService, type AdminServerRuntime } from '../core/services/ad
 import { AdminFrpService } from '../core/services/admin/adminFrpService.ts';
 import { AdminCaService } from '../core/services/admin/adminCaService.ts';
 import { AdminDirectoryService } from '../core/services/admin/adminDirectoryService.ts';
+import { UpdateManager } from '../core/services/updateManager.ts';
+import { scheduleServerUpdate } from './updateInstaller.ts';
+import path from 'node:path';
 import { isPortAvailable, type ServerController } from '../main/serverController.ts';
 import { logger } from '../shared/logger.ts';
 import {
@@ -41,6 +44,7 @@ export class ServiceController implements AdminServerRuntime {
   private readonly adminFrpService: AdminFrpService;
   private readonly adminCaService: AdminCaService;
   private readonly adminDirectoryService: AdminDirectoryService;
+  private readonly updateManager: UpdateManager;
   private sessionCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(context: HeadlessContext, options: { adminPort?: number } = {}) {
@@ -49,6 +53,16 @@ export class ServiceController implements AdminServerRuntime {
     this.adminServerService = new AdminServerService({ settings: context.services.settings, runtime: this });
     this.adminFrpService = new AdminFrpService({ frp: context.frp, settings: context.services.settings });
     this.adminCaService = new AdminCaService({ ca: context.ca, tls: context.tls });
+    this.updateManager = new UpdateManager({
+      update: context.services.update,
+      currentVersion: context.version,
+      mode: 'server',
+      downloadDir: path.join(context.dataDir, 'tmp', 'updates'),
+      install: async (installerPath) => {
+        scheduleServerUpdate({ installerPath, tempDir: path.join(context.dataDir, 'tmp', 'updates') });
+        setTimeout(() => { void this.close().finally(() => process.exit(0)); }, 1_200).unref();
+      },
+    });
     this.adminDirectoryService = new AdminDirectoryService({
       services: context.services,
       audit: context.services.audit,
@@ -155,6 +169,7 @@ export class ServiceController implements AdminServerRuntime {
         pluginsDir: this.context.pluginsDir,
       },
       adminDirectory: this.adminDirectoryService,
+      updateManager: this.updateManager,
     });
 
     const server = await new Promise<Server>((resolve, reject) => {

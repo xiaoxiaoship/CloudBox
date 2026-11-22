@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CollapsibleSection } from './CollapsibleSection.tsx';
 import QRCode from 'qrcode';
 import type {
@@ -38,6 +39,7 @@ const SECONDARY_BUTTON =
 
 export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps) {
   const api = useAdminApi();
+  const { t } = useTranslation();
   const [protocol, setProtocol] = useState<'http' | 'https'>('http');
   const [portInput, setPortInput] = useState('');
   const [applying, setApplying] = useState(false);
@@ -302,7 +304,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     try {
       const result = await call(api.server.importCertificate({ kind }));
       if (!result.imported) return;
-      notify('success', kind === 'cert' ? '证书已导入' : '私钥已导入');
+      notify('success', kind === 'cert' ? t('admin.network.certImported') : t('admin.network.keyImported'));
       await refreshServer();
     } catch (error) {
       notify('error', errorMessage(error));
@@ -325,7 +327,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       });
       const result = await call(api.server.importCertificate({ kind: certImportKind, fileName: file.name, content }));
       if (!result.imported) return;
-      notify('success', certImportKind === 'cert' ? '证书已导入' : '私钥已导入');
+      notify('success', certImportKind === 'cert' ? t('admin.network.certImported') : t('admin.network.keyImported'));
       await refreshServer();
     } catch (error) {
       notify('error', errorMessage(error));
@@ -340,7 +342,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     try {
       const info = await call(api.ca.create());
       setCa(info);
-      notify('success', '私有 CA 已生成并安装到系统信任库');
+      notify('success', t('admin.network.caGenerated'));
       await refreshCa();
       await refreshServer();
     } catch (error) {
@@ -356,7 +358,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     try {
       const info = await call(api.ca.install());
       setCa(info);
-      notify('success', '私有 CA 已安装到系统信任库');
+      notify('success', t('admin.network.caInstalled'));
     } catch (error) {
       notify('error', errorMessage(error));
       await refreshCa();
@@ -370,7 +372,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     try {
       const info = await call(api.ca.uninstall());
       setCa(info);
-      notify('success', '已卸载，浏览器将不再信任该 CA');
+      notify('success', t('admin.network.caUninstalled'));
     } catch (error) {
       notify('error', errorMessage(error));
       await refreshCa();
@@ -385,7 +387,7 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       await call(api.ca.issueServerCert({ extraHosts }));
       setProtocol('https');
       await refreshCa();
-      notify('success', '服务端证书已签发，正在应用 HTTPS 配置');
+      notify('success', t('admin.network.serverCertIssued'));
       await applyNetwork({ protocol: 'https' });
     } catch (error) {
       notify('error', errorMessage(error));
@@ -403,8 +405,8 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
         notify(
           'success',
           result.password
-            ? `客户端证书已导出：${result.fileName}（PKCS#12 密码：${result.password}）`
-            : `客户端证书已导出：${result.fileName}`,
+            ? t('admin.network.clientCertExported', { name: result.fileName, password: result.password })
+            : t('admin.network.clientCertExportedNoPass', { name: result.fileName }),
         );
       }
     } catch (error) {

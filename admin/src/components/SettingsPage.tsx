@@ -508,7 +508,7 @@ export function SettingsPage({
   const confirmDirectoryChange = async (): Promise<void> => {
     if (!directoryChange) return;
     if (isWebAdmin && !/^[A-Za-z]:[\\/]|^\\\\/.test(directoryChange.targetPath.trim())) {
-      setDirectoryError('请输入服务器上的绝对路径，例如 C:\\ProgramData\\CloudBox');
+      setDirectoryError(t('admin.directory.invalid'));
       return;
     }
     setDirectoryPending(true);
@@ -545,7 +545,7 @@ export function SettingsPage({
     try {
       await call(api.auth.revokeAllSessions());
       setAdminSessions([]);
-      notify('success', '已注销全部管理会话，请重新登录');
+      notify('success', t('admin.sessions.revoked'));
       await onPasswordChanged();
     } catch (cause) { notify('error', errorMessage(cause)); }
     finally { setSessionsPending(false); }
@@ -691,29 +691,29 @@ export function SettingsPage({
           <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-slate-200">管理会话</p>
-                <p className="mt-1 text-xs text-slate-500">查看当前管理员的浏览器会话，并可一次注销全部会话。</p>
+                <p className="text-sm font-medium text-slate-200">{t('admin.sessions.title')}</p>
+                <p className="mt-1 text-xs text-slate-500">{t('admin.sessions.description')}</p>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => void refreshAdminSessions()} disabled={sessionsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-60">
                   {sessionsPending ? <Spinner className="h-3.5 w-3.5" /> : null}
-                  刷新
+                  t('admin.sessions.refresh')
                 </button>
                 <button type="button" onClick={() => void revokeAllAdminSessions()} disabled={sessionsPending} className="rounded-lg border border-rose-800/60 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-950/30 disabled:opacity-60">
-                  全部注销
+                  t('admin.sessions.revokeAll')
                 </button>
               </div>
             </div>
             {adminSessions === null ? null : adminSessions.length === 0 ? (
-              <p className="mt-3 text-xs text-slate-500">暂无有效会话。</p>
+              <p className="mt-3 text-xs text-slate-500">{t('admin.sessions.empty')}</p>
             ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-400">
-                  <thead><tr className="border-b border-slate-800 text-slate-500"><th className="px-2 py-2">IP</th><th className="px-2 py-2">设备</th><th className="px-2 py-2">最后活动</th><th className="px-2 py-2">到期</th></tr></thead>
+                  <thead><tr className="border-b border-slate-800 text-slate-500"><th className="px-2 py-2">{t('admin.sessions.ip')}</th><th className="px-2 py-2">{t('admin.sessions.device')}</th><th className="px-2 py-2">{t('admin.sessions.lastSeen')}</th><th className="px-2 py-2">{t('admin.sessions.expires')}</th></tr></thead>
                   <tbody>
                     {adminSessions.map((session, index) => (
                       <tr key={index} className="border-b border-slate-900/60">
-                        <td className="px-2 py-2">{session.ip ?? '-'}{session.current ? ' (当前)' : ''}</td>
+                        <td className="px-2 py-2">{session.ip ?? '-'}{session.current ? ` (${t('admin.sessions.current')})` : ''}</td>
                         <td className="max-w-64 truncate px-2 py-2" title={session.userAgent ?? ''}>{session.userAgent ?? '-'}</td>
                         <td className="px-2 py-2">{new Date(session.lastSeenAt).toLocaleString('zh-CN')}</td>
                         <td className="px-2 py-2">{new Date(session.expiresAt).toLocaleString('zh-CN')}</td>
@@ -855,7 +855,7 @@ export function SettingsPage({
             <p className="mt-1 text-xs text-slate-500">查看当前进程最近日志，或数据库中的审计记录。</p>
           </div>
           <button type="button" onClick={() => void loadLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
-            {logsPending ? '加载中…' : '刷新日志'}
+            {logsPending ? t('common.loading') : t('admin.logs.refresh')}
           </button>
         </div>
         <div className="mt-3 flex gap-2">
@@ -870,7 +870,7 @@ export function SettingsPage({
             ? logsKind === 'runtime'
               ? logs.runtime.join('\n') || '暂无运行日志'
               : JSON.stringify(logs.audit, null, 2)
-            : '点击“刷新日志”加载'}
+            : t('admin.logs.clickRefresh')}
         </pre>
       </section>
 
@@ -1395,10 +1395,10 @@ export function SettingsPage({
                   <input
                     value={directoryChange.targetPath}
                     onChange={(event) => setDirectoryChange({ ...directoryChange, targetPath: event.target.value })}
-                    placeholder="例如 C:\\ProgramData\\CloudBox"
+                    placeholder={t('admin.directory.placeholder')}
                     className={`${INPUT_CLASS} font-mono`}
                   />
-                  <p className="text-[11px] text-slate-500">请输入服务器上的绝对路径；目标目录必须为空。Web 管理端不会打开本机文件夹选择器。</p>
+                  <p className="text-[11px] text-slate-500">{t('admin.directory.webHint')}</p>
                 </>
               ) : (
                 <span className="break-all font-mono text-[11px]">{directoryChange.targetPath}</span>

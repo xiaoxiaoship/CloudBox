@@ -22,6 +22,7 @@ import type { AdminFrpService } from '../core/services/admin/adminFrpService.ts'
 import type { AdminCaService } from '../core/services/admin/adminCaService.ts';
 import type { AdminUserService } from '../core/services/admin/adminUserService.ts';
 import type { AdminDirectoryService } from '../core/services/admin/adminDirectoryService.ts';
+import type { UpdateManager } from '../core/services/updateManager.ts';
 import type { ServiceController } from '../server-entry/serviceController.ts';
 import type { AdminServerService } from '../core/services/admin/adminServerService.ts';
 
@@ -38,6 +39,7 @@ export interface AdminAppOptions {
   adminDist?: string;
   appInfo?: { dataDir: string; storageDir: string; pluginsDir: string };
   adminDirectory?: AdminDirectoryService;
+  updateManager?: UpdateManager;
 }
 
 /**
@@ -91,7 +93,7 @@ export function createAdminApp(options: AdminAppOptions): Express {
     {
       const requireAdmin = createRequireAdmin(options.adminAuth);
       app.use('/api/admin/settings', requireAdmin, createAdminSettingsRouter(options.services, csrf));
-      app.use('/api/admin/system', requireAdmin, createAdminSystemRouter(options.services, options.version, csrf));
+      app.use('/api/admin/system', requireAdmin, createAdminSystemRouter(options.services, options.version, csrf, options.updateManager));
       app.use('/api/admin/files', requireAdmin, createAdminFilesRouter(options.services));
       app.use('/api/admin/plugins', requireAdmin, createAdminPluginsRouter(options.services, csrf));
       if (options.adminFrp !== undefined) {

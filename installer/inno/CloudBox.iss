@@ -62,3 +62,20 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  // Silent update/uninstall must preserve data.
+  if not UninstallSilent then
+  begin
+    if MsgBox('是否同时删除所有用户数据（账号、文件、配置）？' + #13#10 +
+      'Delete all user data (accounts, files, configuration)?' + #13#10 +
+      '选择“否”将保留 %APPDATA%\cloudbox 和 %PROGRAMDATA%\CloudBox，重装后可恢复。',
+      mbConfirmation, MB_YESNO) = IDYES then
+    begin
+      DelTree(ExpandConstant('{userappdata}\cloudbox'), True, True, True);
+      DelTree(ExpandConstant('{commonappdata}\CloudBox'), True, True, True);
+    end;
+  end;
+end;

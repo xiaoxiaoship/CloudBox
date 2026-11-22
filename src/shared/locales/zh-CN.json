@@ -248,7 +248,31 @@
       "close": "关闭",
       "portableHint": "便携版：请下载新版本后，直接替换当前旧版程序文件即可。",
       "devHint": "开发版：当前不是安装包环境，更新提示仅用于开发验证。",
-      "installedHint": "安装版：请下载安装包后直接双击覆盖安装。"
+      "installedHint": "安装版：请下载安装包后直接双击覆盖安装。",
+      "downloadNow": "下载并安装更新",
+      "downloading": "正在下载 {{progress}}%",
+      "installNow": "立即安装并重启",
+      "progressDetail": "已下载 {{done}} / {{total}}",
+      "phase": {
+        "idle": "等待检查",
+        "checking": "正在检查更新",
+        "available": "发现新版本",
+        "downloading": "正在后台下载",
+        "downloaded": "下载完成",
+        "installing": "正在静默安装",
+        "restarting": "正在准备重启",
+        "error": "更新失败"
+      },
+      "phaseHint": {
+        "downloaded": "安装包已校验完成，可以继续安装。",
+        "installing": "安装程序正在静默覆盖安装，请勿关闭窗口。",
+        "restarting": "程序即将退出并重新启动。"
+      },
+      "credits": "开源项目与致谢",
+      "creditsList": "Electron、React、Vite、Express、better-sqlite3、Tailwind CSS、Cap、@mertcanureten/node-waf、OWASP Core Rule Set、7-Zip、ClamAV、pdfjs-dist、docx-preview、ExcelJS、pptx-preview、pdf-lib、Node.js 及所有依赖项目的贡献者。",
+      "creditsThanks": "感谢这些开源项目让 CloudBox 得以运行。",
+      "creditsDsh": "本项目的开发、静态审计与动态渗透测试使用了 DeepSeek Harness（DSH）及其插件生态。",
+      "downloadAndInstall": "下载并静默安装"
     },
     "pluginsPage": {
       "title": "插件平台",
@@ -288,6 +312,38 @@
       "overrideOn": "Web 接管已开启",
       "overrideOff": "Web 接管已关闭",
       "uninstalled": "插件已卸载"
+    },
+    "sessions": {
+      "title": "管理会话",
+      "description": "查看当前管理员的有效浏览器会话，可一次注销全部会话。",
+      "refresh": "刷新",
+      "revokeAll": "全部注销",
+      "empty": "暂无有效会话。",
+      "ip": "IP",
+      "device": "设备",
+      "lastSeen": "最后活动",
+      "expires": "到期",
+      "current": "当前",
+      "revoked": "已注销全部管理会话，请重新登录"
+    },
+    "directory": {
+      "webHint": "请输入服务器上的绝对路径；目标目录必须为空。Web 管理端不会打开本机文件夹选择器。",
+      "placeholder": "例如 C:\\\\ProgramData\\\\CloudBox",
+      "invalid": "请输入服务器上的绝对路径，例如 C:\\\\ProgramData\\\\CloudBox"
+    },
+    "logs": {
+      "refresh": "刷新日志",
+      "clickRefresh": "点击“刷新日志”加载"
+    },
+    "network": {
+      "certImported": "证书已导入",
+      "keyImported": "私钥已导入",
+      "caGenerated": "私有 CA 已生成并安装到系统信任库",
+      "caInstalled": "私有 CA 已安装到系统信任库",
+      "caUninstalled": "已卸载，浏览器将不再信任该 CA",
+      "serverCertIssued": "服务端证书已签发，正在应用 HTTPS 配置",
+      "clientCertExported": "客户端证书已导出：{{name}}（PKCS#12 密码：{{password}}）",
+      "clientCertExportedNoPass": "客户端证书已导出：{{name}}"
     }
   },
   "header": {

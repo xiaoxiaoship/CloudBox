@@ -53,6 +53,24 @@ export interface UpdateCheckResult {
   latestVersion: string;
   releaseNotes: string;
   downloadUrl: string;
+  assetName?: string;
+  assetUrl?: string;
+  assetSize?: number | null;
+  assetDigest?: string | null;
+}
+
+export type UpdatePhase = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'installing' | 'restarting' | 'error';
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  progress: number;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  currentVersion: string;
+  latestVersion: string | null;
+  assetName: string | null;
+  error: string | null;
+  checkedAt: number | null;
 }
 
 export interface AdminStatus {
@@ -385,6 +403,9 @@ export interface CloudboxApi {
   };
   system: {
     checkUpdate: () => Promise<Result<UpdateCheckResult>>;
+    updateStatus?: () => Promise<Result<UpdateStatus>>;
+    downloadUpdate?: () => Promise<Result<UpdateStatus>>;
+    installUpdate?: () => Promise<Result<UpdateStatus>>;
     openExternal: (input: { url: string }) => Promise<Result<null>>;
     rateLimits: () => Promise<Result<Array<{ ip: string; until: number; endpoint: string }>>>;
     clearRateLimit: (input: { ip: string }) => Promise<Result<null>>;
@@ -494,6 +515,9 @@ export const IPC = {
   settingsTestMail: 'settings:test-mail',
   logsGet: 'logs:get',
   systemCheckUpdate: 'system:check-update',
+  systemUpdateStatus: 'system:update-status',
+  systemDownloadUpdate: 'system:download-update',
+  systemInstallUpdate: 'system:install-update',
   systemOpenExternal: 'system:open-external',
   systemRateLimits: 'system:rate-limits',
   systemClearRateLimit: 'system:clear-rate-limit',

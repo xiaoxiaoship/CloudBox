@@ -167,6 +167,9 @@ export function createHttpAdminApi(): AdminApi {
 
   const system: AdminApi['system'] = {
     checkUpdate: () => resultOf(() => request('/api/admin/system/check-update')),
+    updateStatus: () => resultOf(() => request('/api/admin/system/update/status')),
+    downloadUpdate: () => resultOf(() => request('/api/admin/system/update/download', { method: 'POST' })),
+    installUpdate: () => resultOf(() => request('/api/admin/system/update/install', { method: 'POST' })),
     openExternal: (input) => resultOf(async () => {
       window.open(input.url, '_blank', 'noopener,noreferrer');
       return null;

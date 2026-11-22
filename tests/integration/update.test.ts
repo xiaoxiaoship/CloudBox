@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { UpdateService } from '../../src/core/services/updateService.ts';
+import { UpdateManager } from '../../src/core/services/updateManager.ts';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { SettingsService } from '../../src/core/services/settingsService.ts';
 import { createTestServer, TEST_PASSWORD } from '../helpers/testServer.ts';
 
@@ -63,6 +67,49 @@ describe('system update route', () => {
       assert.equal(response.status, 403);
     } finally {
       await t.close();
+    }
+  });
+
+  it('selects the matching Setup or Server asset and drives update status', async () => {
+    const fetchImpl = (async () => new Response(JSON.stringify({
+      tag_name: 'v1.3.0',
+      body: 'notes',
+      html_url: 'https://github.com/owner/repo/releases/tag/v1.3.0',
+      assets: [
+        { name: 'CloudBox-Setup-1.3.0-x64.exe', browser_download_url: 'https://example.test/setup.exe', size: 10, digest: 'sha256:abc' },
+        { name: 'CloudBox-Server-1.3.0-x64.exe', browser_download_url: 'https://example.test/server.exe', size: 20, digest: 'sha256:def' },
+      ],
+    }), { status: 200 })) as typeof fetch;
+    const update = new UpdateService({ settings: { get: () => 'owner/repo' } as unknown as SettingsService, fetchImpl });
+    const gui = await update.check('1.2.0', 'gui');
+    assert.equal(gui.assetName, 'CloudBox-Setup-1.3.0-x64.exe');
+    const server = await new UpdateService({ settings: { get: () => 'owner/repo' } as unknown as SettingsService, fetchImpl }).check('1.2.0', 'server');
+    assert.equal(server.assetName, 'CloudBox-Server-1.3.0-x64.exe');
+
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cloudbox-update-test-'));
+    try {
+      const manager = new UpdateManager({
+        update: {
+          check: async () => ({ ...gui, hasUpdate: true }),
+          downloadAsset: async (_asset: unknown, destination: string, progress: (done: number, total: number | null) => void) => {
+            progress(5, 10);
+            progress(10, 10);
+            await import('node:fs/promises').then(({ writeFile }) => writeFile(destination, 'binary'));
+          },
+        } as unknown as UpdateService,
+        currentVersion: '1.2.0',
+        mode: 'gui',
+        downloadDir: dir,
+        install: async () => {},
+      });
+      await manager.check();
+      await manager.download();
+      assert.equal(manager.status().phase, 'downloaded');
+      assert.equal(manager.status().progress, 100);
+      await manager.install();
+      assert.equal(manager.status().phase, 'restarting');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

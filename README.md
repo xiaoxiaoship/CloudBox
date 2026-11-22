@@ -81,6 +81,16 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 - SQLite 在线备份；GUI 和 Web 均支持数据/网盘/插件目录迁移；Web 备份直接下载到浏览器设备。
 - 中文 / English 双语界面。
 
+## 更新与卸载
+
+- 检查到新版本后，管理端会后台下载匹配的安装包并显示进度。
+- 下载完成后自动执行静默覆盖安装，随后重启 GUI 或 Windows 服务。
+- Server 更新使用 `CloudBox-Server` 安装包；GUI 使用 `CloudBox-Setup` 安装包。
+- 卸载时系统会询问是否删除用户数据：
+  - 选择“否”：只移除程序、快捷方式和注册表项，保留 `%APPDATA%\cloudbox` / `%PROGRAMDATA%\CloudBox`。
+  - 选择“是”：同时删除账号、文件与配置。
+  - 静默更新会跳过该询问，始终保留用户数据。
+
 ## 安全提示
 
 - 管理 Web 的 1250 端口默认仅限内网，且没有内置 HTTPS；不要通过 frp 或公网端口转发暴露。
@@ -314,6 +324,16 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 - GitHub Releases update check without silent replacement.
 - SQLite online backup; GUI and Web directory migration; Web browser download.
 - Chinese / English UI.
+
+## Updates and uninstall
+
+- When an update is available, the admin downloads the matching installer in the background with progress.
+- After verification the installer runs silently and the GUI/service restarts.
+- Server updates use the `CloudBox-Server` package; GUI updates use `CloudBox-Setup`.
+- The uninstaller asks whether to delete user data:
+  - No: remove only the program, shortcuts and registry entries; keep `%APPDATA%\cloudbox` / `%PROGRAMDATA%\CloudBox`.
+  - Yes: also delete accounts, files and configuration.
+  - Silent updates skip the prompt and always preserve user data.
 
 ## Security notes
 

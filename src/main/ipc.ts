@@ -1205,7 +1205,13 @@ export function registerIpc(context: IpcContext): void {
     return { saved: true, fileName: path.basename(selection.filePath) };
   });
 
-  register(IPC.systemCheckUpdate, z.undefined(), () => context.services.update.check(context.version));
+  register(IPC.systemCheckUpdate, z.undefined(), () => context.updateManager.check());
+
+  register(IPC.systemUpdateStatus, z.undefined(), () => context.updateManager.status());
+
+  register(IPC.systemDownloadUpdate, z.undefined(), () => context.updateManager.download());
+
+  register(IPC.systemInstallUpdate, z.undefined(), () => context.updateManager.install());
 
   register(IPC.systemOpenExternal, z.object({ url: z.string().url() }), async (input) => {
     const url = new URL(input.url);

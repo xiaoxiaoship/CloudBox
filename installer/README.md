@@ -36,4 +36,8 @@ certificate before public distribution if this is not acceptable.
 ## Uninstall
 
 The installer stops and removes the service, shortcuts and uninstall entry.
-User data under `%PROGRAMDATA%\CloudBox` is intentionally preserved.
+During an interactive uninstall it asks whether to delete user data
+(`%APPDATA%\cloudbox` and `%PROGRAMDATA%\CloudBox`). Choosing No preserves data
+for a later reinstall. Silent updates skip the prompt and always preserve data.
+The standalone uninstaller tool is no longer maintained; use Windows
+"Apps & features" / the uninstall entry.

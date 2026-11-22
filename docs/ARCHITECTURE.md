@@ -458,6 +458,22 @@ const api = window.cloudbox
 
 Web Admin 没有 Electron 文件选择器；相关操作隐藏或禁用。
 
+## 13.1 自动更新
+
+- `UpdateService` 解析 GitHub Release assets，GUI 选择 `CloudBox-Setup-*-x64.exe`，Server 选择 `CloudBox-Server-*-x64.exe`。
+- `UpdateManager` 在后台下载到临时目录，按 asset 大小与 GitHub digest 校验，状态为 idle/checking/available/downloading/downloaded/installing/restarting/error。
+- GUI 通过独立 cmd 脚本等待退出后静默运行安装包并重新启动 `CloudBox.exe`。
+- Server 通过独立 cmd 脚本停止 WinSW 服务、静默运行 Server 安装包，再启动服务；当前进程以 0 退出，避免 WinSW 在安装前重启旧版本。
+- Web 管理端通过 `/api/admin/system/update/status|download|install` 轮询状态；GUI 通过 IPC 轮询。
+- 下载失败、大小不符或 digest 不符会删除临时文件并报告错误。
+
+## 13.2 卸载数据选择
+
+- NSIS `customUnInstall` 与 Inno Setup `InitializeUninstall` 在交互卸载时询问是否删除 `%APPDATA%\cloudbox` 与 `%PROGRAMDATA%\CloudBox`。
+- 选择“否”只删除程序本体、快捷方式和注册表项。
+- 静默安装/更新跳过询问，始终保留数据。
+- 不再维护独立卸载工具，使用 Windows“应用和功能”/安装目录卸载入口。
+
 ## 14. 测试、构建与发布
 
 ```bash

@@ -248,7 +248,31 @@
       "close": "Close",
       "portableHint": "Portable build: download the new version and replace the old program files directly.",
       "devHint": "Development build: this is not an installed package; the update check is for development only.",
-      "installedHint": "Installed build: download the installer and double-click to install over the old version."
+      "installedHint": "Installed build: download the installer and double-click to install over the old version.",
+      "downloadNow": "Download and install update",
+      "downloading": "Downloading {{progress}}%",
+      "installNow": "Install and restart now",
+      "progressDetail": "Downloaded {{done}} / {{total}}",
+      "phase": {
+        "idle": "Waiting for check",
+        "checking": "Checking for updates",
+        "available": "Update available",
+        "downloading": "Downloading in background",
+        "downloaded": "Download complete",
+        "installing": "Installing silently",
+        "restarting": "Preparing to restart",
+        "error": "Update failed"
+      },
+      "phaseHint": {
+        "downloaded": "The installer has been verified and is ready.",
+        "installing": "The installer is applying the update silently. Do not close the window.",
+        "restarting": "The app will exit and restart shortly."
+      },
+      "credits": "Open-source projects and credits",
+      "creditsList": "Electron, React, Vite, Express, better-sqlite3, Tailwind CSS, Cap, @mertcanureten/node-waf, OWASP Core Rule Set, 7-Zip, ClamAV, pdfjs-dist, docx-preview, ExcelJS, pptx-preview, pdf-lib, Node.js, and all dependency contributors.",
+      "creditsThanks": "Thanks to these open-source projects for making CloudBox possible.",
+      "creditsDsh": "Development, static audit and dynamic penetration testing used DeepSeek Harness (DSH) and its plugin ecosystem.",
+      "downloadAndInstall": "Download and install silently"
     },
     "pluginsPage": {
       "title": "Plugin Platform",
@@ -288,6 +312,38 @@
       "overrideOn": "Web takeover enabled",
       "overrideOff": "Web takeover disabled",
       "uninstalled": "Plugin uninstalled"
+    },
+    "sessions": {
+      "title": "Admin sessions",
+      "description": "View active admin browser sessions and revoke all of them at once.",
+      "refresh": "Refresh",
+      "revokeAll": "Revoke all",
+      "empty": "No active sessions.",
+      "ip": "IP",
+      "device": "Device",
+      "lastSeen": "Last seen",
+      "expires": "Expires",
+      "current": "Current",
+      "revoked": "All admin sessions were revoked; please sign in again."
+    },
+    "directory": {
+      "webHint": "Enter an absolute path on the server; the target directory must be empty. Web Admin cannot open a local folder picker.",
+      "placeholder": "e.g. C:\\\\ProgramData\\\\CloudBox",
+      "invalid": "Enter an absolute server path, e.g. C:\\\\ProgramData\\\\CloudBox"
+    },
+    "logs": {
+      "refresh": "Refresh logs",
+      "clickRefresh": "Click “Refresh logs” to load"
+    },
+    "network": {
+      "certImported": "Certificate imported",
+      "keyImported": "Private key imported",
+      "caGenerated": "Private CA generated and installed into the system trust store",
+      "caInstalled": "Private CA installed into the system trust store",
+      "caUninstalled": "CA removed from the system trust store",
+      "serverCertIssued": "Server certificate issued; applying HTTPS",
+      "clientCertExported": "Client certificate exported: {{name}} (PKCS#12 password: {{password}})",
+      "clientCertExportedNoPass": "Client certificate exported: {{name}}"
     }
   },
   "header": {
