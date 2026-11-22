@@ -136,7 +136,7 @@ npm run build:headless
 node dist/headless/index.mjs
 ```
 
-Windows Server 安装器需要 WinSW 和 Inno Setup，具体见 [installer/README.md](installer/README.md)。
+Windows Server 安装器需要 Inno Setup；WinSW 已包含在仓库中，具体见 [installer/README.md](installer/README.md)。
 
 测试：
 
@@ -370,7 +370,7 @@ npm run build:headless
 node dist/headless/index.mjs
 ```
 
-Windows Server installer prerequisites are documented in [installer/README.md](installer/README.md).
+Windows Server installer prerequisites (Inno Setup; WinSW is included) are documented in [installer/README.md](installer/README.md).
 
 Tests:
 
