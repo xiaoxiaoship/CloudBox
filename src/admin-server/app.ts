@@ -60,8 +60,13 @@ export function createAdminApp(options: AdminAppOptions): Express {
         objectSrc: ["'none'"],
         baseUri: ["'none'"],
         frameAncestors: ["'none'"],
+        // Admin Web is HTTP by default; upgrading assets to HTTPS makes the
+        // login/setup page blank because this port has no TLS listener.
+        upgradeInsecureRequests: null,
       },
     },
+    // HSTS is ignored on HTTP and must not be advertised by the plain admin port.
+    strictTransportSecurity: false,
     crossOriginEmbedderPolicy: false,
   }));
   app.use(express.json({ limit: '256kb' }));
