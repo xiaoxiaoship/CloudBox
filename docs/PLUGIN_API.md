@@ -203,7 +203,7 @@ GET /api/public/plugin-theme.css
 1. 插件包含 `web-override/index.html`。
 2. 启用插件。
 3. 在插件页打开“允许此插件接管 Web 界面”，确认红色警告。
-4. 用户访问 `/` 时返回该 HTML。
+4. 用户访问 `/` 时，CloudBox 用 sandbox iframe 包装该 HTML；页面不再直接替换主文档。
 
 接管页面只能通过标准 `/api/*` 与后端通信（Session + CSRF），不能访问本地文件系统。CSP 由 CloudBox 设置，资源放在 `web-override/` 并通过 `/plugin-web/{name}/...` 引用。
 
@@ -250,7 +250,7 @@ npm run electron:start
 
 ## CloudBox Plugin Development & API
 
-> Applies to version: 1.0.2  
+> Applies to version: 1.0.3  
 
 ### Contents
 
@@ -296,7 +296,7 @@ plugins/
     │   └── index.html         # optional, admin settings page
     ├── web-theme.css          # optional, injects a Web theme
     └── web-override/
-        ├── index.html         # optional, takes over the Web home page
+        ├── index.html         # optional, custom page wrapped in a sandbox iframe
         └── assets...
 ```
 

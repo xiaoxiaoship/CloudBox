@@ -85,7 +85,7 @@ CloudBox 提供两种运行形态，二者共用同一套用户、文件、安�
 
 - 检查到新版本后，管理端会后台下载匹配的安装包并显示进度。
 - 下载完成后自动执行静默覆盖安装，随后重启 GUI 或 Windows 服务。
-- **当前 v1.0.2 的自动更新只完成了下载/进度/SHA/状态机测试，真实旧版本到新版本的安装/重启尚未端到端验证。**
+- **当前 v1.0.3 的自动更新只完成了下载/进度/SHA/状态机测试，真实旧版本到新版本的安装/重启尚未端到端验证。**
 - Server 更新使用 `CloudBox-Server` 安装包；GUI 使用 `CloudBox-Setup` 安装包。
 - Server 版支持 CLI 静默卸载：默认保留数据；加 `/DELETEAPPDATA` 才删除默认目录和 `cloudbox-paths.json` 记录的自定义目录。
 - 卸载时系统会询问是否删除用户数据：
@@ -250,7 +250,7 @@ CloudBox 的运行不依赖 DSH。DSH 是本项目开发阶段使用的开源智
 
 CloudBox is a private network drive and file management service for Windows. Files stay on your own computer or server; LAN users access them through a browser, and frp can be configured for public access.
 
-Current version: **1.0.2**
+Current version: **1.0.3**
 
 CloudBox has two runtime forms. They share the same users, files, security policy and SQLite database, but differ in management entry point and deployment.
 
@@ -333,7 +333,7 @@ CloudBox has two runtime forms. They share the same users, files, security polic
 
 - When an update is available, the admin downloads the matching installer in the background with progress.
 - After verification the installer runs silently and the GUI/service restarts.
-- **The v1.0.2 auto-updater has unit coverage for download/progress/SHA/state, but a real old-version-to-new-version install/restart has not yet been verified end-to-end.**
+- **The v1.0.3 auto-updater has unit coverage for download/progress/SHA/state, but a real old-version-to-new-version install/restart has not yet been verified end-to-end.**
 - Server updates use the `CloudBox-Server` package; GUI updates use `CloudBox-Setup`.
 - Server supports CLI uninstall: default keeps data; `/DELETEAPPDATA` deletes defaults and custom paths recorded in `cloudbox-paths.json`.
 - The uninstaller asks whether to delete user data:
