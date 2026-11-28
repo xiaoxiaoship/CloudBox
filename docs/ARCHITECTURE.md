@@ -1,7 +1,7 @@
 # CloudBox 架构与实现原理 / Architecture & Implementation
 
-> 适用版本：1.0.2  
-> Applies to: 1.0.2
+> 适用版本：1.0.3  
+> Applies to: 1.0.3
 
 ## 目录 / Contents
 
@@ -27,7 +27,7 @@
 
 ## 1. 运行形态
 
-CloudBox 1.0.2 有两种运行形态，共享 core/services 和 SQLite，但入口与部署不同。
+CloudBox 1.0.3 有两种运行形态，共享 core/services 和 SQLite，但入口与部署不同。
 
 ```text
 Electron GUI
@@ -525,7 +525,7 @@ release\CloudBox-Server-<version>-x64.exe
 
 ## CloudBox Architecture & Implementation
 
-> Applies to version: 1.0.2
+> Applies to version: 1.0.3
 
 ### Contents
 
@@ -551,7 +551,7 @@ release\CloudBox-Server-<version>-x64.exe
 
 ### 1. Runtime forms
 
-CloudBox 1.0.2 has two runtime forms; they share core/services and SQLite, but their entry points and deployment differ.
+CloudBox 1.0.3 has two runtime forms; they share core/services and SQLite, but their entry points and deployment differ.
 
 ```text
 Electron GUI

@@ -1,11 +1,11 @@
 # CloudBox 开发与交接指南
 
-> 适用版本：v1.0.2  
+> 适用版本：v1.0.3  
 > 目标读者：后续接手开发、构建、发布和排障的维护者
 
 ## 1. 项目形态
 
-CloudBox v1.0.2 有两种运行形态，共用同一套 `core/services` 和 SQLite：
+CloudBox v1.0.3 有两种运行形态，共用同一套 `core/services` 和 SQLite：
 
 ```text
 Electron GUI
@@ -190,7 +190,7 @@ resources/uninstall-cleanup.ps1
 - 自动更新真实安装未验证。
 - Desktop NSIS 的卸载询问依赖 `scripts/patch-nsis-uninstaller.mjs` 注入；不要删除该步骤。
 - Inno staging 使用短临时路径，避免 Windows 长路径导致 Inno 失败。
-- 存量 Settings/Network/Files 等页面仍有硬编码文案，见 `docs/AUDIT-v1.0.2.md`。
+- 存量 Settings/Network/Files 等页面仍有硬编码文案，见 `docs/AUDIT-v1.0.3.md`。
 
 ## 9. 发布流程
 
@@ -259,12 +259,12 @@ release\CloudBox-Setup-*-__uninstaller.exe
 
 ## CloudBox Development and Handover Guide
 
-> Applies to version: v1.0.2  
+> Applies to version: v1.0.3  
 > Intended audience: maintainers who will take over development, builds, releases, and troubleshooting
 
 ### 1. Project Forms
 
-CloudBox v1.0.2 has two runtime forms, which share the same `core/services` and SQLite:
+CloudBox v1.0.3 has two runtime forms, which share the same `core/services` and SQLite:
 
 ```text
 Electron GUI
@@ -449,7 +449,7 @@ Do not break the following when modifying code:
 - Real-world auto-update installation is not verified.
 - The Desktop NSIS uninstall prompt depends on injection by `scripts/patch-nsis-uninstaller.mjs`; do not remove that step.
 - Inno staging uses a short temporary path to avoid Inno failures caused by Windows long paths.
-- Existing pages such as Settings/Network/Files still contain hardcoded text; see `docs/AUDIT-v1.0.2.md`.
+- Existing pages such as Settings/Network/Files still contain hardcoded text; see `docs/AUDIT-v1.0.3.md`.
 
 ### 9. Release Process
 

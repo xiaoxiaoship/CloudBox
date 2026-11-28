@@ -166,7 +166,7 @@ npm run e2e:electron
 - [Windows Server 安装说明](installer/README.md)
 - [第三方组件声明](THIRD_PARTY_NOTICES.md)
 - [开发与交接指南](docs/HANDOVER.md)
-- [v1.0.2 静态审计报告](docs/AUDIT-v1.0.2.md)
+- [v1.0.3 静态审计报告](docs/AUDIT-v1.0.3.md)
 
 ## 开源项目与致谢
 
@@ -414,7 +414,7 @@ npm run e2e:electron
 - [Windows Server installation](installer/README.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 - [Development and handover guide](docs/HANDOVER.md)
-- [v1.0.2 static audit](docs/AUDIT-v1.0.2.md)
+- [v1.0.3 static audit](docs/AUDIT-v1.0.3.md)
 
 ## Open-source projects
 

@@ -1,7 +1,7 @@
 # CloudBox 配置指南 / Configuration Guide
 
-> 适用版本：1.0.2  
-> Applies to: 1.0.2
+> 适用版本：1.0.3  
+> Applies to: 1.0.3
 
 本指南同时说明 **Electron GUI** 与 **Web 管理版**。两者共用业务设置，但入口、认证和部分桌面能力不同。
 
@@ -638,7 +638,7 @@ frp token 留空表示不启用 token 认证，仅建议在可信 frps 使用。
 
 ## CloudBox Configuration Guide
 
-> Applies to: 1.0.2  
+> Applies to: 1.0.3  
 
 This guide covers both the **Electron GUI** and the **Web Admin**. They share business settings, but entry points, authentication and some desktop capabilities differ.
 
