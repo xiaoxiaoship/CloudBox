@@ -13,6 +13,13 @@ import type { AuditService } from './auditService.ts';
 import { compressionGate } from '../../server/concurrency.ts';
 
 function sevenBinary(): string {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  if (resourcesPath) {
+    const candidates = [path.join(resourcesPath, 'bin', '7za.exe'), path.join(resourcesPath, 'bin', '7za')];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return candidate;
+    }
+  }
   return path7za;
 }
 
