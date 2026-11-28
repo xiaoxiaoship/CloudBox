@@ -342,7 +342,7 @@ export function FilesPage() {
         </div>
 
         <div className="mb-3 flex items-center justify-start">
-          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索个人盘" className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-900" />
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t('files.searchPlaceholder')} className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-900" />
           {searchPending ? <span className="ml-2 text-[11px] text-slate-400">搜索中…</span> : null}
         </div>
 
@@ -503,10 +503,10 @@ export function FilesPage() {
                 disabled={selected.length === 0}
                 onClick={() => setCompressEntries(entries.filter((entry) => selected.includes(entry.path)))}
                 className={SECONDARY_BUTTON}
-                title="压缩"
+                title={t('files.compress')}
               >
                 <ArchiveIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">压缩</span>
+                <span className="hidden sm:inline">{t('files.compress')}</span>
               </button>
               ) : null}
 

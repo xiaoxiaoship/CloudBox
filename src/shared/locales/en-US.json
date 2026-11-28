@@ -112,7 +112,9 @@
     "downloadItem": "Download {{name}}",
     "renameItem": "Rename {{name}}",
     "deleteItem": "Delete {{name}}",
-    "folderNamePlaceholder": "e.g. Photos"
+    "folderNamePlaceholder": "e.g. Photos",
+    "compress": "Compress",
+    "searchPlaceholder": "Search my drive"
   },
   "settings": {
     "title": "Settings",

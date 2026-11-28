@@ -112,7 +112,9 @@
     "downloadItem": "下载 {{name}}",
     "renameItem": "重命名 {{name}}",
     "deleteItem": "删除 {{name}}",
-    "folderNamePlaceholder": "例如：照片"
+    "folderNamePlaceholder": "例如：照片",
+    "compress": "压缩",
+    "searchPlaceholder": "搜索个人盘"
   },
   "settings": {
     "title": "系统设置",
