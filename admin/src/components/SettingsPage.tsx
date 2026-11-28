@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { autoT as t } from '../i18n.ts';
 import { CollapsibleSection } from './CollapsibleSection.tsx';
 import type { AdminSessionInfo, AdminSettings, FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
@@ -93,8 +93,6 @@ export function SettingsPage({
     adminIdleMinutes: 30,
     lowLevel: { ...DEFAULT_LOW_LEVEL_SECURITY },
   });
-  const [adminWeb, setAdminWeb] = useState<AdminSettings['adminWeb']>({ intranetOnly: true });
-  const [adminWebConfirmOpen, setAdminWebConfirmOpen] = useState(false);
   const [adminSessions, setAdminSessions] = useState<AdminSessionInfo[] | null>(null);
   const [sessionsPending, setSessionsPending] = useState(false);
   const [securityPending, setSecurityPending] = useState(false);
@@ -189,7 +187,6 @@ export function SettingsPage({
         setShareAddressMode(settings.shareAddressMode);
         setSecurity(settings.security);
         setSecurityModeSnapshot(settings.security.mode);
-        setAdminWeb(settings.adminWeb);
         setScan(settings.scan);
         setAi(settings.ai);
         setHosting(settings.hosting);
@@ -755,23 +752,6 @@ export function SettingsPage({
           <label className="mt-3 block text-[11px] text-slate-500">{t('admin.settings.idle-timeout-minutes')}
             <input type="number" min={1} max={1440} value={security.adminIdleMinutes} disabled={!security.adminIdleEnabled} onChange={(event) => setSecurity((current) => ({ ...current, adminIdleMinutes: Math.max(1, Math.min(1440, Number(event.target.value) || 30)) }))} className={`${INPUT_CLASS} max-w-48 disabled:opacity-50`} />
           </label>
-        </div>
-        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-slate-200">{t('admin.settings.web-2')}</p>
-              <p className="mt-1 text-xs text-slate-500">{t('admin.settings.1250')}</p>
-            </div>
-            <button type="button" role="switch" aria-checked={adminWeb.intranetOnly} onClick={() => {
-              if (adminWeb.intranetOnly) { setAdminWebConfirmOpen(true); return; }
-              void (async () => {
-                try { const next = await call(api.settings.setAdminWeb({ intranetOnly: true })); setAdminWeb(next.adminWeb); notify('success', t('admin.settings.text-2')); }
-                catch (cause) { notify('error', errorMessage(cause)); }
-              })();
-            }} className={`relative h-7 w-12 shrink-0 rounded-full transition ${adminWeb.intranetOnly ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${adminWeb.intranetOnly ? 'left-6' : 'left-1'}`} />
-            </button>
-          </div>
         </div>
         {api.auth.sessions ? (
           <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
@@ -1565,16 +1545,6 @@ export function SettingsPage({
           ) : null}
       </section>
 
-      {adminWebConfirmOpen ? (
-        <ConfirmDialog
-          title={t('admin.settings.web')}
-          description={t('admin.settings.1250-https')}
-          confirmLabel={t('admin.settings.text-15')}
-          danger
-          onClose={() => setAdminWebConfirmOpen(false)}
-          onConfirm={async () => { const next = await call(api.settings.setAdminWeb({ intranetOnly: false })); setAdminWeb(next.adminWeb); setAdminWebConfirmOpen(false); notify('success', t('admin.settings.text-16')); }}
-        />
-      ) : null}
       {usageOpen ? (
         <Modal title={t('admin.settings.text-17')} onClose={() => setUsageOpen(false)} footer={<button type="button" onClick={() => setUsageOpen(false)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">{t('admin.settings.close')}</button>}>
           <div className="space-y-2 text-xs text-slate-300">

@@ -71,9 +71,16 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const [frpSyncPending, setFrpSyncPending] = useState(false);
   const [schedule, setSchedule] = useState({ enabled: false, start: '08:00', end: '22:00' });
   const [schedulePending, setSchedulePending] = useState(false);
+  const [adminWeb, setAdminWeb] = useState({ intranetOnly: true });
+  const [adminWebConfirmOpen, setAdminWebConfirmOpen] = useState(false);
   const frpLoaded = useRef(false);
   const certFileRef = useRef<HTMLInputElement>(null);
   const [certImportKind, setCertImportKind] = useState<'cert' | 'key'>('cert');
+
+  useEffect(() => {
+    if (!isWebAdmin) return;
+    void call(api.settings.get()).then((settings) => setAdminWeb(settings.adminWeb)).catch(() => {});
+  }, [api, isWebAdmin]);
 
   useEffect(() => {
     if (!server) return;
@@ -118,6 +125,16 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       notify('error', errorMessage(error));
     } finally {
       setSchedulePending(false);
+    }
+  };
+
+  const setAdminWebIntranet = async (intranetOnly: boolean): Promise<void> => {
+    try {
+      const next = await call(api.settings.setAdminWeb({ intranetOnly }));
+      setAdminWeb(next.adminWeb);
+      notify('success', intranetOnly ? '管理端已恢复仅内网访问' : '管理端已允许非内网访问');
+    } catch (error) {
+      notify('error', errorMessage(error));
     }
   };
 
@@ -489,6 +506,21 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
             </div>
           ) : null}
         </div>
+
+        {isWebAdmin ? <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-slate-200">管理 Web 仅限内网访问</p>
+              <p className="mt-1 text-[11px] text-slate-500">关闭后 1250 管理端将允许非内网地址访问，存在较高暴露风险。</p>
+            </div>
+            <button type="button" role="switch" aria-checked={adminWeb.intranetOnly} onClick={() => {
+              if (adminWeb.intranetOnly) { setAdminWebConfirmOpen(true); return; }
+              void setAdminWebIntranet(true);
+            }} className={`relative h-7 w-12 shrink-0 rounded-full transition ${adminWeb.intranetOnly ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${adminWeb.intranetOnly ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+        </div> : null}
 
         <label className="mt-4 flex w-fit items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
           <input type="checkbox" checked={server?.autoStart ?? false} onChange={(event) => void toggleAutoStart(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
@@ -1067,6 +1099,17 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           <p className="mt-1 text-[10px] text-slate-600">配置：{frp?.configPath ?? '—'}</p>
         </div>
       </CollapsibleSection>
+
+      {isWebAdmin && adminWebConfirmOpen ? (
+        <ConfirmDialog
+          title="关闭管理 Web 内网限制？"
+          description="关闭后，任何能访问 1250 端口的设备都可以打开管理员登录页。请确认已配置防火墙、HTTPS 或可信反向代理；否则强烈不建议继续。"
+          confirmLabel="我了解风险，关闭限制"
+          danger
+          onClose={() => setAdminWebConfirmOpen(false)}
+          onConfirm={async () => { await setAdminWebIntranet(false); setAdminWebConfirmOpen(false); }}
+        />
+      ) : null}
     </div>
   );
 }
