@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { FrpStatus, UserIpHistoryEntry, UserSummary, UserStatus } from '../../../src/shared/ipcTypes.ts';
+import type { AnnouncementView, FrpStatus, UserIpHistoryEntry, UserSummary, UserStatus } from '../../../src/shared/ipcTypes.ts';
 import { call, errorMessage } from '../api/ipc.ts';
 import { useAdminApi } from '../api/AdminApiContext.tsx';
 import { ConfirmDialog, Modal, type ToastState } from './Dialog.tsx';
@@ -48,6 +48,12 @@ export function UsersPage({ notify }: UsersPageProps) {
   const [ipHistory, setIpHistory] = useState<UserIpHistoryEntry[]>([]);
   const [ipHistoryLoading, setIpHistoryLoading] = useState(false);
   const [frpStatus, setFrpStatus] = useState<FrpStatus | null>(null);
+  const [annCategory, setAnnCategory] = useState<'critical' | 'warning' | 'info'>('info');
+  const [annAudience, setAnnAudience] = useState<'all' | 'user'>('all');
+  const [annTarget, setAnnTarget] = useState('');
+  const [annBody, setAnnBody] = useState('');
+  const [annPending, setAnnPending] = useState(false);
+  const [announcements, setAnnouncements] = useState<AnnouncementView[]>([]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -64,6 +70,14 @@ export function UsersPage({ notify }: UsersPageProps) {
   useEffect(() => {
     void api.frp.status().then((value) => { if (value.ok) setFrpStatus(value.data); }).catch(() => {});
   }, []);
+
+  const loadAnnouncements = useCallback(async (): Promise<void> => {
+    try { setAnnouncements(await call(api.announcements.list())); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    void loadAnnouncements();
+  }, [loadAnnouncements]);
 
   useEffect(() => {
     void refresh();
@@ -132,8 +146,73 @@ export function UsersPage({ notify }: UsersPageProps) {
     finally { setBatchPending(false); }
   };
 
+  const publishAnnouncement = async (): Promise<void> => {
+    setAnnPending(true);
+    try {
+      await call(api.announcements.create({
+        category: annCategory,
+        audience: annAudience,
+        targetUserId: annAudience === 'user' ? Number(annTarget) : null,
+        body: annBody,
+      }));
+      setAnnBody('');
+      notify('success', '公告已发布');
+      await loadAnnouncements();
+    } catch (cause) { notify('error', errorMessage(cause)); }
+    finally { setAnnPending(false); }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className="flex items-center gap-2">
+          <UsersIcon className="h-4 w-4 text-indigo-400" />
+          <h2 className="text-sm font-semibold text-slate-100">发布公告</h2>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-[11px] text-slate-500">类别
+            <select value={annCategory} onChange={(event) => setAnnCategory(event.target.value as typeof annCategory)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+              <option value="critical">关键</option><option value="warning">警告</option><option value="info">消息</option>
+            </select>
+          </label>
+          <label className="text-[11px] text-slate-500">范围
+            <select value={annAudience} onChange={(event) => setAnnAudience(event.target.value as typeof annAudience)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+              <option value="all">全部公开</option><option value="user">指定用户</option>
+            </select>
+          </label>
+          <label className="text-[11px] text-slate-500">目标用户
+            <select value={annTarget} disabled={annAudience !== 'user'} onChange={(event) => setAnnTarget(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50">
+              <option value="">请选择</option>
+              {users.filter((user) => user.role !== 'admin').map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+            </select>
+          </label>
+        </div>
+        <textarea value={annBody} onChange={(event) => setAnnBody(event.target.value)} rows={3} maxLength={5000} placeholder="公告内容" className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+        <div className="mt-3 flex justify-end">
+          <button type="button" onClick={() => void publishAnnouncement()} disabled={annPending || annBody.trim() === '' || (annAudience === 'user' && !annTarget)} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white disabled:opacity-50">{annPending ? '发布中…' : '发布公告'}</button>
+        </div>
+        <div className="mt-4 border-t border-slate-800 pt-3">
+          <p className="mb-2 text-[11px] font-medium text-slate-400">历史公告</p>
+          {announcements.length === 0 ? <p className="text-xs text-slate-500">暂无历史公告</p> : (
+            <ul className="max-h-72 space-y-2 overflow-auto">
+              {announcements.map((announcement) => (
+                <li key={announcement.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      <span className={announcement.category === 'critical' ? 'text-rose-300' : announcement.category === 'warning' ? 'text-amber-300' : 'text-sky-300'}>{announcement.category === 'critical' ? '关键' : announcement.category === 'warning' ? '警告' : '消息'}</span>
+                      <span className="text-slate-500">{announcement.audience === 'all' ? '全部公开' : `指定：${announcement.targetUsername ?? announcement.targetUserId ?? ''}`}</span>
+                      <span className="text-slate-600">{formatDate(announcement.createdAt)}</span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-300">{announcement.body}</p>
+                  </div>
+                  <button type="button" onClick={() => void (async () => { try { await call(api.announcements.delete(announcement.id)); await loadAnnouncements(); notify('success', '公告已删除'); } catch (cause) { notify('error', errorMessage(cause)); } })()} className="shrink-0 text-[11px] text-rose-400 hover:text-rose-300">删除</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">用户账户</h2>

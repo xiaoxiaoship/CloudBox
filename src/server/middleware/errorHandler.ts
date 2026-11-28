@@ -4,6 +4,7 @@ import type { EventBus } from '../../core/services/eventBus.ts';
 import { PathSecurityError } from '../../core/security/safePath.ts';
 import { AuthError } from '../../core/services/authService.ts';
 import { FileServiceError } from '../../core/services/fileService.ts';
+import { GuestError } from '../../core/services/guestLinkService.ts';
 import { RegistrationError } from '../../core/services/registrationService.ts';
 import { ShareError } from '../../core/services/shareService.ts';
 import { logger } from '../../shared/logger.ts';
@@ -81,6 +82,18 @@ export function errorHandler(events?: EventBus): ErrorRequestHandler {
       message: error.message,
       requestId,
       ...(error.details === undefined ? {} : { details: error.details }),
+    } satisfies ErrorBody);
+    return;
+  }
+
+  if (error instanceof GuestError) {
+    if (error.httpStatus === 429) {
+      res.setHeader('Retry-After', '60');
+    }
+    res.status(error.httpStatus).json({
+      code: error.code,
+      message: error.message,
+      requestId,
     } satisfies ErrorBody);
     return;
   }

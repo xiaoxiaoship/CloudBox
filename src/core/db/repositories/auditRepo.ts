@@ -99,6 +99,10 @@ export class AuditRepository {
     return row.n;
   }
 
+  clearAll(): number {
+    return this.db.prepare('DELETE FROM audit_logs').run().changes;
+  }
+
   pruneBefore(ts: number): number {
     return this.db.prepare('DELETE FROM audit_logs WHERE ts < ?').run(ts).changes;
   }

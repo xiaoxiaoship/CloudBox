@@ -1,4 +1,3 @@
-import { rm } from 'node:fs/promises';
 import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import type { CoreServices } from '../../core/container.ts';
@@ -6,6 +5,7 @@ import type { AdminSettings } from '../../shared/ipcTypes.ts';
 import { clampLowLevelSecurity, type LowLevelSecurity } from '../../shared/lowLevelSecurity.ts';
 import { resetLimitedIps } from '../../server/middleware/rateLimit.ts';
 import { buildAdminSettings } from '../../core/services/admin/adminSettingsService.ts';
+import { clearResourceCache } from '../../core/services/cacheCleanupService.ts';
 
 const securitySchema = z.object({
   mode: z.enum(['simple', 'advanced']),
@@ -89,6 +89,9 @@ export function createAdminSettingsRouter(services: CoreServices, csrf: RequestH
     services.settings.set('scan.localTimeoutSeconds', lowLevel.clamavTimeoutSeconds, null);
     services.settings.set('maxConcurrentExtractions', lowLevel.maxConcurrentExtractions, null);
     services.settings.set('maxConcurrentScans', lowLevel.maxConcurrentScans, null);
+    services.settings.set('maxConcurrentHeavyPreviews', lowLevel.maxConcurrentHeavyPreviews, null);
+    services.settings.set('maxConcurrentPreviewsPerUser', lowLevel.maxConcurrentPreviewsPerUser, null);
+    services.settings.set('maxLogSizeMB', lowLevel.maxLogSizeMB, null);
     resetLimitedIps();
     res.json(buildAdminSettings(services));
   });
@@ -110,6 +113,8 @@ export function createAdminSettingsRouter(services: CoreServices, csrf: RequestH
       allowUserPreviewImage: z.boolean(), allowUserPreviewVideo: z.boolean(),
       allowUserPreviewPdf: z.boolean(), allowUserPreviewOffice: z.boolean(),
       allowUserExtract: z.boolean(), allowUserScan: z.boolean(),
+      allowUserCompress: z.boolean(), allowUserDirectShare: z.boolean(),
+      allowUserArchivePreview: z.boolean(), allowGuestMode: z.boolean(),
     }).parse(req.body);
     services.settings.set('allow_user_preview_image', input.allowUserPreviewImage, null);
     services.settings.set('allow_user_preview_video', input.allowUserPreviewVideo, null);
@@ -117,6 +122,22 @@ export function createAdminSettingsRouter(services: CoreServices, csrf: RequestH
     services.settings.set('allow_user_preview_office', input.allowUserPreviewOffice, null);
     services.settings.set('allow_user_extract', input.allowUserExtract, null);
     services.settings.set('allow_user_scan', input.allowUserScan, null);
+    services.settings.set('allow_user_compress', input.allowUserCompress, null);
+    services.settings.set('allow_user_direct_share', input.allowUserDirectShare, null);
+    services.settings.set('allow_user_archive_preview', input.allowUserArchivePreview, null);
+    services.settings.set('allow_guest_mode', input.allowGuestMode, null);
+    res.json(buildAdminSettings(services));
+  });
+
+  router.post('/address-mode', csrf, (req, res) => {
+    const input = z.object({ target: z.enum(['guest', 'share']), mode: z.enum(['auto', 'public']) }).parse(req.body);
+    services.settings.set(input.target === 'guest' ? 'guest.addressMode' : 'share.addressMode', input.mode, null);
+    res.json(buildAdminSettings(services));
+  });
+
+  router.post('/default-quota', csrf, (req, res) => {
+    const input = z.object({ bytes: z.number().int().min(0).max(1024 ** 5) }).parse(req.body);
+    services.settings.set('user.defaultQuotaBytes', input.bytes, null);
     res.json(buildAdminSettings(services));
   });
 
@@ -149,8 +170,13 @@ export function createAdminSettingsRouter(services: CoreServices, csrf: RequestH
   });
 
   router.post('/hosting', csrf, (req, res) => {
-    const input = z.object({ enabled: z.boolean(), baseUrl: z.string().max(500) }).parse(req.body);
+    const input = z.object({
+      enabled: z.boolean(),
+      baseUrl: z.string().max(500),
+      mode: z.enum(['auto', 'public']).default('auto'),
+    }).parse(req.body);
     services.settings.set('hosting.enabled', input.enabled, null);
+    services.settings.set('hosting.mode', input.mode, null);
     services.settings.set('hosting.base_url', input.baseUrl, null);
     res.json(buildAdminSettings(services));
   });
@@ -166,10 +192,18 @@ export function createAdminSettingsRouter(services: CoreServices, csrf: RequestH
     res.json(buildAdminSettings(services));
   });
 
+  router.post('/cache-cleanup', csrf, (req, res) => {
+    const input = z.object({
+      autoEnabled: z.boolean(),
+      intervalHours: z.number().int().min(1).max(720),
+    }).parse(req.body);
+    services.settings.set('cacheCleanup.autoEnabled', input.autoEnabled, null);
+    services.settings.set('cacheCleanup.intervalHours', input.intervalHours, null);
+    res.json(buildAdminSettings(services));
+  });
+
   router.post('/clear-cache', csrf, async (_req, res) => {
-    await rm(services.files.getTempDir(), { recursive: true, force: true }).catch(() => {});
-    const removedLogs = services.audit.trimToBytes(services.settings.get('maxLogSizeMB') * 1024 * 1024);
-    res.json({ removedFiles: 0, removedLogs });
+    res.json(await clearResourceCache(services));
   });
 
   return router;

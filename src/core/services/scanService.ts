@@ -227,8 +227,21 @@ export class ScanService {
       );
     }
 
-    const task = this.tasks.create(user.id, 'scan', 'scanning');
-    void scanGate.run(this.settings.get('maxConcurrentScans'), () => this.run(task.id, user, target, ctx));
+    const task = this.tasks.create(user.id, 'scan', 'queued', { path: filePath });
+    const ticket = scanGate.enqueue(this.settings.get('maxConcurrentScans'), undefined, (position) => {
+      this.tasks.update(task.id, { queuePosition: position });
+    });
+    this.tasks.registerCancel(task.id, () => ticket.cancel());
+    void ticket.promise.then(async () => {
+      try {
+        await this.run(task.id, user, target, ctx);
+      } finally {
+        ticket.release();
+      }
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.tasks.update(task.id, { status: message.includes('cancelled') ? 'cancelled' : 'failed', error: message.includes('cancelled') ? '已取消' : message, queuePosition: null });
+    });
     return { taskId: task.id };
   }
 
@@ -238,6 +251,7 @@ export class ScanService {
     target: DownloadTarget,
     ctx: RequestContext,
   ): Promise<void> {
+    this.tasks.update(taskId, { status: 'scanning', queuePosition: null });
     const mode = this.settings.get('scan.mode');
 
     try {
@@ -270,6 +284,7 @@ export class ScanService {
         };
       }
 
+      if (this.tasks.getForUser(taskId, user.id)?.status === 'cancelled') return;
       const status: ScanStatus = result.status;
       const scannedAt = this.now();
       this.scans.upsert({

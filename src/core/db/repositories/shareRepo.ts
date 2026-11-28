@@ -75,6 +75,17 @@ export class ShareRepository {
     return row ? mapShare(row) : null;
   }
 
+  listByUser(userId: number): ShareRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM shares WHERE user_id = ? ORDER BY created_at DESC LIMIT 100')
+      .all(userId) as ShareRow[];
+    return rows.map(mapShare);
+  }
+
+  deleteForUser(id: number, userId: number): boolean {
+    return this.db.prepare('DELETE FROM shares WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
+  }
+
   deleteExpired(now: number): number {
     return this.db.prepare('DELETE FROM shares WHERE expires_at < ?').run(now).changes;
   }

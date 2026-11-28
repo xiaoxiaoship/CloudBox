@@ -2,6 +2,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const SESSION_COOKIE = 'cloudbox_session';
 export const CSRF_COOKIE = 'cloudbox_csrf';
+/** 访客模式独立 Cookie：普通 requireUser 只认 SESSION_COOKIE，绝不接受它 */
+export const GUEST_COOKIE = 'cb_guest';
 export const CSRF_HEADER = 'x-csrf-token';
 
 interface CookieCarrier {

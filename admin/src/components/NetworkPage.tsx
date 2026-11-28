@@ -53,10 +53,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
   const [caPending, setCaPending] = useState<string | null>(null);
   const [extraHosts, setExtraHosts] = useState('');
   const [mtls, setMtls] = useState(false);
-  const [trustProxy, setTrustProxy] = useState(false);
-  const [trustProxyPending, setTrustProxyPending] = useState(false);
-  const [trustProxyConfirm, setTrustProxyConfirm] = useState<boolean | null>(null);
-
   const [frp, setFrp] = useState<FrpStatus | null>(null);
   const [frpConfig, setFrpConfig] = useState<FrpConfig>({
     serverAddr: '',
@@ -98,17 +94,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
     void refreshCa();
   }, [refreshCa]);
 
-  useEffect(() => {
-    let active = true;
-    void call(api.settings.get())
-      .then((settings) => {
-        if (active) setTrustProxy(settings.trustProxy);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -156,25 +141,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
       await refreshServer();
     } catch (error) {
       notify('error', errorMessage(error));
-    }
-  };
-
-  const toggleTrustProxy = async (enabled: boolean): Promise<void> => {
-    setTrustProxyPending(true);
-    try {
-      const settings = await call(api.settings.setTrustProxy({ enabled }));
-      setTrustProxy(settings.trustProxy);
-      notify(
-        'success',
-        enabled
-          ? '已开启信任反向代理真实 IP'
-          : '已关闭信任反向代理真实 IP',
-      );
-      await refreshServer();
-    } catch (error) {
-      notify('error', errorMessage(error));
-    } finally {
-      setTrustProxyPending(false);
     }
   };
 
@@ -584,50 +550,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-start justify-between gap-4 border-t border-slate-800 pt-4">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-semibold text-slate-200">
-                信任反向代理的真实 IP
-              </h3>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] ${
-                  trustProxy
-                    ? 'bg-emerald-500/15 text-emerald-300'
-                    : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {trustProxy ? '已开启' : '已关闭'}
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] leading-5 text-slate-500">
-              开启后限流将基于 X-Forwarded-For 头，适用于挂载了 frp 或 Nginx 的场景。
-              注意：如果直连暴露端口，请保持关闭，防止伪造 IP 头绕过限流。
-            </p>
-            <p className="mt-1 text-[11px] text-slate-600">
-              修改后如果服务正在运行，会自动重启 HTTP 服务以生效。
-            </p>
-          </div>
-
-          <button
-            type="button"
-            role="switch"
-            aria-checked={trustProxy}
-            aria-label="信任反向代理的真实 IP"
-            disabled={trustProxyPending}
-            onClick={() => setTrustProxyConfirm(!trustProxy)}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-              trustProxy ? 'bg-emerald-500' : 'bg-slate-700'
-            } disabled:opacity-50`}
-          >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                trustProxy ? 'left-6' : 'left-1'
-              }`}
-            />
-          </button>
-        </div>
-
         {httpsSelected ? (
           <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-[11px] leading-5 text-amber-300">
             <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1018,9 +940,9 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
               }
               className={INPUT_CLASS}
             >
-              <option value="http">HTTP（推荐，自动带 X-Forwarded-For）</option>
-              <option value="https">HTTPS（frps 终止 TLS）</option>
-              <option value="tcp">TCP（原始端口，需 PROXY protocol 才能识别 IP）</option>
+              <option value="http">HTTP</option>
+              <option value="https">HTTPS</option>
+              <option value="tcp">TCP</option>
             </select>
           </div>
           {frpConfig.tunnelType === 'tcp' ? (
@@ -1145,26 +1067,6 @@ export function NetworkPage({ server, refreshServer, notify }: NetworkPageProps)
           <p className="mt-1 text-[10px] text-slate-600">配置：{frp?.configPath ?? '—'}</p>
         </div>
       </CollapsibleSection>
-      {trustProxyConfirm !== null ? (
-        <ConfirmDialog
-          title="确认信任反向代理真实 IP"
-          description={
-            trustProxyConfirm && frpConfig.tunnelType === 'tcp' && !frpConfig.proxyProtocol
-              ? '当前为 TCP 隧道且未启用 PROXY Protocol v2。开启后可能导致 IP 限流失效，或允许伪造来源 IP，建议先启用 PROXY Protocol v2。'
-              : trustProxyConfirm
-                ? '开启后 CloudBox 将信任反向代理传入的真实 IP。请确认反向代理已正确设置来源 IP。'
-                : '关闭后 CloudBox 将不再信任反向代理传入的真实 IP，限流可能回退到代理地址。'
-          }
-          confirmLabel={trustProxyConfirm ? '确认开启' : '确认关闭'}
-          danger={trustProxyConfirm && frpConfig.tunnelType === 'tcp' && !frpConfig.proxyProtocol}
-          onClose={() => setTrustProxyConfirm(null)}
-          onConfirm={async () => {
-            const target = trustProxyConfirm;
-            setTrustProxyConfirm(null);
-            if (target !== null) await toggleTrustProxy(target);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

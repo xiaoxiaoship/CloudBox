@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdminStatus, AdminUser, ServerStatus } from '../../../src/shared/ipcTypes.ts';
-import { call, errorMessage } from '../api/ipc.ts';
+import { call, errorMessage, isWebAdmin } from '../api/ipc.ts';
 import { useAdminApi } from '../api/AdminApiContext.tsx';
 import type { PageKey } from '../App.tsx';
-import { applyAdminTheme, readAdminTheme, saveAdminTheme, type AdminTheme } from '../lib/theme.ts';
+import { applyAdminTheme, readAdminTheme, saveAdminTheme, subscribeAdminSystemTheme, type AdminTheme } from '../lib/theme.ts';
 import type { ToastState } from './Dialog.tsx';
 import {
   CloudIcon,
@@ -14,6 +14,9 @@ import {
   PlugIcon,
   ServerIcon,
   SettingsIcon,
+  SunIcon,
+  MoonIcon,
+  MonitorIcon,
   Spinner,
   UsersIcon,
   WifiIcon,
@@ -61,6 +64,12 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
   const lastTraffic = useRef<{ time: number; up: number; down: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [theme, setTheme] = useState<AdminTheme>(() => readAdminTheme());
+
+  useEffect(() => {
+    applyAdminTheme(theme);
+    if (theme !== 'system') return;
+    return subscribeAdminSystemTheme(() => applyAdminTheme('system'));
+  }, [theme]);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [idlePolicy, setIdlePolicy] = useState({ enabled: true, minutes: 30 });
@@ -196,6 +205,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
             </span>
           </div>
 
+          {!isWebAdmin ? (
           <button
             type="button"
             onClick={() => {
@@ -208,6 +218,7 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
           >
             {t('admin.shell.dataDirectory')}
           </button>
+          ) : null}
 
           <div className="flex items-center justify-between px-2 text-[10px] text-slate-600">
             <span>v{status.version}</span>
@@ -228,7 +239,28 @@ export function Shell({ status, user, page, onNavigate, onLogout, notify }: Shel
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); saveAdminTheme(next); }} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800">{theme === 'dark' ? t('浅色') : t('深色')}</button>
+            <div role="group" aria-label={t('主题模式')} className="inline-flex items-center gap-0.5 rounded-xl border border-slate-700 bg-slate-900 p-0.5">
+              {([
+                ['light', t('浅色'), SunIcon],
+                ['dark', t('深色'), MoonIcon],
+                ['system', t('跟随系统'), MonitorIcon],
+              ] as const).map(([value, label, Icon]) => {
+                const active = theme === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => { setTheme(value); saveAdminTheme(value); }}
+                    aria-label={label}
+                    aria-pressed={active}
+                    title={label}
+                    className={`rounded-[10px] p-1.5 transition ${active ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-200'}`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                );
+              })}
+            </div>
             <div className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-400">
               <ServerIcon className="h-3.5 w-3.5" />
               {server?.running ? t('admin.shell.online') : t('admin.shell.offline')}

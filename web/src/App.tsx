@@ -3,6 +3,7 @@ import { FilesPage } from './components/FilesPage.tsx';
 import { AudioPlayer } from './components/AudioPlayer.tsx';
 import { LoginPage } from './components/LoginPage.tsx';
 import { ThemeSync } from './components/ThemeToggle.tsx';
+import { PluginSlots } from './components/PluginSlots.tsx';
 import { useAppStore } from './store/useAppStore.ts';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
         <>
           <FilesPage />
           <AudioPlayer />
+          <PluginSlots />
         </>
       ) : (
         <LoginPage />

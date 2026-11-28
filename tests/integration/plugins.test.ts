@@ -50,6 +50,17 @@ describe('plugin runtime and web extensions', () => {
     const zipped = await t.services.plugins.importZip(zipPath);
     assert.ok(zipped.some((plugin) => plugin.name === 'zip-demo'));
 
+    const badZipPath = path.join(zipDirectory, 'not-a-plugin.zip');
+    writeFileSync(badZipPath, await makeZip({ 'readme.txt': 'not a plugin' }));
+    await assert.rejects(() => t!.services.plugins.importZip(badZipPath), /manifest\.json/);
+
+    const oversizedPath = path.join(zipDirectory, 'oversized-plugin.zip');
+    writeFileSync(oversizedPath, await makeZip({
+      'manifest.json': JSON.stringify({ name: 'oversized-demo', version: '1.0.0' }),
+      'large.bin': 'A'.repeat(17 * 1024 * 1024),
+    }));
+    await assert.rejects(() => t!.services.plugins.importZip(oversizedPath), /单文件解压后/);
+
     await t.services.plugins.setEnabled('ai-summary', true);
     const running = t.services.plugins.list().find((plugin) => plugin.name === 'ai-summary');
     assert.equal(running?.running, true);
@@ -123,7 +134,11 @@ describe('plugin runtime and web extensions', () => {
     t.services.plugins.setAllowWebOverride('override-demo', true);
     const page = await t.client.request('/');
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /OVERRIDE_BY_PLUGIN/);
+    const pageHtml = await page.text();
+    assert.match(pageHtml, /<iframe[^>]+sandbox="allow-scripts allow-forms"/);
+    assert.match(pageHtml, /plugin-web\/override-demo\/web-override\/index\.html/);
+    const framePage = await t.client.request('/plugin-web/override-demo/web-override/index.html');
+    assert.match(await framePage.text(), /OVERRIDE_BY_PLUGIN/);
 
     const asset = await t.client.request('/plugin-web/override-demo/asset.js');
     assert.equal(asset.status, 200, await asset.clone().text());

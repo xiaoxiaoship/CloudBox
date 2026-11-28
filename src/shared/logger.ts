@@ -15,6 +15,10 @@ export function getRecentLogs(limit = 500): string[] {
   return recentLines.slice(-Math.max(1, Math.min(limit, MAX_RECENT_LINES)));
 }
 
+export function clearRecentLogs(): void {
+  recentLines.length = 0;
+}
+
 export function setLogLevel(level: LogLevel): void {
   minLevel = level;
 }

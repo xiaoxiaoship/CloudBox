@@ -19,6 +19,8 @@ import {
   type AuthErrorCode,
 } from '../../src/core/services/authService.ts';
 import { SettingsService } from '../../src/core/services/settingsService.ts';
+import { SecurityPolicyService } from '../../src/core/services/securityPolicyService.ts';
+import { toSessionUser } from '../../src/core/types/models.ts';
 
 const BASE_TIME = Date.UTC(2026, 0, 1);
 const TEST_PASSWORD = 'Passw0rd!';
@@ -55,7 +57,8 @@ function buildHarness(db: Db): Harness {
   settings.set('security.mode', 'simple', null);
   const audit = new AuditService(new AuditRepository(db), clock);
 
-  const auth = new AuthService({ users, sessions, settings, audit, now: clock });
+  const securityPolicy = new SecurityPolicyService(db, settings, clock);
+  const auth = new AuthService({ users, sessions, settings, securityPolicy, audit, now: clock });
 
   return {
     db,
@@ -409,6 +412,35 @@ describe('authService', () => {
 
     const audit = h.audit.list({ limit: 1 })[0]!;
     assert.equal(audit.action, 'auth.login.success');
+  });
+
+  it('默认 WAF 策略中的改名限制会生效', async () => {
+    h.settings.set('security.mode', 'advanced', null);
+    const userId = await createUser(h);
+    for (const name of ['alice2', 'alice3', 'alice4']) {
+      const current = toSessionUser(h.users.findById(userId)!);
+      await h.auth.rename(current, name);
+    }
+    const fourth = toSessionUser(h.users.findById(userId)!);
+    await assert.rejects(
+      h.auth.rename(fourth, 'alice5'),
+      authError(AUTH_ERROR.RENAME_LIMITED),
+    );
+  });
+
+  it('默认 WAF 策略中的头像修改限制会生效', async () => {
+    h.settings.set('security.mode', 'advanced', null);
+    const userId = await createUser(h);
+    const avatar = 'data:image/png;base64,AAAA';
+    for (let index = 0; index < 3; index += 1) {
+      const current = toSessionUser(h.users.findById(userId)!);
+      await h.auth.changeAvatar(current, avatar);
+    }
+    const fourth = toSessionUser(h.users.findById(userId)!);
+    await assert.rejects(
+      h.auth.changeAvatar(fourth, avatar),
+      authError(AUTH_ERROR.AVATAR_LIMITED),
+    );
   });
 
   it('登录参数非法时拒绝，且不写会话', async () => {

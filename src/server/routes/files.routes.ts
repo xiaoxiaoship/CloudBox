@@ -32,6 +32,8 @@ const transferBody = z.object({
   destination: z.string().max(900).optional().default(''),
 });
 
+const searchQuery = z.object({ q: z.string().min(1).max(200) });
+
 const downloadQuery = z.object({
   path: z.string().min(1).max(900),
 });
@@ -43,10 +45,19 @@ const previewQuery = z.object({
 const extractBody = z.object({
   file_path: z.string().min(1).max(900),
   target_dir: z.string().max(900).optional().default(''),
+  password: z.string().max(128).optional(),
 });
 
 const scanBody = z.object({
   path: z.string().min(1).max(900),
+});
+
+const compressBody = z.object({
+  paths: z.array(z.string().min(1).max(900)).min(1).max(10_000),
+  target_dir: z.string().max(900).optional().default(''),
+  archive_name: z.string().min(1).max(255),
+  level: z.number().int().min(1).max(9).default(6),
+  password: z.string().max(128).optional(),
 });
 
 const uploadQuery = z.object({
@@ -74,6 +85,7 @@ export interface FilesRouterDeps {
   uploadLimiter: RequestHandler;
   extractLimiter: RequestHandler;
   scanLimiter: RequestHandler;
+  compressLimiter: RequestHandler;
 }
 
 export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps): Router {
@@ -87,6 +99,16 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
     const { path } = listQuery.parse(req.query);
     const listing = await services.files.list(req.user!, path, requestContext(req, res));
     res.json(listing);
+  });
+
+  router.get('/archive', async (req, res) => {
+    const { path: filePath } = previewQuery.parse(req.query);
+    res.json({ entries: await services.extraction.listPreview(req.user!, filePath, requestContext(req, res)) });
+  });
+
+  router.get('/search', async (req, res) => {
+    const { q } = searchQuery.parse(req.query);
+    res.json({ entries: await services.files.search(req.user!, q, 200) });
   });
 
   router.get('/download', async (req, res) => {
@@ -150,6 +172,7 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
       body.file_path,
       body.target_dir,
       requestContext(req, res),
+      body.password,
     );
     res.status(202).json(result);
   });
@@ -159,6 +182,16 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
     const result = await services.scan.start(
       req.user!,
       body.path,
+      requestContext(req, res),
+    );
+    res.status(202).json(result);
+  });
+
+  router.post('/compress', deps.compressLimiter, deps.csrf, async (req, res) => {
+    const body = compressBody.parse(req.body);
+    const result = await services.compression.start(
+      req.user!,
+      { paths: body.paths, targetDir: body.target_dir, archiveName: body.archive_name, level: body.level, password: body.password },
       requestContext(req, res),
     );
     res.status(202).json(result);
@@ -222,46 +255,29 @@ export function createFilesRouter(services: CoreServices, deps: FilesRouterDeps)
     let preparedPath = query.path;
 
     try {
-      const result = await services.files.runExclusive(user.id, async () => {
-        const received = await receiveUpload(req, {
-          maxDrainBytes: services.settings.getLowLevel().uploadDrainBytes,
-          tempDir: services.files.getTempDir(),
-          onProgress: recordUploadBytes,
-          prepare: (filename) => {
-            const prepared = services.files.prepareUpload(
-              user,
-              query.path,
-              filename,
-              overwrite,
-              ctx,
-            );
-            preparedPath = prepared.relativePath;
-            return prepared;
-          },
+      const received = await receiveUpload(req, {
+        maxDrainBytes: services.settings.getLowLevel().uploadDrainBytes,
+        tempDir: services.files.getTempDir(),
+        onProgress: recordUploadBytes,
+        prepare: (filename) => {
+          const prepared = services.files.prepareUpload(user, query.path, filename, overwrite, ctx);
+          preparedPath = prepared.relativePath;
+          return prepared;
+        },
+      });
+
+      try {
+        const result = await services.files.runExclusive(user.id, async () => {
+          const file = await services.files.commitUpload(user, received.prepared, received.tempPath, received.size, ctx);
+          return { file, usage: services.files.getUsage(user), overwritten: received.prepared.existingSize > 0 };
         });
-
-        try {
-          const file = await services.files.commitUpload(
-            user,
-            received.prepared,
-            received.tempPath,
-            received.size,
-            ctx,
-          );
-          return {
-            file,
-            usage: services.files.getUsage(user),
-            overwritten: received.prepared.existingSize > 0,
-          };
-        } finally {
-          await unlink(received.tempPath).catch(() => {});
-        }
-      });
-
-      res.status(result.overwritten ? 200 : 201).json({
-        file: result.file,
-        usage: result.usage,
-      });
+        res.status(result.overwritten ? 200 : 201).json({
+          file: result.file,
+          usage: result.usage,
+        });
+      } finally {
+        await unlink(received.tempPath).catch(() => {});
+      }
     } catch (error) {
       if (shouldAuditUploadError(error)) {
         services.files.auditUploadFailure(user, preparedPath, error, ctx);

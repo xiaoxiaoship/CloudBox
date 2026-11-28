@@ -217,7 +217,8 @@ export class AdminAuthService {
   private issueSession(user: UserRecord, ctx: AdminAuthContext): AdminLoginResult {
     const now = this.now();
     const token = generateSessionToken();
-    const expiresAt = now + ADMIN_SESSION_TTL_MS;
+    const ttlHours = this.settings.getLowLevel().adminSessionTtlHours;
+    const expiresAt = now + (Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60_000 : ADMIN_SESSION_TTL_MS);
     const tokenHash = hashSessionToken(token);
     this.sessions.create({
       idHash: tokenHash,

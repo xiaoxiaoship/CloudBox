@@ -138,6 +138,25 @@ export interface ClientCertExport {
   password?: string;
 }
 
+export type AnnouncementCategory = 'critical' | 'warning' | 'info';
+export interface AnnouncementInput {
+  category: AnnouncementCategory;
+  audience: 'all' | 'user';
+  targetUserId?: number | null;
+  body: string;
+}
+export interface AnnouncementView {
+  id: number;
+  authorId: number;
+  category: AnnouncementCategory;
+  audience: 'all' | 'user';
+  targetUserId: number | null;
+  body: string;
+  createdAt: number;
+  read: boolean;
+  targetUsername: string | null;
+}
+
 export interface AdminSettings {
   allowPublicRegistration: boolean;
   trustProxy: boolean;
@@ -165,6 +184,10 @@ export interface AdminSettings {
     adminIdleMinutes: number;
     lowLevel: LowLevelSecurity;
   };
+  cacheCleanup: {
+    autoEnabled: boolean;
+    intervalHours: number;
+  };
   resources: {
     maxConcurrentExtractions: number;
     maxConcurrentScans: number;
@@ -172,6 +195,7 @@ export interface AdminSettings {
     maxConcurrentPreviewsPerUser: number;
     maxLogSizeMB: number;
   };
+  defaultQuotaBytes: number;
   permissions: {
     allowUserPreviewImage: boolean;
     allowUserPreviewVideo: boolean;
@@ -179,6 +203,10 @@ export interface AdminSettings {
     allowUserPreviewOffice: boolean;
     allowUserExtract: boolean;
     allowUserScan: boolean;
+    allowUserCompress: boolean;
+    allowUserDirectShare: boolean;
+    allowUserArchivePreview: boolean;
+    allowGuestMode: boolean;
   };
   scan: {
     enabled: boolean;
@@ -198,7 +226,10 @@ export interface AdminSettings {
   hosting: {
     enabled: boolean;
     baseUrl: string;
+    mode: 'auto' | 'public';
   };
+  guestAddressMode: 'auto' | 'public';
+  shareAddressMode: 'auto' | 'public';
   mail: {
     enabled: boolean;
     host: string;
@@ -226,6 +257,10 @@ export interface FeaturePermissions {
   allowUserPreviewOffice: boolean;
   allowUserExtract: boolean;
   allowUserScan: boolean;
+  allowUserCompress: boolean;
+  allowUserDirectShare: boolean;
+  allowUserArchivePreview: boolean;
+  allowGuestMode: boolean;
 }
 
 export interface ScanConfig {
@@ -368,6 +403,9 @@ export interface CloudboxApi {
     setAdminWeb: (input: { intranetOnly: boolean }) => Promise<Result<AdminSettings>>;
     setSecurity: (input: AdminSettings['security']) => Promise<Result<AdminSettings>>;
     setResources: (input: AdminSettings['resources']) => Promise<Result<AdminSettings>>;
+    setCacheCleanup: (input: AdminSettings['cacheCleanup']) => Promise<Result<AdminSettings>>;
+    setDefaultQuota: (input: { bytes: number }) => Promise<Result<AdminSettings>>;
+    setAddressMode: (input: { target: 'guest' | 'share'; mode: 'auto' | 'public' }) => Promise<Result<AdminSettings>>;
     resetDefaults: () => Promise<Result<AdminSettings>>;
     clearResourceCache: () => Promise<Result<{ removedFiles: number; removedLogs: number }>>;
     setPermissions: (input: FeaturePermissions) => Promise<Result<AdminSettings>>;
@@ -380,7 +418,11 @@ export interface CloudboxApi {
       model: string;
       dailyLimit: number;
     }) => Promise<Result<AdminSettings>>;
-    setHosting: (input: { enabled: boolean; baseUrl: string }) => Promise<Result<AdminSettings>>;
+    setHosting: (input: {
+      enabled: boolean;
+      baseUrl: string;
+      mode: 'auto' | 'public';
+    }) => Promise<Result<AdminSettings>>;
     setMail: (input: {
       enabled: boolean;
       host: string;
@@ -400,6 +442,13 @@ export interface CloudboxApi {
   };
   logs: {
     get: (input?: { limit?: number }) => Promise<Result<{ runtime: string[]; audit: unknown[] }>>;
+    export: (input: { runtime: string[]; audit: unknown[] }) => Promise<Result<{ saved: boolean; fileName?: string }>>;
+    clear: () => Promise<Result<null>>;
+  };
+  announcements: {
+    list: () => Promise<Result<AnnouncementView[]>>;
+    create: (input: AnnouncementInput) => Promise<Result<AnnouncementView>>;
+    delete: (id: number) => Promise<Result<null>>;
   };
   system: {
     checkUpdate: () => Promise<Result<UpdateCheckResult>>;
@@ -412,6 +461,7 @@ export interface CloudboxApi {
     securityBans: () => Promise<Result<SecurityBanEntry[]>>;
     clearSecurityBan: (input: { id: number }) => Promise<Result<null>>;
     clearAllSecurityBans: () => Promise<Result<{ removed: number }>>;
+    taskUsage: () => Promise<Result<unknown>>;
     securityCounts: () => Promise<Result<Array<{ scope: 'ip' | 'account' | 'global'; target: string; feature: string; count: number; updatedAt: number }>>>;
     clearSecurityCount: (input: { scope: 'ip' | 'account' | 'global'; target: string; feature: string }) => Promise<Result<null>>;
     clearAllSecurityCounts: () => Promise<Result<null>>;
@@ -505,6 +555,14 @@ export const IPC = {
   settingsSetAdminWeb: 'settings:set-admin-web',
   settingsSetSecurity: 'settings:set-security',
   settingsSetResources: 'settings:set-resources',
+  settingsSetCacheCleanup: 'settings:set-cache-cleanup',
+  settingsSetDefaultQuota: 'settings:set-default-quota',
+  settingsSetAddressMode: 'settings:set-address-mode',
+  systemThemeGet: 'system:theme-get',
+  systemThemeChanged: 'system:theme-changed',
+  announcementsList: 'announcements:list',
+  announcementsCreate: 'announcements:create',
+  announcementsDelete: 'announcements:delete',
   settingsResetDefaults: 'settings:reset-defaults',
   resourcesClearCache: 'resources:clear-cache',
   settingsSetPermissions: 'settings:set-permissions',
@@ -514,6 +572,8 @@ export const IPC = {
   settingsSetMail: 'settings:set-mail',
   settingsTestMail: 'settings:test-mail',
   logsGet: 'logs:get',
+  logsExport: 'logs:export',
+  logsClear: 'logs:clear',
   systemCheckUpdate: 'system:check-update',
   systemUpdateStatus: 'system:update-status',
   systemDownloadUpdate: 'system:download-update',
@@ -524,6 +584,7 @@ export const IPC = {
   systemSecurityBans: 'system:security-bans',
   systemClearSecurityBan: 'system:clear-security-ban',
   systemClearAllSecurityBans: 'system:clear-all-security-bans',
+  systemTaskUsage: 'system:task-usage',
   systemSecurityCounts: 'system:security-counts',
   systemClearSecurityCount: 'system:clear-security-count',
   systemClearAllSecurityCounts: 'system:clear-all-security-counts',

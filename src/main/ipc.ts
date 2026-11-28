@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { rm, stat } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import {
@@ -33,7 +33,9 @@ import { FRP_ERROR, FrpError } from './frpService.ts';
 import { SERVER_ERROR, ServerError, isPortAvailable } from './serverController.ts';
 import { TLS_ERROR, TlsError } from './tlsManager.ts';
 import { getRecentLogs } from '../shared/logger.ts';
+import { clearAdminLogs } from '../core/services/admin/adminLogService.ts';
 import { applyLoginItem, isInstalledBuild } from './loginItem.ts';
+import { clearResourceCache } from '../core/services/cacheCleanupService.ts';
 import { clearLimitedIp, listLimitedIps, resetLimitedIps } from '../server/middleware/rateLimit.ts';
 
 export interface IpcContext extends MainContext {
@@ -116,6 +118,10 @@ const featurePermissionsSchema = z.object({
   allowUserPreviewOffice: z.boolean(),
   allowUserExtract: z.boolean(),
   allowUserScan: z.boolean(),
+  allowUserCompress: z.boolean(),
+  allowUserDirectShare: z.boolean(),
+  allowUserArchivePreview: z.boolean(),
+  allowGuestMode: z.boolean(),
 });
 const scanConfigSchema = z.object({
   enabled: z.boolean(),
@@ -815,6 +821,9 @@ export function registerIpc(context: IpcContext): void {
     settings.set('scan.localTimeoutSeconds', lowLevel.clamavTimeoutSeconds, admin.id);
     settings.set('maxConcurrentExtractions', lowLevel.maxConcurrentExtractions, admin.id);
     settings.set('maxConcurrentScans', lowLevel.maxConcurrentScans, admin.id);
+    settings.set('maxConcurrentHeavyPreviews', lowLevel.maxConcurrentHeavyPreviews, admin.id);
+    settings.set('maxConcurrentPreviewsPerUser', lowLevel.maxConcurrentPreviewsPerUser, admin.id);
+    settings.set('maxLogSizeMB', lowLevel.maxLogSizeMB, admin.id);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
@@ -856,11 +865,33 @@ export function registerIpc(context: IpcContext): void {
 
   register(IPC.resourcesClearCache, z.undefined(), async () => {
     const admin = actor();
-    await rm(path.join(context.dataDir, 'tmp'), { recursive: true, force: true });
-    context.services.audit.pruneBefore(Date.now() - 30 * 24 * 60 * 60_000);
-    const removedLogs = context.services.audit.trimToBytes(context.services.settings.get('maxLogSizeMB') * 1024 * 1024);
-    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'resources.clear-cache', result: 'success', targetType: 'settings', detail: { removedLogs } });
-    return { removedFiles: 0, removedLogs };
+    const result = await clearResourceCache(context.services);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'resources.clear-cache', result: 'success', targetType: 'settings', detail: result });
+    return result;
+  });
+
+  register(IPC.settingsSetAddressMode, z.object({ target: z.enum(['guest', 'share']), mode: z.enum(['auto', 'public']) }), (input) => {
+    const admin = actor();
+    context.services.settings.set(input.target === 'guest' ? 'guest.addressMode' : 'share.addressMode', input.mode, admin.id);
+    return adminSettings();
+  });
+
+  register(IPC.settingsSetDefaultQuota, z.object({ bytes: z.number().int().min(0).max(1024 ** 5) }), (input) => {
+    const admin = actor();
+    context.services.settings.set('user.defaultQuotaBytes', input.bytes, admin.id);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'settings.default-quota', result: 'success', targetType: 'settings', detail: input });
+    return adminSettings();
+  });
+
+  register(IPC.settingsSetCacheCleanup, z.object({
+    autoEnabled: z.boolean(),
+    intervalHours: z.number().int().min(1).max(720),
+  }), (input) => {
+    const admin = actor();
+    context.services.settings.set('cacheCleanup.autoEnabled', input.autoEnabled, admin.id);
+    context.services.settings.set('cacheCleanup.intervalHours', input.intervalHours, admin.id);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'settings.cache-cleanup', result: 'success', targetType: 'settings', detail: input });
+    return adminSettings();
   });
 
   register(IPC.settingsSetPermissions, featurePermissionsSchema, (input) => {
@@ -872,6 +903,10 @@ export function registerIpc(context: IpcContext): void {
     settings.set('allow_user_preview_office', input.allowUserPreviewOffice, admin.id);
     settings.set('allow_user_extract', input.allowUserExtract, admin.id);
     settings.set('allow_user_scan', input.allowUserScan, admin.id);
+    settings.set('allow_user_compress', input.allowUserCompress, admin.id);
+    settings.set('allow_user_direct_share', input.allowUserDirectShare, admin.id);
+    settings.set('allow_user_archive_preview', input.allowUserArchivePreview, admin.id);
+    settings.set('allow_guest_mode', input.allowGuestMode, admin.id);
     context.services.audit.record({
       actorType: 'admin',
       actorId: admin.id,
@@ -926,10 +961,15 @@ export function registerIpc(context: IpcContext): void {
 
   register(
     IPC.settingsSetHosting,
-    z.object({ enabled: z.boolean(), baseUrl: z.string().max(500) }),
+    z.object({
+      enabled: z.boolean(),
+      baseUrl: z.string().max(500),
+      mode: z.enum(['auto', 'public']).default('auto'),
+    }),
     (input) => {
       const admin = actor();
       context.services.settings.set('hosting.enabled', input.enabled, admin.id);
+      context.services.settings.set('hosting.mode', input.mode, admin.id);
       context.services.settings.set('hosting.base_url', input.baseUrl.trim(), admin.id);
       context.services.audit.record({
         actorType: 'admin',
@@ -937,7 +977,7 @@ export function registerIpc(context: IpcContext): void {
         action: 'settings.hosting',
         result: 'success',
         targetType: 'settings',
-        detail: { enabled: input.enabled, baseUrl: input.baseUrl },
+        detail: { enabled: input.enabled, mode: input.mode, baseUrl: input.baseUrl },
       });
       return adminSettings();
     },
@@ -974,6 +1014,32 @@ export function registerIpc(context: IpcContext): void {
       };
     },
   );
+
+  register(IPC.logsExport, z.object({
+    runtime: z.array(z.string()),
+    audit: z.array(z.unknown()),
+  }), async (input) => {
+    const window = context.getWindow();
+    if (window === null) throw new Error('主窗口不可用');
+    const admin = actor();
+    const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\..+$/, '');
+    const selection = await dialog.showSaveDialog(window, {
+      title: '导出运行与审计日志',
+      defaultPath: path.join(app.getPath('documents'), `cloudbox-logs-${stamp}.json`),
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (selection.canceled || !selection.filePath) return { saved: false };
+    await writeFile(selection.filePath, JSON.stringify({ exportedAt: new Date().toISOString(), ...input }, null, 2), 'utf8');
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'logs.export', result: 'success', targetType: 'logs', detail: { fileName: path.basename(selection.filePath) } });
+    return { saved: true, fileName: path.basename(selection.filePath) };
+  });
+
+  register(IPC.logsClear, z.undefined(), () => {
+    const admin = actor();
+    clearAdminLogs(context.services.audit);
+    context.services.audit.record({ actorType: 'admin', actorId: admin.id, action: 'logs.clear', result: 'success', targetType: 'logs' });
+    return null;
+  });
 
   register(IPC.caInfo, z.undefined(), () => context.ca.getCAInfo());
   register(IPC.caCreate, z.undefined(), async () => {
@@ -1241,6 +1307,22 @@ export function registerIpc(context: IpcContext): void {
   register(IPC.systemClearSecurityCount, z.object({ scope: z.enum(['ip', 'account', 'global']), target: z.string().min(1).max(200), feature: z.string().min(1).max(100) }), (input) => { context.services.securityPolicy.clearCount(input.scope, input.target, input.feature); return null; });
 
   register(IPC.systemClearAllSecurityCounts, z.undefined(), () => { context.services.securityPolicy.clearAllCounts(); return null; });
+
+  register(IPC.announcementsList, z.undefined(), () => context.services.announcements.listAll());
+
+  register(IPC.announcementsCreate, z.object({
+    category: z.enum(['critical', 'warning', 'info']),
+    audience: z.enum(['all', 'user']),
+    targetUserId: z.number().int().positive().nullable().optional(),
+    body: z.string().min(1).max(5_000),
+  }), (input) => context.services.announcements.create(actor().id, input));
+
+  register(IPC.announcementsDelete, z.number().int().positive(), (id) => {
+    if (!context.services.announcements.delete(id)) throw new Error('公告不存在');
+    return null;
+  });
+
+  register(IPC.systemTaskUsage, z.undefined(), () => ({ ...context.services.tasks.featureUsage(), overall: context.services.tasks.stats() }));
 
   register(IPC.systemClearAllSecurityBans, z.undefined(), () => ({
     removed: context.services.securityPolicy.clearAll(),

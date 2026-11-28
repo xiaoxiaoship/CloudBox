@@ -12,7 +12,7 @@ export function createAdminPluginsRouter(
   const router = Router();
   const nameOf = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] ?? '' : (value ?? '');
 
-  router.post('/import', csrf, express.raw({ type: 'application/zip', limit: '21mb' }), async (req, res) => {
+  router.post('/import', csrf, express.raw({ type: 'application/zip', limit: '101mb' }), async (req, res) => {
     const fileName = req.get('x-plugin-filename') ?? '';
     if (!/^[^/\\]+\.zip$/i.test(fileName) || !Buffer.isBuffer(req.body)) {
       res.status(400).json({ code: 'INVALID_PLUGIN_PACKAGE', message: '请上传 ZIP 插件包' });

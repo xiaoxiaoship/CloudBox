@@ -21,8 +21,10 @@ export interface UploadItem {
   name: string;
   size: number;
   progress: number;
+  speed: number;
   status: UploadStatus;
   error?: string;
+  taskId?: string;
 }
 
 interface AppState {
@@ -236,7 +238,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       set((state) => ({
         uploads: [
           ...state.uploads,
-          { id: item.id, name: item.file.name, size: item.file.size, progress: 0, status: 'uploading' },
+          { id: item.id, name: item.file.name, size: item.file.size, progress: 0, speed: 0, status: 'uploading' },
         ],
       }));
     }
@@ -247,17 +249,31 @@ export const useAppStore = create<AppState>()((set, get) => ({
           uploads: state.uploads.map((entry) => (entry.id === item.id ? { ...entry, ...patch } : entry)),
         }));
       };
+      let lastSampleAt = Date.now();
+      let lastRatio = 0;
       try {
         await uploadFile({
           file: item.file,
           path: targetPath,
-          onProgress: (ratio) => update({ progress: ratio }),
+          onProgress: (ratio) => {
+            const now = Date.now();
+            const elapsed = now - lastSampleAt;
+            if (elapsed >= 250) {
+              const speed = Math.max(0, ((ratio - lastRatio) * item.file.size * 1000) / elapsed);
+              update({ progress: ratio, speed });
+              lastSampleAt = now;
+              lastRatio = ratio;
+            } else {
+              update({ progress: ratio });
+            }
+          },
           onAbortReady: (abort) => uploadAborts.set(item.id, abort),
         });
-        update({ status: 'success', progress: 1 });
+        update({ status: 'success', progress: 1, speed: 0 });
+        await get().refresh();
       } catch (error) {
         const canceled = error instanceof ApiError && error.code === 'UPLOAD_ABORTED';
-        update({ status: canceled ? 'canceled' : 'error', error: canceled ? '已取消' : errorMessage(error) });
+        update({ status: canceled ? 'canceled' : 'error', speed: 0, error: canceled ? '已取消' : errorMessage(error) });
       } finally {
         uploadAborts.delete(item.id);
       }

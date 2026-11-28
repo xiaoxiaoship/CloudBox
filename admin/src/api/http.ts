@@ -184,6 +184,7 @@ export function createHttpAdminApi(): AdminApi {
       await request(`/api/admin/system/security-bans/${input.id}/clear`, { method: 'POST' });
       return null;
     }),
+    taskUsage: () => resultOf(() => request('/api/admin/system/task-usage')),
     clearAllSecurityBans: () => resultOf(() => request('/api/admin/system/security-bans/clear-all', { method: 'POST' })),
     securityCounts: () => resultOf(() => request('/api/admin/system/security-counts')),
     clearSecurityCount: (input) => resultOf(async () => {
@@ -274,6 +275,9 @@ export function createHttpAdminApi(): AdminApi {
       setAdminWeb: (input) => resultOf(() => request('/api/admin/settings/admin-web', { method: 'POST', body: JSON.stringify(input) })),
       setSecurity: (input) => resultOf(() => request('/api/admin/settings/security', { method: 'POST', body: JSON.stringify(input) })),
       setResources: (input) => resultOf(() => request('/api/admin/settings/resources', { method: 'POST', body: JSON.stringify(input) })),
+      setCacheCleanup: (input) => resultOf(() => request('/api/admin/settings/cache-cleanup', { method: 'POST', body: JSON.stringify(input) })),
+      setDefaultQuota: (input) => resultOf(() => request('/api/admin/settings/default-quota', { method: 'POST', body: JSON.stringify(input) })),
+      setAddressMode: (input) => resultOf(() => request('/api/admin/settings/address-mode', { method: 'POST', body: JSON.stringify(input) })),
       resetDefaults: () => resultOf(() => request('/api/admin/settings/reset-defaults', { method: 'POST' })),
       clearResourceCache: () => resultOf(() => request('/api/admin/settings/clear-cache', { method: 'POST' })),
       setPermissions: (input) => resultOf(() => request('/api/admin/settings/permissions', { method: 'POST', body: JSON.stringify(input) })),
@@ -285,6 +289,22 @@ export function createHttpAdminApi(): AdminApi {
     },
     logs: {
       get: (input) => resultOf(() => request(`/api/admin/system/logs?limit=${input?.limit ?? 200}`)),
+      export: () => resultOf(async () => {
+        const response = await fetch('/api/admin/system/logs/export', { credentials: 'same-origin' });
+        if (!response.ok) throw new HttpAdminError('LOG_EXPORT_FAILED', `导出失败（HTTP ${response.status}）`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url; anchor.download = 'cloudbox-logs.json'; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5_000);
+        return { saved: true, fileName: 'cloudbox-logs.json' };
+      }),
+      clear: () => resultOf(() => request('/api/admin/system/logs/clear', { method: 'POST' })),
+    },
+    announcements: {
+      list: () => resultOf(() => request('/api/admin/announcements')),
+      create: (input) => resultOf(() => request('/api/admin/announcements', { method: 'POST', body: JSON.stringify(input) })),
+      delete: (id) => resultOf(async () => { await request(`/api/admin/announcements/${id}`, { method: 'DELETE' }); return null; }),
     },
     system,
     frp: {

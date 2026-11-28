@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+﻿import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { autoT as t } from '../i18n.ts';
 import { CollapsibleSection } from './CollapsibleSection.tsx';
 import type { AdminSessionInfo, AdminSettings, FeaturePermissions, ScanConfig, SecurityBanEntry } from '../../../src/shared/ipcTypes.ts';
@@ -10,7 +10,7 @@ import { LowLevelSecurityPanel } from './LowLevelSecurityPanel.tsx';
 import { DEFAULT_LOW_LEVEL_SECURITY } from '../../../src/shared/lowLevelSecurity.ts';
 import { SimpleSecurityPanel } from './SimpleSecurityPanel.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
-import { DatabaseIcon, HardDriveIcon, KeyIcon, RefreshIcon, ServerIcon, Spinner, UsersIcon } from './Icons.tsx';
+import { ArchiveIcon, CompressIcon, DatabaseIcon, EyeIcon, FolderIcon, HardDriveIcon, KeyIcon, MailIcon, RefreshIcon, SettingsIcon, ShareIcon, ShieldIcon, Spinner, UsersIcon } from './Icons.tsx';
 
 interface SettingsPageProps {
   dataDir: string;
@@ -37,6 +37,8 @@ export function SettingsPage({
   const [changing, setChanging] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [backupPending, setBackupPending] = useState(false);
+  const [cacheCleanup, setCacheCleanup] = useState({ autoEnabled: false, intervalHours: 24 });
+  const [cachePending, setCachePending] = useState(false);
   const [directoryChange, setDirectoryChange] = useState<{
     kind: 'data' | 'storage' | 'plugins';
     targetPath: string;
@@ -55,8 +57,19 @@ export function SettingsPage({
     allowUserPreviewOffice: true,
     allowUserExtract: true,
     allowUserScan: true,
+    allowUserCompress: true,
+    allowUserDirectShare: true,
+    allowUserArchivePreview: true,
+    allowGuestMode: false,
   });
   const [permissionsPending, setPermissionsPending] = useState(false);
+  const [defaultQuotaBytes, setDefaultQuotaBytes] = useState(5 * 1024 ** 3);
+  const [defaultQuotaPending, setDefaultQuotaPending] = useState(false);
+  const [guestAddressMode, setGuestAddressMode] = useState<'auto' | 'public'>('auto');
+  const [shareAddressMode, setShareAddressMode] = useState<'auto' | 'public'>('auto');
+  const [addressModePending, setAddressModePending] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
+  const [usageData, setUsageData] = useState<Record<string, { users?: number; running: number; queued: number; paused: number }> | null>(null);
   const [security, setSecurity] = useState({
     mode: 'simple' as 'simple' | 'advanced',
     enabled: true,
@@ -89,14 +102,13 @@ export function SettingsPage({
   const [modeChangeConfirm, setModeChangeConfirm] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const [resources, setResources] = useState({ maxConcurrentExtractions: 10, maxConcurrentScans: 10, maxConcurrentHeavyPreviews: 10, maxConcurrentPreviewsPerUser: 10, maxLogSizeMB: 100 });
-  const [resourcesPending, setResourcesPending] = useState(false);
   const [securityUsers, setSecurityUsers] = useState<Array<{ id: number; username: string; status: string; lockedUntil: number | null; renameLimitedUntil: number | null }>>([]);
   const [rateLimits, setRateLimits] = useState<Array<{ ip: string; until: number; endpoint: string }>>([]);
   const [securityBans, setSecurityBans] = useState<SecurityBanEntry[]>([]);
   const [logs, setLogs] = useState<{ runtime: string[]; audit: unknown[] } | null>(null);
   const [logsKind, setLogsKind] = useState<'runtime' | 'audit'>('runtime');
   const [logsPending, setLogsPending] = useState(false);
+  const [deleteLogsConfirm, setDeleteLogsConfirm] = useState(false);
   const [adminUsername, setAdminUsername] = useState('');
   const [adminRenamePending, setAdminRenamePending] = useState(false);
   const [startup, setStartup] = useState({ autoStart: false, startInTray: false });
@@ -119,7 +131,7 @@ export function SettingsPage({
   });
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [aiPending, setAiPending] = useState(false);
-  const [hosting, setHosting] = useState({ enabled: false, baseUrl: '' });
+  const [hosting, setHosting] = useState<AdminSettings['hosting']>({ enabled: false, baseUrl: '', mode: 'auto' });
   const [hostingPending, setHostingPending] = useState(false);
   const [mail, setMail] = useState({
     enabled: false,
@@ -172,6 +184,9 @@ export function SettingsPage({
         if (!active) return;
         setAllowRegistration(settings.allowPublicRegistration);
         setPermissions(settings.permissions);
+        setDefaultQuotaBytes(settings.defaultQuotaBytes);
+        setGuestAddressMode(settings.guestAddressMode);
+        setShareAddressMode(settings.shareAddressMode);
         setSecurity(settings.security);
         setSecurityModeSnapshot(settings.security.mode);
         setAdminWeb(settings.adminWeb);
@@ -179,7 +194,7 @@ export function SettingsPage({
         setAi(settings.ai);
         setHosting(settings.hosting);
         setMail(settings.mail);
-        setResources(settings.resources);
+        setCacheCleanup(settings.cacheCleanup);
       })
       .catch(() => {})
       .finally(() => {
@@ -195,7 +210,7 @@ export function SettingsPage({
     try {
       const settings = await call(api.settings.setPublicRegistration({ enabled }));
       setAllowRegistration(settings.allowPublicRegistration);
-      notify('success', enabled ? '已开启用户网页自助注册' : '已关闭用户网页自助注册');
+      notify('success', enabled ? t('admin.settings.public-self-registration-enabled') : t('admin.settings.public-self-registration-disabled'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -214,12 +229,39 @@ export function SettingsPage({
     try {
       const settings = await call(api.settings.setPermissions(next));
       setPermissions(settings.permissions);
-      notify('success', '功能权限已更新');
+      notify('success', t('admin.settings.feature-permissions-updated'));
     } catch (cause) {
       setPermissions(previous);
       notify('error', errorMessage(cause));
     } finally {
       setPermissionsPending(false);
+    }
+  };
+
+  const exportLogs = async (): Promise<void> => {
+    setLogsPending(true);
+    try {
+      const data = await call(api.logs.get({ limit: 500 }));
+      const result = await call(api.logs.export(data));
+      if (result.saved) notify('success', `鏃ュ織宸插鍑猴細${result.fileName ?? ''}`);
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setLogsPending(false);
+    }
+  };
+
+  const clearLogs = async (): Promise<void> => {
+    setLogsPending(true);
+    try {
+      await call(api.logs.clear());
+      setLogs(null);
+      setDeleteLogsConfirm(false);
+      notify('success', t('admin.settings.runtime-and-audit-logs-deleted'));
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setLogsPending(false);
     }
   };
 
@@ -234,11 +276,56 @@ export function SettingsPage({
     }
   };
 
+  const saveCacheCleanup = async (): Promise<void> => {
+    setCachePending(true);
+    try {
+      const next = await call(api.settings.setCacheCleanup(cacheCleanup));
+      setCacheCleanup(next.cacheCleanup);
+      notify('success', t('admin.settings.cache-cleanup-settings-saved'));
+    } catch (cause) {
+      notify('error', errorMessage(cause));
+    } finally {
+      setCachePending(false);
+    }
+  };
+
+  const openUsage = async (): Promise<void> => {
+    setUsageOpen(true);
+    try { setUsageData(await call(api.system.taskUsage()) as Record<string, { users?: number; running: number; queued: number; paused: number }>); }
+    catch (cause) { notify('error', errorMessage(cause)); }
+  };
+
+  const setAddressMode = async (target: 'guest' | 'share', mode: 'auto' | 'public'): Promise<void> => {
+    setAddressModePending(true);
+    try {
+      const next = await call(api.settings.setAddressMode({ target, mode }));
+      setGuestAddressMode(next.guestAddressMode);
+      setShareAddressMode(next.shareAddressMode);
+      notify('success', t('admin.settings.address-mode-saved'));
+    } catch (cause) { notify('error', errorMessage(cause)); } finally { setAddressModePending(false); }
+  };
+
+  const saveDefaultQuota = async (): Promise<void> => {
+    setDefaultQuotaPending(true);
+    try {
+      const next = await call(api.settings.setDefaultQuota({ bytes: Math.round(defaultQuotaBytes) }));
+      setDefaultQuotaBytes(next.defaultQuotaBytes);
+      notify('success', t('admin.settings.default-quota-saved'));
+    } catch (cause) { notify('error', errorMessage(cause)); } finally { setDefaultQuotaPending(false); }
+  };
+
+  const saveLowLevel = async (lowLevel: AdminSettings['security']['lowLevel']): Promise<void> => {
+    const next = { ...security, lowLevel };
+    const result = await call(api.settings.setSecurity(next));
+    setSecurity(result.security);
+    notify('success', t('admin.settings.low-level-security-settings-saved'));
+  };
+
   const saveStartup = async (): Promise<void> => {
     setStartupPending(true);
     try {
       setStartup(await call(api.app.setStartup(startup)));
-      notify('success', '启动与托盘设置已保存');
+      notify('success', t('admin.settings.startup-and-tray-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -251,7 +338,7 @@ export function SettingsPage({
     try {
       const result = await call(api.users.renameSelf({ username: adminUsername }));
       setAdminUsername(result.username);
-      notify('success', '管理员用户名已更新');
+      notify('success', t('admin.settings.administrator-username-updated'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -270,7 +357,7 @@ export function SettingsPage({
   const unlockSecurityUser = async (userId: number): Promise<void> => {
     try {
       await call(api.users.unlock({ userId }));
-      notify('success', '账户已解锁');
+      notify('success', t('admin.settings.account-unlocked'));
       await refreshSecurityUsers();
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -278,7 +365,7 @@ export function SettingsPage({
   const clearRateLimit = async (ip: string): Promise<void> => {
     try {
       await call(api.system.clearRateLimit({ ip }));
-      notify('success', 'IP 限流已解除');
+      notify('success', t('admin.settings.ip-rate-limit-cleared'));
       await refreshSecurityUsers();
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -286,7 +373,7 @@ export function SettingsPage({
   const clearRenameLimit = async (userId: number): Promise<void> => {
     try {
       await call(api.users.clearRenameLimit({ userId }));
-      notify('success', '改名限制已解除');
+      notify('success', t('admin.settings.rename-limit-cleared'));
       await refreshSecurityUsers();
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -303,7 +390,7 @@ export function SettingsPage({
       } else if (user.lockedUntil !== null && user.lockedUntil > Date.now()) {
         await call(api.users.unlock({ userId }));
       }
-      notify('success', '账户限制已解除');
+      notify('success', t('admin.settings.account-restriction-cleared'));
       await refreshSecurityUsers();
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -311,7 +398,7 @@ export function SettingsPage({
   const enableSecurityUser = async (userId: number): Promise<void> => {
     try {
       await call(api.users.setStatus({ userId, status: 'active' }));
-      notify('success', '账户已启用');
+      notify('success', t('admin.settings.account-enabled'));
       await refreshSecurityUsers();
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -325,7 +412,7 @@ export function SettingsPage({
     try {
       const settings = await call(api.settings.setSecurity({ ...security, renameEnabled: security.enabled }));
       setSecurity(settings.security);
-      notify('success', '网络安全设置已保存');
+      notify('success', t('admin.settings.network-security-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -343,7 +430,7 @@ export function SettingsPage({
       anchor.download = 'cloudbox-settings.json';
       anchor.click();
       URL.revokeObjectURL(url);
-      notify('success', '配置已导出；跨版本导入可能存在兼容性问题');
+      notify('success', t('admin.settings.configuration-exported-importing-across-versions'));
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
 
@@ -356,8 +443,7 @@ export function SettingsPage({
       await call(api.settings.setPermissions(next.permissions));
       await call(api.settings.setScan({ ...next.scan, apiKey: next.scan.apiKey.includes('***') ? '' : next.scan.apiKey }));
       await call(api.settings.setHosting(next.hosting));
-      await call(api.settings.setResources(next.resources));
-      notify('success', '配置已导入；跨版本配置可能不完全兼容');
+      notify('success', t('admin.settings.configuration-imported-cross-version-settings-ma'));
       window.setTimeout(() => window.location.reload(), 500);
     } catch (cause) { notify('error', errorMessage(cause)); }
   };
@@ -367,7 +453,7 @@ export function SettingsPage({
     try {
       const settings = await call(api.settings.setScan(scan));
       setScan(settings.scan);
-      notify('success', '安全查杀设置已保存');
+      notify('success', t('admin.settings.security-scan-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -390,7 +476,7 @@ export function SettingsPage({
       );
       setAi(settings.ai);
       setApiKeyInput('');
-      notify('success', 'AI 设置已保存');
+      notify('success', t('admin.settings.ai-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -403,7 +489,7 @@ export function SettingsPage({
     try {
       const settings = await call(api.settings.setHosting(hosting));
       setHosting(settings.hosting);
-      notify('success', '静态托管设置已保存');
+      notify('success', t('admin.settings.static-hosting-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -433,7 +519,7 @@ export function SettingsPage({
       );
       setMail(settings.mail);
       setMailPass('');
-      notify('success', '邮件通知设置已保存');
+      notify('success', t('admin.settings.mail-notification-settings-saved'));
     } catch (cause) {
       notify('error', errorMessage(cause));
     } finally {
@@ -454,7 +540,7 @@ export function SettingsPage({
     event.preventDefault();
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('两次输入的新密码不一致');
+      setPasswordError(t('admin.settings.the-new-passwords-do-not-match'));
       return;
     }
 
@@ -462,7 +548,7 @@ export function SettingsPage({
     setPasswordError(null);
     try {
       await call(api.auth.changePassword({ currentPassword, newPassword }));
-      notify('success', '管理员密码已修改，请重新登录');
+      notify('success', t('admin.settings.administrator-password-changed-please-sign-in-ag'));
       await onPasswordChanged();
     } catch (cause) {
       setPasswordError(errorMessage(cause));
@@ -476,7 +562,7 @@ export function SettingsPage({
     try {
       const result = await call(api.app.backupDatabase());
       if (result.saved) {
-        notify('success', `数据库已备份：${result.fileName ?? '备份文件'}`);
+        notify('success', `鏁版嵁搴撳凡澶囦唤锛?{result.fileName ?? t('admin.settings.backup-file')}`);
       }
     } catch (cause) {
       notify('error', errorMessage(cause));
@@ -522,7 +608,7 @@ export function SettingsPage({
           deleteOld,
         }),
       );
-      notify('success', '目录配置已更新，应用即将重启…');
+      notify('success', t('admin.settings.text'));
       setDirectoryChange(null);
     } catch (cause) {
       setDirectoryError(errorMessage(cause));
@@ -559,31 +645,31 @@ export function SettingsPage({
     <div className="mx-auto max-w-4xl space-y-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setResetConfirm(true)} className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40">{t('一键恢复默认设置')}</button>
-          <button type="button" onClick={() => void exportConfig()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('导出配置')}</button>
-          <button type="button" onClick={() => importInputRef.current?.click()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('导入配置')}</button>
+          <button type="button" onClick={() => setResetConfirm(true)} className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40">{t('admin.settings.restore-defaults')}</button>
+          <button type="button" onClick={() => void exportConfig()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('admin.settings.export-configuration')}</button>
+          <button type="button" onClick={() => importInputRef.current?.click()} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">{t('admin.settings.import-configuration')}</button>
           <input ref={importInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importConfig(file); event.target.value = ''; }} />
         </div>
         <LanguageSwitcher />
       </div>
             <div className="pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('管理员账户')}</p>
-        <p className="mt-1 text-[11px] text-slate-500">{t('管理员密码、账户信息与登录安全。')}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('admin.settings.administrator-account')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('admin.settings.administrator-password-account-details-and-sign-')}</p>
       </div>
 
 <CollapsibleSection>
         <div className="flex items-center gap-2">
           <KeyIcon className="h-4 w-4 text-amber-400" />
-          <h2 className="text-sm font-semibold text-slate-100">管理员密码</h2>
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.administrator-password')}</h2>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          修改后所有管理员会话会立即失效，需要使用新密码重新登录。
+          {t('admin.settings.all-administrator-sessions-will-be-revoked-after')}
         </p>
 
         <form onSubmit={(event) => void changePassword(event)} className="mt-4 grid gap-3 md:grid-cols-3">
           <div>
             <label className="text-[11px] text-slate-500" htmlFor="current-password">
-              当前密码
+              {t('admin.settings.current-password')}
             </label>
             <input
               id="current-password"
@@ -596,7 +682,7 @@ export function SettingsPage({
           </div>
           <div>
             <label className="text-[11px] text-slate-500" htmlFor="new-admin-password">
-              新密码
+              {t('admin.settings.new-password')}
             </label>
             <input
               id="new-admin-password"
@@ -605,12 +691,12 @@ export function SettingsPage({
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
               className={INPUT_CLASS}
-              placeholder="至少 8 位，含字母和数字"
+              placeholder={t('admin.settings.at-least-8-characters-with-letters-and-numbers')}
             />
           </div>
           <div>
             <label className="text-[11px] text-slate-500" htmlFor="confirm-admin-password">
-              确认新密码
+              {t('admin.settings.confirmNewPassword')}
             </label>
             <input
               id="confirm-admin-password"
@@ -635,7 +721,7 @@ export function SettingsPage({
               className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60"
             >
               {changing ? <Spinner className="h-4 w-4" /> : null}
-              修改密码
+              {t('admin.settings.changePassword')}
             </button>
           </div>
         </form>
@@ -644,42 +730,42 @@ export function SettingsPage({
       <CollapsibleSection>
         <div className="flex items-center gap-2">
           <KeyIcon className="h-4 w-4 text-sky-400" />
-          <h2 className="text-sm font-semibold text-slate-100">管理员账户</h2>
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.administrator-account')}</h2>
         </div>
-        <p className="mt-1 text-xs text-slate-500">管理员可在系统设置中修改自己的用户名；密码和已有文件不受影响。</p>
+        <p className="mt-1 text-xs text-slate-500">{t('admin.settings.the-administrator-can-change-the-username-here-p')}</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="text-[11px] text-slate-500">管理员用户名
+          <label className="text-[11px] text-slate-500">{t('admin.settings.admin-username')}
             <input value={adminUsername} onChange={(event) => setAdminUsername(event.target.value)} className={`${'mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500'} min-w-64`} />
           </label>
           <button type="button" onClick={() => void saveAdminUsername()} disabled={adminRenamePending || !adminUsername.trim()} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
             {adminRenamePending ? <Spinner className="h-4 w-4" /> : null}
-            保存用户名
+            {t('admin.settings.saveUsername')}
           </button>
         </div>
         <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-slate-200">管理员 GUI 空闲锁定</p>
-              <p className="mt-1 text-xs text-slate-500">无操作超时后自动退出管理员界面，需要重新登录；随网络安全设置保存。</p>
+              <p className="text-sm font-medium text-slate-200">{t('admin.settings.administrator-gui-idle-lock')}</p>
+              <p className="mt-1 text-xs text-slate-500">{t('admin.settings.sign-out-automatically-after-inactivity-saved-wi')}</p>
             </div>
             <button type="button" role="switch" aria-checked={security.adminIdleEnabled} onClick={() => setSecurity((current) => ({ ...current, adminIdleEnabled: !current.adminIdleEnabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${security.adminIdleEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
               <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${security.adminIdleEnabled ? 'left-6' : 'left-1'}`} />
             </button>
           </div>
-          <label className="mt-3 block text-[11px] text-slate-500">空闲超时（分钟）
+          <label className="mt-3 block text-[11px] text-slate-500">{t('admin.settings.idle-timeout-minutes')}
             <input type="number" min={1} max={1440} value={security.adminIdleMinutes} disabled={!security.adminIdleEnabled} onChange={(event) => setSecurity((current) => ({ ...current, adminIdleMinutes: Math.max(1, Math.min(1440, Number(event.target.value) || 30)) }))} className={`${INPUT_CLASS} max-w-48 disabled:opacity-50`} />
           </label>
         </div>
         <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-slate-200">管理 Web 仅限内网访问</p>
-              <p className="mt-1 text-xs text-slate-500">关闭后 1250 管理端将允许非内网地址访问，存在较高暴露风险。</p>
+              <p className="text-sm font-medium text-slate-200">{t('admin.settings.web-2')}</p>
+              <p className="mt-1 text-xs text-slate-500">{t('admin.settings.1250')}</p>
             </div>
             <button type="button" role="switch" aria-checked={adminWeb.intranetOnly} onClick={() => {
               if (adminWeb.intranetOnly) { setAdminWebConfirmOpen(true); return; }
               void (async () => {
-                try { const next = await call(api.settings.setAdminWeb({ intranetOnly: true })); setAdminWeb(next.adminWeb); notify('success', '管理端已恢复仅内网访问'); }
+                try { const next = await call(api.settings.setAdminWeb({ intranetOnly: true })); setAdminWeb(next.adminWeb); notify('success', t('admin.settings.text-2')); }
                 catch (cause) { notify('error', errorMessage(cause)); }
               })();
             }} className={`relative h-7 w-12 shrink-0 rounded-full transition ${adminWeb.intranetOnly ? 'bg-emerald-500' : 'bg-rose-500'}`}>
@@ -728,8 +814,8 @@ export function SettingsPage({
       </CollapsibleSection>
 
             <div className="pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('安全与运行')}</p>
-        <p className="mt-1 text-[11px] text-slate-500">{t('网络安全与访问保护。')}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('admin.settings.security-and-operations')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('admin.settings.network-security-and-access-protection')}</p>
       </div>
 
 <CollapsibleSection>
@@ -737,14 +823,14 @@ export function SettingsPage({
           <div>
             <div className="flex items-center gap-2">
               <KeyIcon className="h-4 w-4 text-rose-400" />
-              <h2 className="text-sm font-semibold text-slate-100">网络安全</h2>
+              <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.text-24')}</h2>
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">Beta</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] ${security.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{security.enabled ? '已开启' : '已关闭'}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] ${security.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{security.enabled ? t('admin.settings.enabled') : t('admin.settings.disabled')}</span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
               {security.mode === 'simple'
-                ? t('使用旧版账号锁定、IP 限流和改名限制；修改后点击保存生效。')
-                : t('使用拖拽策略、全局封禁、IPS 与黑白名单；拖动下方功能到对应区域，松开即启用。')}
+                ? t('admin.settings.uses-legacy-account-lock-ip-rate-limit-and-renam')
+                : t('admin.settings.uses-drag-and-drop-policy-global-bans-ips-and-ac')}
             </p>
           </div>
           <button type="button" role="switch" aria-checked={security.enabled} onClick={() => setSecurity((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${security.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
@@ -752,8 +838,8 @@ export function SettingsPage({
           </button>
         </div>
         <div className="mt-4 flex gap-2 border-b border-slate-800 pb-2">
-          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'simple' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'simple' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>简洁模式</button>
-          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'advanced' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'advanced' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>高级模式</button>
+          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'simple' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'simple' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>{t('admin.settings.simple-mode')}</button>
+          <button type="button" onClick={() => setSecurity((current) => ({ ...current, mode: 'advanced' }))} className={`rounded-lg px-3 py-1.5 text-xs font-medium ${security.mode === 'advanced' ? 'bg-indigo-600 text-white' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}>{t('admin.settings.advanced-mode')}</button>
         </div>
 
         <div className="mt-4">
@@ -799,7 +885,7 @@ export function SettingsPage({
                 }
                 setSecurityBans(await call(api.system.securityBans()));
                 await refreshSecurityUsers();
-                notify('success', '封禁已解除');
+                notify('success', t('admin.settings.text-3'));
               } catch (cause) { notify('error', errorMessage(cause)); }
             }}
             onClearAccount={(userId) => void clearAccountRestriction(userId)}
@@ -809,66 +895,67 @@ export function SettingsPage({
               try {
                 const result = await call(api.system.clearAllSecurityBans());
                 await refreshSecurityUsers();
-                notify('success', `已解封并清零 ${result.removed} 条封禁`);
+                notify('success', t('admin.settings.bansCleared', { count: result.removed }));
               } catch (cause) { notify('error', errorMessage(cause)); }
             }}
             capSettings={{ enabled: security.capEnabled, loginFailures: security.capLoginFailures, registrationLimit: security.capRegistrationLimit, shareLimit: security.capShareLimit }}
             onCapSettingsChange={(value) => setSecurity((current) => ({ ...current, capEnabled: value.enabled, capLoginFailures: value.loginFailures, capRegistrationLimit: value.registrationLimit, capShareLimit: value.shareLimit }))}
           />
           ) : null}
-          {security.mode === 'advanced' ? (
-            <LowLevelSecurityPanel value={security.lowLevel} policyRaw={security.policy} onChange={(lowLevel) => setSecurity((current) => ({ ...current, lowLevel }))} />
-          ) : null}
         </div>
 
         <button type="button" onClick={() => void saveSecurity()} disabled={securityPending} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
           {securityPending ? <Spinner className="h-4 w-4" /> : null}
-          保存网络安全设置
+          {t('admin.settings.saveSecuritySettings')}
         </button>
       </CollapsibleSection>
 
       <CollapsibleSection>
-  <div className="flex items-center gap-2">
-    <ServerIcon className="h-4 w-4 text-sky-400" />
-    <h2 className="text-sm font-semibold text-slate-100">本地资源配布</h2>
-  </div>
-  <p className="mt-1 text-xs text-slate-500">限制解压、查杀和预览的并发量，避免单机资源被瞬时打满。</p>
-  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-    {([['maxConcurrentExtractions','最大同时解压任务数'],['maxConcurrentScans','最大同时查杀任务数'],['maxConcurrentHeavyPreviews','重度预览全局并发'],['maxConcurrentPreviewsPerUser','单用户预览并发'],['maxLogSizeMB','日志保存上限（MB）']] as const).map(([key,label]) => (
-      <label key={key} className="text-[11px] text-slate-500">{label}
-        <input type="number" min={1} max={key === 'maxLogSizeMB' ? 100000 : 1000} value={resources[key]} onChange={(event) => setResources((current) => ({ ...current, [key]: Number(event.target.value) }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-      </label>
-    ))}
-  </div>
-  <div className="mt-4 flex flex-wrap gap-2">
-    <button type="button" onClick={async () => { setResourcesPending(true); try { const next = await call(api.settings.setResources(resources)); setResources(next.resources); notify('success','资源配布已保存'); } catch (cause) { notify('error', errorMessage(cause)); } finally { setResourcesPending(false); } }} disabled={resourcesPending} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-60">{t('保存资源配布')}</button>
-    <button type="button" onClick={async () => { try { const result = await call(api.settings.clearResourceCache()); notify('success', '已清理缓存，清理过期审计 ' + result.removedLogs + ' 条'); } catch (cause) { notify('error', errorMessage(cause)); } }} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">{t('清理缓存')}</button>
-  </div>
-</CollapsibleSection>
+        <div className="flex items-center gap-2">
+          <ShieldIcon className="h-4 w-4 text-indigo-400" />
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.low-level-security-controls')}</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t('admin.settings.waf')}</p>
+        <div className="mt-4">
+          <LowLevelSecurityPanel
+            embedded
+            value={security.lowLevel}
+            policyRaw={security.policy}
+            onChange={(lowLevel) => setSecurity((current) => ({ ...current, lowLevel }))}
+            onSave={saveLowLevel}
+          />
+        </div>
+      </CollapsibleSection>
+
+      
 <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <RefreshIcon className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-slate-100">运行与审计日志</h2>
+              <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.runtimeAndAuditLogs')}</h2>
             </div>
-            <p className="mt-1 text-xs text-slate-500">查看当前进程最近日志，或数据库中的审计记录。</p>
+            <p className="mt-1 text-xs text-slate-500">{t('admin.settings.view-recent-process-logs-or-audit-records-from-t')}</p>
           </div>
-          <button type="button" onClick={() => void loadLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
-            {logsPending ? t('common.loading') : t('admin.logs.refresh')}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void exportLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">{t('admin.settings.export-logs')}</button>
+            <button type="button" onClick={() => setDeleteLogsConfirm(true)} disabled={logsPending} className="rounded-lg border border-rose-800/60 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-950/40 disabled:opacity-50">{t('admin.settings.delete-logs')}</button>
+            <button type="button" onClick={() => void loadLogs()} disabled={logsPending} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+              {logsPending ? t('common.loading') : t('admin.logs.refresh')}
+            </button>
+          </div>
         </div>
         <div className="mt-3 flex gap-2">
           {(['runtime', 'audit'] as const).map((kind) => (
             <button key={kind} type="button" onClick={() => setLogsKind(kind)} className={`rounded-lg px-3 py-1 text-xs ${logsKind === kind ? 'bg-indigo-600 text-white' : 'bg-slate-950 text-slate-400'}`}>
-              {kind === 'runtime' ? '运行日志' : '审计日志'}
+              {kind === 'runtime' ? t('admin.settings.runtime-logs') : t('admin.settings.audit-logs')}
             </button>
           ))}
         </div>
         <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950 p-3 text-[11px] leading-5 text-slate-400">
           {logs
             ? logsKind === 'runtime'
-              ? logs.runtime.join('\n') || '暂无运行日志'
+              ? logs.runtime.join('\n') || t('admin.settings.no-runtime-logs')
               : JSON.stringify(logs.audit, null, 2)
             : t('admin.logs.clickRefresh')}
         </pre>
@@ -876,15 +963,15 @@ export function SettingsPage({
 
 
             <div className="pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('功能控制')}</p>
-        <p className="mt-1 text-[11px] text-slate-500">{t('自助注册、用户功能权限、安全查杀、AI、静态托管与邮件通知。')}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('admin.settings.feature-controls')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('admin.settings.self-registration-user-permissions-scans-ai-stat')}</p>
       </div>
 
       <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <UsersIcon className="h-4 w-4 text-indigo-400" />
-            <h2 className="text-sm font-semibold text-slate-100">用户网页自助注册</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.public-self-registration')}</h2>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] ${
                 allowRegistration
@@ -892,7 +979,7 @@ export function SettingsPage({
                   : 'bg-slate-800 text-slate-400'
               }`}
             >
-              {allowRegistration ? '已开启' : '已关闭'}
+              {allowRegistration ? t('admin.settings.enabled') : t('admin.settings.disabled')}
             </span>
           </div>
 
@@ -900,7 +987,7 @@ export function SettingsPage({
             type="button"
             role="switch"
             aria-checked={allowRegistration}
-            aria-label="允许用户通过网页自助注册"
+            aria-label={t('admin.settings.allow-public-self-registration')}
             disabled={!registrationLoaded || registrationPending}
             onClick={() => void toggleRegistration(!allowRegistration)}
             className={`relative h-7 w-12 rounded-full transition ${
@@ -915,37 +1002,35 @@ export function SettingsPage({
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          默认关闭。开启后普通用户登录页会显示“没有账号？点击注册”，注册成功后立即生效，无需重启服务。
+          {t('admin.settings.disabled-by-default-when-enabled-the-login-page-')}
         </p>
         <p className="mt-2 text-[11px] text-slate-500">
-          新注册用户角色为普通用户，状态正常，默认分配 5 GB 配额；高级模式的注册频率由注册量策略卡控制。
-        </p>
+          新注册用户角色为普通用户，状态正常，默认分配 5 GB 配额；高级模式的注册频率由注册量策略卡控制。</p>
         {registrationPending ? (
           <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-400">
             <Spinner className="h-3 w-3" />
-            正在更新设置…
+            {t('admin.settings.updating-settings')}
           </p>
         ) : null}
       </CollapsibleSection>
 
 <CollapsibleSection>
         <div className="flex items-center gap-2">
-          <UsersIcon className="h-4 w-4 text-sky-400" />
-          <h2 className="text-sm font-semibold text-slate-100">用户功能权限</h2>
+          <EyeIcon className="h-4 w-4 text-sky-400" />
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.text-25')}</h2>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          关闭后 Web 端会隐藏对应入口，后端接口同时返回 403。
+          {t('admin.settings.when-disabled-the-web-entry-is-hidden-and-backen')}
         </p>
 
         <div className="mt-4 divide-y divide-slate-800 rounded-xl border border-slate-800">
           {(
             [
-              ['allowUserPreviewImage', '图片在线预览', '允许用户在浏览器中查看 PNG/JPG/WebP 等图片'],
-              ['allowUserPreviewVideo', '视频在线播放', '允许播放 MP4/WebM/Ogg 视频'],
-              ['allowUserPreviewPdf', 'PDF 在线预览', '允许在浏览器中渲染 PDF'],
-              ['allowUserPreviewOffice', 'Word / Excel / PPT 预览', '允许在线预览 .docx / .xlsx / .pptx 文件'],
-              ['allowUserExtract', '在线解压', '允许把 zip/7z/rar/tar.gz 解压到当前目录'],
-              ['allowUserScan', '安全查杀', '允许用户对文件发起 ClamAV / VirusTotal 查杀'],
+              ['allowUserPreviewImage', t('admin.settings.image-preview'), t('admin.settings.allow-users-to-preview-png-jpg-webp-images-in-th')],
+              ['allowUserPreviewVideo', t('admin.settings.video-playback'), t('admin.settings.allow-mp4-webm-ogg-video-playback')],
+              ['allowUserPreviewPdf', t('admin.settings.pdf-preview'), t('admin.settings.allow-pdf-rendering-in-the-browser')],
+              ['allowUserPreviewOffice', t('admin.settings.word-excel-ppt-preview'), t('admin.settings.allow-online-preview-of-docx-xlsx-pptx-files')],
+              ['allowUserArchivePreview', t('admin.settings.text-4'), t('admin.settings.zip-7z')],
             ] as const
           ).map(([key, title, description]) => {
             const checked = permissions[key];
@@ -978,10 +1063,66 @@ export function SettingsPage({
         </div>
       </CollapsibleSection>
 
+      {([
+        ['allowUserExtract', t('admin.settings.online-extraction'), t('admin.settings.text-5')],
+        ['allowUserCompress', t('admin.settings.text-6'), t('admin.settings.zip')],
+        ['allowUserDirectShare', t('admin.settings.text-7'), t('admin.settings.text-8')],
+        ['allowGuestMode', t('admin.settings.text-9'), t('admin.settings.text-10')],
+      ] as const).map(([key, title, description]) => {
+        const checked = permissions[key];
+        const Icon = key === 'allowUserExtract' ? ArchiveIcon : key === 'allowUserCompress' ? CompressIcon : key === 'allowUserDirectShare' ? ShareIcon : UsersIcon;
+        return (
+          <CollapsibleSection key={key}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-indigo-400" />
+                  <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${checked ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{checked ? t('admin.settings.enabled') : t('admin.settings.disabled')}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">{description}；关闭后 Web 隐藏入口，后端接口同时拒绝。</p>
+              </div>
+              <button type="button" role="switch" aria-checked={checked} aria-label={title} disabled={permissionsPending} onClick={() => void togglePermission(key, !checked)} className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? 'bg-emerald-500' : 'bg-slate-700'} disabled:opacity-50`}>
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+            {(key === 'allowGuestMode' || key === 'allowUserDirectShare') ? (
+            <div className="mt-3 rounded-lg border border-slate-800 p-2.5 text-[11px] text-slate-400">
+            <p className="mb-2 text-slate-300">{t('admin.settings.text-26')}</p>
+            <label className="flex items-start gap-2 py-1">
+            <input type="radio" name={`address-mode-${key}`} checked={(key === 'allowGuestMode' ? guestAddressMode : shareAddressMode) === 'auto'} disabled={addressModePending} onChange={() => void setAddressMode(key === 'allowGuestMode' ? 'guest' : 'share', 'auto')} />
+            <span><strong className="text-slate-300">{t('admin.settings.text-27')}</strong>{t('admin.settings.ip-2')}</span>
+            </label>
+            <label className="flex items-start gap-2 py-1">
+            <input type="radio" name={`address-mode-${key}`} checked={(key === 'allowGuestMode' ? guestAddressMode : shareAddressMode) === 'public'} disabled={addressModePending} onChange={() => void setAddressMode(key === 'allowGuestMode' ? 'guest' : 'share', 'public')} />
+            <span><strong className="text-slate-300">{t('admin.settings.text-28')}</strong>{t('admin.settings.ip-3')}</span>
+            </label>
+          <p className="mt-1 text-slate-500">当前公网基础地址：{hosting.baseUrl || '未配置，自动模式会回退到当前访问地址'}</p>
+            </div>
+            ) : null}
+          </CollapsibleSection>
+        );
+      })}
+
+      <CollapsibleSection>
+        <div className="flex items-center gap-2">
+          <UsersIcon className="h-4 w-4 text-indigo-400" />
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.text-29')}</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t('admin.settings.text-30')}</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="text-[11px] text-slate-500">{t('admin.settings.gb')}
+            <input type="number" min={0} step="0.5" value={defaultQuotaBytes / 1024 ** 3} onChange={(event) => setDefaultQuotaBytes(Math.max(0, Number(event.target.value) || 0) * 1024 ** 3)} className="mt-1 block w-32 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </label>
+          <button type="button" onClick={() => void saveDefaultQuota()} disabled={defaultQuotaPending} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-60">{defaultQuotaPending ? t('admin.settings.saving') : t('admin.settings.text-12')}</button>
+        </div>
+      </CollapsibleSection>
+
       <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
+              <ShieldIcon className="h-4 w-4 text-rose-400" />
               <h2 className="text-sm font-semibold text-slate-100">安全查杀</h2>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] ${
@@ -990,19 +1131,17 @@ export function SettingsPage({
                     : 'bg-slate-800 text-slate-400'
                 }`}
               >
-                {scan.enabled ? '已启用' : '已关闭'}
+                {scan.enabled ? t('admin.settings.enabled-2') : t('admin.settings.disabled')}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              API 模式使用 VirusTotal（文件上限 32MB）；本地模式调用配置目录中的 ClamAV 引擎。
-              结果为 infected 的文件会被强制禁止下载、分享和解压。
-            </p>
+              API 模式使用 VirusTotal（文件上限 32MB）；本地模式调用配置目录中的 ClamAV 引擎。结果为 infected 的文件会被强制禁止下载、分享和解压。</p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={scan.enabled}
-            aria-label="安全查杀总开关"
+            aria-label={t('admin.settings.security-scanning-master-switch')}
             onClick={() => setScan((current) => ({ ...current, enabled: !current.enabled }))}
             className={`relative h-7 w-12 shrink-0 rounded-full transition ${
               scan.enabled ? 'bg-emerald-500' : 'bg-slate-700'
@@ -1019,7 +1158,7 @@ export function SettingsPage({
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div>
             <label className="text-[11px] text-slate-500" htmlFor="scan-mode">
-              查杀模式
+              {t('admin.settings.text-20')}妯″紡
             </label>
             <select
               id="scan-mode"
@@ -1032,7 +1171,7 @@ export function SettingsPage({
               }
               className={INPUT_CLASS}
             >
-              <option value="local">本地 ClamAV</option>
+              <option value="local">{t('admin.settings.local-clamav')}</option>
               <option value="api">VirusTotal API</option>
             </select>
           </div>
@@ -1050,13 +1189,13 @@ export function SettingsPage({
                   setScan((current) => ({ ...current, apiKey: event.target.value }))
                 }
                 className={INPUT_CLASS}
-                placeholder="仅保存在本机数据库"
+                placeholder={t('admin.settings.stored-only-in-the-local-database')}
               />
             </div>
           ) : (
             <div>
               <label className="text-[11px] text-slate-500" htmlFor="scan-local-path">
-                ClamAV 目录
+                {t('admin.settings.clamav-directory')}
               </label>
               <input
                 id="scan-local-path"
@@ -1065,7 +1204,7 @@ export function SettingsPage({
                   setScan((current) => ({ ...current, localPath: event.target.value }))
                 }
                 className={INPUT_CLASS}
-                placeholder="例如：C:\\Program Files\\ClamAV"
+                placeholder={t('admin.settings.c-program-files-clamav')}
               />
             </div>
           )}
@@ -1086,20 +1225,21 @@ export function SettingsPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-100">AI 服务</h2>
+              <SettingsIcon className="h-4 w-4 text-violet-400" />
+              <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.ai-service')}</h2>
               <span className={`rounded-full px-2 py-0.5 text-[10px] ${ai.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
-                {ai.enabled ? 'AI 已开启' : 'AI 已关闭'}
+                {ai.enabled ? t('admin.settings.ai-enabled') : t('admin.settings.ai-disabled')}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              API Key 使用 AES-256-GCM 加密落盘，界面只显示脱敏值。
+              {t('admin.settings.api-key-aes-256-gcm')}
             </p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={ai.enabled}
-            aria-label="AI 总开关"
+            aria-label={t('admin.settings.ai-master-switch')}
             onClick={() => setAi((current) => ({ ...current, enabled: !current.enabled }))}
             className={`relative h-7 w-12 shrink-0 rounded-full transition ${ai.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
           >
@@ -1109,14 +1249,14 @@ export function SettingsPage({
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div>
-            <label className="text-[11px] text-slate-500" htmlFor="ai-mode">AI 模式</label>
+            <label className="text-[11px] text-slate-500" htmlFor="ai-mode">{t('admin.settings.ai-mode')}</label>
             <select id="ai-mode" value={ai.mode} onChange={(event) => setAi((current) => ({ ...current, mode: event.target.value as 'admin' | 'user' }))} className={INPUT_CLASS}>
-              <option value="admin">管理员共享配置</option>
-              <option value="user">用户自填配置</option>
+              <option value="admin">{t('admin.settings.administrator-shared-configuration')}</option>
+              <option value="user">{t('admin.settings.user-provided-configuration')}</option>
             </select>
           </div>
           <div>
-            <label className="text-[11px] text-slate-500" htmlFor="ai-daily-limit">普通用户每日上限</label>
+            <label className="text-[11px] text-slate-500" htmlFor="ai-daily-limit">{t('admin.settings.daily-limit-for-regular-users')}</label>
             <input id="ai-daily-limit" type="number" min={1} max={10000} value={ai.dailyLimit} onChange={(event) => setAi((current) => ({ ...current, dailyLimit: Number(event.target.value) }))} className={INPUT_CLASS} />
           </div>
           {ai.mode === 'admin' ? (
@@ -1131,12 +1271,12 @@ export function SettingsPage({
               </div>
               <div className="md:col-span-2">
                 <label className="text-[11px] text-slate-500" htmlFor="ai-admin-key">管理员 API Key（脱敏展示：{ai.apiKeyMasked || '未配置'}）</label>
-                <input id="ai-admin-key" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} className={INPUT_CLASS} placeholder={ai.hasApiKey ? '留空保持现有 Key' : 'sk-...'} />
+                <input id="ai-admin-key" type="password" value={apiKeyInput} onChange={(event) => setApiKeyInput(event.target.value)} className={INPUT_CLASS} placeholder={ai.hasApiKey ? t('admin.settings.leave-blank-to-keep-the-current-key') : 'sk-...'} />
               </div>
             </>
           ) : (
             <p className="md:col-span-2 rounded-lg border border-sky-900/50 bg-sky-950/20 px-3 py-2 text-xs text-sky-300">
-              用户模式：管理员 Base URL / API Key 已隐藏，普通用户必须在 Web“个人设置”中填写自己的配置。
+              {t('admin.settings.user-mode-administrator-base-url-api-key-are-hid')}
             </p>
           )}
         </div>
@@ -1151,21 +1291,41 @@ export function SettingsPage({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-100">内嵌静态托管</h2>
+              <FolderIcon className="h-4 w-4 text-sky-400" />
+              <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.static-hosting')}</h2>
               <span className={`rounded-full px-2 py-0.5 text-[10px] ${hosting.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
-                {hosting.enabled ? '已开启' : '已关闭'}
+                {hosting.enabled ? t('admin.settings.enabled') : t('admin.settings.disabled')}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              站点统一挂载在 <code>/host/</code> 下，不额外监听端口。端口复用依赖 frp HTTP/HTTPS 隧道。
-            </p>
+              {t('admin.settings.sites-are-served-under')} <code>/host/</code> 下，不额外监听端口。自动模式按访问请求的协议与 Host 生成链接，无需手填内网地址。</p>
           </div>
-          <button type="button" role="switch" aria-checked={hosting.enabled} aria-label="静态托管总开关" onClick={() => setHosting((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${hosting.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+          <button type="button" role="switch" aria-checked={hosting.enabled} aria-label={t('admin.settings.static-hosting-master-switch')} onClick={() => setHosting((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 shrink-0 rounded-full transition ${hosting.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
             <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${hosting.enabled ? 'left-6' : 'left-1'}`} />
           </button>
         </div>
-        <label className="mt-3 block text-[11px] text-slate-500" htmlFor="hosting-base-url">公网基础地址（用于生成链接）</label>
-        <input id="hosting-base-url" value={hosting.baseUrl} onChange={(event) => setHosting((current) => ({ ...current, baseUrl: event.target.value }))} className={INPUT_CLASS} placeholder="例如：https://pan.yourdomain.com" />
+        <div className="mt-4">
+          <p className="text-[11px] text-slate-500">{t('admin.settings.text-26')}</p>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-300">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="hosting-mode" value="auto" checked={hosting.mode === 'auto'} onChange={() => setHosting((current) => ({ ...current, mode: 'auto' }))} className="accent-indigo-500" />
+              自动（内网）
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="hosting-mode" value="public" checked={hosting.mode === 'public'} onChange={() => setHosting((current) => ({ ...current, mode: 'public' }))} className="accent-indigo-500" />
+              {t('admin.settings.text-32')}
+            </label>
+          </div>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            自动模式使用当前访问的协议与 Host（含端口）生成绝对地址；公网模式优先使用下方固定地址，未填写时同样回退到当前请求地址。</p>
+        </div>
+        {hosting.mode === 'public' ? (
+          <div className="mt-3">
+            <label className="block text-[11px] text-slate-500" htmlFor="hosting-base-url">{t('admin.settings.text-33')}</label>
+            <input id="hosting-base-url" value={hosting.baseUrl} onChange={(event) => setHosting((current) => ({ ...current, baseUrl: event.target.value }))} className={INPUT_CLASS} placeholder={t('admin.settings.e-g-https-pan-yourdomain-com')} />
+          </div>
+        ) : null}
+        <p className="mt-2 text-[11px] text-slate-500">CSP、HSTS、nosniff 等安全响应头由服务端根据访问协议自动生成，无需手动填写。</p>
         <button type="button" onClick={() => void saveHosting()} disabled={hostingPending} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
           {hostingPending ? <Spinner className="h-4 w-4" /> : null}
           保存托管设置
@@ -1177,53 +1337,100 @@ export function SettingsPage({
       <CollapsibleSection>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2"><h2 className="text-sm font-semibold text-slate-100">邮件通知</h2><span className={`rounded-full px-2 py-0.5 text-[10px] ${mail.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{mail.enabled ? '已开启' : '已关闭'}</span></div>
-            <p className="mt-1 text-xs text-slate-500">SMTP 告警异步发送；密码 AES-256-GCM 加密，界面脱敏。</p>
+            <div className="flex items-center gap-2"><MailIcon className="h-4 w-4 text-emerald-400" /><h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.email-notifications')}</h2><span className={`rounded-full px-2 py-0.5 text-[10px] ${mail.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>{mail.enabled ? t('admin.settings.enabled') : t('admin.settings.disabled')}</span></div>
+            <p className="mt-1 text-xs text-slate-500">{t('admin.settings.smtp-alerts-are-sent-asynchronously-passwords-ar')}</p>
           </div>
-          <button type="button" role="switch" aria-checked={mail.enabled} aria-label="邮件总开关" onClick={() => setMail((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 rounded-full transition ${mail.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+          <button type="button" role="switch" aria-checked={mail.enabled} aria-label={t('admin.settings.email-master-switch')} onClick={() => setMail((current) => ({ ...current, enabled: !current.enabled }))} className={`relative h-7 w-12 rounded-full transition ${mail.enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}>
             <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${mail.enabled ? 'left-6' : 'left-1'}`} />
           </button>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-host">SMTP Host</label><input id="mail-host" value={mail.host} onChange={(e) => setMail((c) => ({ ...c, host: e.target.value }))} className={INPUT_CLASS} /></div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-port">Port</label><input id="mail-port" type="number" value={mail.port} onChange={(e) => setMail((c) => ({ ...c, port: Number(e.target.value) }))} className={INPUT_CLASS} /></div>
-          <div><label className="text-[11px] text-slate-500" htmlFor="mail-user">SMTP 用户</label><input id="mail-user" value={mail.user} onChange={(e) => setMail((c) => ({ ...c, user: e.target.value }))} className={INPUT_CLASS} /></div>
+          <div><label className="text-[11px] text-slate-500" htmlFor="mail-user">{t('admin.settings.smtpUser')}</label><input id="mail-user" value={mail.user} onChange={(e) => setMail((c) => ({ ...c, user: e.target.value }))} className={INPUT_CLASS} /></div>
           <div><label className="text-[11px] text-slate-500" htmlFor="mail-pass">授权码/密码（{mail.passMasked || '未配置'}）</label><input id="mail-pass" type="password" value={mailPass} onChange={(e) => setMailPass(e.target.value)} className={INPUT_CLASS} placeholder={mail.hasPass ? '留空保持现有密码' : '请输入 QQ 邮箱授权码'} />{!mail.hasPass && mail.user ? <p className="mt-1 text-[10px] text-amber-300">未配置或无法解密，请重新填写授权码</p> : null}</div>
-          <div><label className="text-[11px] text-slate-500" htmlFor="mail-from">发件人</label><input id="mail-from" value={mail.from} onChange={(e) => setMail((c) => ({ ...c, from: e.target.value }))} className={INPUT_CLASS} /></div>
-          <div><label className="text-[11px] text-slate-500" htmlFor="mail-to">告警接收邮箱</label><input id="mail-to" value={mail.to} onChange={(e) => setMail((c) => ({ ...c, to: e.target.value }))} className={INPUT_CLASS} /></div>
+          <div><label className="text-[11px] text-slate-500" htmlFor="mail-from">{t('admin.settings.sender')}</label><input id="mail-from" value={mail.from} onChange={(e) => setMail((c) => ({ ...c, from: e.target.value }))} className={INPUT_CLASS} /></div>
+          <div><label className="text-[11px] text-slate-500" htmlFor="mail-to">{t('admin.settings.alertRecipient')}</label><input id="mail-to" value={mail.to} onChange={(e) => setMail((c) => ({ ...c, to: e.target.value }))} className={INPUT_CLASS} /></div>
         </div>
         <label className="mt-3 flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={mail.secure} onChange={(e) => setMail((c) => ({ ...c, secure: e.target.checked }))} className="accent-indigo-500" />TLS（secure）</label>
         <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-300">
-          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.userRegistered} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, userRegistered: e.target.checked } }))} className="accent-indigo-500" />新用户注册</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityAlert: e.target.checked } }))} className="accent-indigo-500" />安全告警</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityLimit} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityLimit: e.target.checked } }))} className="accent-indigo-500" />{t('安全限制触发')}</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.resourceAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, resourceAlert: e.target.checked } }))} className="accent-indigo-500" />{t('本地资源告警')}</label>
-          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.systemError} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, systemError: e.target.checked } }))} className="accent-indigo-500" />系统错误</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.userRegistered} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, userRegistered: e.target.checked } }))} className="accent-indigo-500" />{t('admin.settings.new-registration')}</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityAlert: e.target.checked } }))} className="accent-indigo-500" />{t('admin.settings.security-alert')}</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.securityLimit} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, securityLimit: e.target.checked } }))} className="accent-indigo-500" />{t('admin.settings.security-restriction-triggered')}</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.resourceAlert} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, resourceAlert: e.target.checked } }))} className="accent-indigo-500" />{t('admin.settings.local-resource-alert')}</label>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={mail.events.systemError} onChange={(e) => setMail((c) => ({ ...c, events: { ...c.events, systemError: e.target.checked } }))} className="accent-indigo-500" />{t('admin.settings.system-error')}</label>
         </div>
         <div className="mt-4 flex gap-2">
-          <button type="button" onClick={() => void saveMail()} disabled={mailPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">{mailPending ? '保存中…' : '保存邮件设置'}</button>
-          <button type="button" onClick={() => void testMail()} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">发送测试邮件</button>
+          <button type="button" onClick={() => void saveMail()} disabled={mailPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">{mailPending ? t('admin.settings.saving') : t('admin.settings.save-email-settings')}</button>
+          <button type="button" onClick={() => void testMail()} className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">{t('admin.settings.send-test-email')}</button>
         </div>
       </CollapsibleSection>
 
+      <CollapsibleSection>
+        <div className="flex items-center gap-2">
+          <EyeIcon className="h-4 w-4 text-indigo-400" />
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.text-17')}</h2>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">查看解压、压缩、查杀的当前用户、运行、排队与暂停数量。</p>
+        <button type="button" onClick={() => void openUsage()} className="mt-3 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">查看功能使用状态</button>
+      </CollapsibleSection>
+
             <div className="pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('系统与存储')}</p>
-        <p className="mt-1 text-[11px] text-slate-500">{t('启动与托盘、本地资源、运行日志、数据库备份与目录配置。')}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('admin.settings.system-and-storage')}</p>
+        <p className="mt-1 text-[11px] text-slate-500">{t('admin.settings.text-14')}</p>
       </div>
+
+
+      <CollapsibleSection>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <RefreshIcon className="h-4 w-4 text-sky-400" />
+            <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.cache-cleanup')}</h2>
+          </div>
+          
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t('admin.settings.1-part')}</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
+            <span>{t('admin.settings.automatic-cleanup')}</span>
+            <input type="checkbox" checked={cacheCleanup.autoEnabled} onChange={(e) => setCacheCleanup((c) => ({ ...c, autoEnabled: e.target.checked }))} className="h-4 w-4 accent-indigo-500" />
+          </label>
+          <label className="text-[11px] text-slate-500">{t('admin.settings.cleanup-interval-hours')}
+            <input type="number" min={1} max={720} value={cacheCleanup.intervalHours} onChange={(e) => setCacheCleanup((c) => ({ ...c, intervalHours: Number(e.target.value) || 1 }))} className="mt-1 block w-28 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+          </label>
+          <button
+                      type="button"
+                      onClick={async () => {
+                        setCachePending(true);
+                        try {
+                          const result = await call(api.settings.clearResourceCache());
+                          notify('success', '已清理缓存，清理过期审计 ' + result.removedLogs + ' 条');
+                        } catch (cause) { notify('error', errorMessage(cause)); } finally { setCachePending(false); }
+                      }}
+                      disabled={cachePending}
+                      className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {cachePending ? <Spinner className="h-3.5 w-3.5" /> : null}
+                      {t('admin.settings.clean-now')}
+                    </button>
+          <button type="button" onClick={() => void saveCacheCleanup()} disabled={cachePending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">{t('admin.settings.save-cache-cleanup-settings')}</button>
+        </div>
+      </CollapsibleSection>
+
 
 <CollapsibleSection>
         <div className="flex items-center gap-2">
           <HardDriveIcon className="h-4 w-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-slate-100">启动与托盘</h2>
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.startup-tray')}</h2>
         </div>
         <p className="mt-1 text-xs text-slate-500">控制登录 Windows 后是否自动启动 CloudBox，以及启动后是否隐藏在系统托盘。</p>
         <div className="mt-4 space-y-3">
           <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
-            <span>开机自动启动 CloudBox<br /><span className="text-[11px] text-slate-500">打包安装版生效；开发版不会注册系统启动项。</span></span>
+            <span>开机自动启动 CloudBox<br /><span className="text-[11px] text-slate-500">{t('admin.settings.applies-to-installed-builds-development-builds-d')}</span></span>
             <input type="checkbox" checked={startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, autoStart: event.target.checked }))} className="h-4 w-4 accent-indigo-500" />
           </label>
           <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 px-3 py-2 text-xs text-slate-300">
-            <span>自启动后收起到系统托盘<br /><span className="text-[11px] text-slate-500">需同时开启上一项；手动启动仍显示主窗口。</span></span>
+            <span>{t('admin.settings.minimize-to-system-tray-after-auto-start')}<br /><span className="text-[11px] text-slate-500">{t('admin.settings.requires-the-previous-option-manual-launches-sti')}</span></span>
             <input type="checkbox" checked={startup.startInTray} disabled={!startup.autoStart} onChange={(event) => setStartup((current) => ({ ...current, startInTray: event.target.checked }))} className="h-4 w-4 accent-indigo-500 disabled:opacity-40" />
           </label>
           <button type="button" onClick={() => void saveStartup()} disabled={startupPending} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
@@ -1237,11 +1444,10 @@ export function SettingsPage({
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex items-center gap-2">
           <DatabaseIcon className="h-4 w-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-slate-100">数据库备份</h2>
+          <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.database-backup')}</h2>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          使用 SQLite 在线备份 API 导出当前数据库（包含用户、配额、设置与审计日志）。
-        </p>
+          使用 SQLite 在线备份 API 导出当前数据库（包含用户、配额、设置与审计日志）。</p>
 
         <button
           type="button"
@@ -1254,125 +1460,141 @@ export function SettingsPage({
         </button>
       </section>
 
-      
-
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <HardDriveIcon className="h-4 w-4 text-sky-400" />
-            <h2 className="text-sm font-semibold text-slate-100">系统数据目录</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.system-data-directory')}</h2>
           </div>
           <button
             type="button"
             onClick={() => void chooseDirectory('data')}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
-            更改目录
+            {t('admin.settings.change-directory')}
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          存放 cloudbox.db、SSL 证书、CA 与 frp 配置。
+          {t('admin.settings.stores-cloudbox-db-ssl-certificates-ca-and-frp-c')}
         </p>
         <p className="mt-2 select-all break-all rounded-lg bg-slate-950/60 px-3 py-2 font-mono text-[11px] text-slate-400">
           {dataDir}
         </p>
-        <button
-          type="button"
-          onClick={() =>
-            isWebAdmin ? undefined : void call(api.app.openDataDir()).catch((error: unknown) =>
-              notify('error', errorMessage(error)),
-            )
-          }
-          className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
-        >
-          在资源管理器中打开
-        </button>
+        {!isWebAdmin ? (
+          <button
+            type="button"
+            onClick={() =>
+              isWebAdmin ? undefined : void call(api.app.openDataDir()).catch((error: unknown) =>
+                notify('error', errorMessage(error)),
+              )
+            }
+            className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
+          >
+            {t('admin.settings.open-in-file-manager')}
+          </button>
+          ) : null}
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <HardDriveIcon className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-slate-100">网盘文件目录</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.drive-files-directory')}</h2>
           </div>
           <button
             type="button"
             onClick={() => void chooseDirectory('storage')}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
-            更改目录
+            {t('admin.settings.change-directory')}
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          存放所有用户上传的文件（storage）。修改后应用会重启。
+          {t('admin.settings.stores-user-uploaded-files-storage-the-app-resta')}
         </p>
         <p className="mt-2 select-all break-all rounded-lg bg-slate-950/60 px-3 py-2 font-mono text-[11px] text-slate-400">
           {storageDir}
         </p>
-        <button
-          type="button"
-          onClick={() =>
-            isWebAdmin ? undefined : void call(api.app.openStorageDir()).catch((error: unknown) =>
-              notify('error', errorMessage(error)),
-            )
-          }
-          className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
-        >
-          在资源管理器中打开
-        </button>
+        {!isWebAdmin ? (
+          <button
+            type="button"
+            onClick={() =>
+              isWebAdmin ? undefined : void call(api.app.openStorageDir()).catch((error: unknown) =>
+                notify('error', errorMessage(error)),
+              )
+            }
+            className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
+          >
+            {t('admin.settings.open-in-file-manager')}
+          </button>
+          ) : null}
       </section>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <HardDriveIcon className="h-4 w-4 text-amber-400" />
-            <h2 className="text-sm font-semibold text-slate-100">插件目录</h2>
+            <h2 className="text-sm font-semibold text-slate-100">{t('admin.settings.plugins-directory')}</h2>
           </div>
           <button
             type="button"
             onClick={() => void chooseDirectory('plugins')}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800"
           >
-            更改目录
+            {t('admin.settings.change-directory')}
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          存放已安装插件与插件专属配置（默认 %APPDATA%/CloudBox/plugins）。修改后应用会重启。
+          {t('admin.settings.stores-installed-plugins-and-plugin-data-default')}
         </p>
         <p className="mt-2 select-all break-all rounded-lg bg-slate-950/60 px-3 py-2 font-mono text-[11px] text-slate-400">
           {pluginsDir}
         </p>
-        <button
-          type="button"
-          onClick={() =>
-            isWebAdmin ? undefined : void call(api.app.openPluginsDir()).catch((error: unknown) =>
-              notify('error', errorMessage(error)),
-            )
-          }
-          className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
-        >
-          在资源管理器中打开
-        </button>
+        {!isWebAdmin ? (
+          <button
+            type="button"
+            onClick={() =>
+              isWebAdmin ? undefined : void call(api.app.openPluginsDir()).catch((error: unknown) =>
+                notify('error', errorMessage(error)),
+              )
+            }
+            className="mt-3 text-xs text-indigo-300 transition hover:text-indigo-200"
+          >
+            {t('admin.settings.open-in-file-manager')}
+          </button>
+          ) : null}
       </section>
 
       {adminWebConfirmOpen ? (
         <ConfirmDialog
-          title="关闭管理 Web 内网限制？"
-          description="关闭后，任何能访问 1250 端口的设备都可以打开管理员登录页。请确认已配置防火墙、HTTPS 或可信反向代理；否则强烈不建议继续。"
-          confirmLabel="我了解风险，关闭限制"
+          title={t('admin.settings.web')}
+          description={t('admin.settings.1250-https')}
+          confirmLabel={t('admin.settings.text-15')}
           danger
           onClose={() => setAdminWebConfirmOpen(false)}
-          onConfirm={async () => { const next = await call(api.settings.setAdminWeb({ intranetOnly: false })); setAdminWeb(next.adminWeb); setAdminWebConfirmOpen(false); notify('success', '管理端已允许非内网访问'); }}
+          onConfirm={async () => { const next = await call(api.settings.setAdminWeb({ intranetOnly: false })); setAdminWeb(next.adminWeb); setAdminWebConfirmOpen(false); notify('success', t('admin.settings.text-16')); }}
         />
       ) : null}
+      {usageOpen ? (
+        <Modal title={t('admin.settings.text-17')} onClose={() => setUsageOpen(false)} footer={<button type="button" onClick={() => setUsageOpen(false)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">{t('admin.settings.close')}</button>}>
+          <div className="space-y-2 text-xs text-slate-300">
+            {usageData ? ['extract', 'compress', 'scan'].map((key) => <div key={key} className="flex justify-between rounded-lg border border-slate-800 p-2"><span>{key === 'extract' ? '解压' : key === 'compress' ? '压缩' : '查杀'}</span><span>用户 {usageData[key]?.users ?? 0} / 运行 {usageData[key]?.running ?? 0} / 排队 {usageData[key]?.queued ?? 0} / 暂停 {usageData[key]?.paused ?? 0}</span></div>) : <p>加载中…</p>}
+          </div>
+        </Modal>
+      ) : null}
+
+      {deleteLogsConfirm ? (
+        <ConfirmDialog title={t('admin.settings.delete-all-logs')} description={t('admin.settings.this-clears-runtime-logs-and-audit-logs-in-the-d')} confirmLabel={t('admin.settings.confirm-delete')} danger onClose={() => setDeleteLogsConfirm(false)} onConfirm={clearLogs} />
+      ) : null}
+
       {resetConfirm ? (
-        <ConfirmDialog title="恢复默认设置？" description="将重置安全、查杀、权限、邮件、资源配布等配置，并清除当前封禁和计数；不会删除用户、文件或数据库。" confirmLabel="确认恢复" danger onClose={() => setResetConfirm(false)} onConfirm={async () => { try { const next = await call(api.settings.resetDefaults()); setSecurity(next.security); setSecurityModeSnapshot(next.security.mode); setResources(next.resources); setPermissions(next.permissions); setScan(next.scan); setResetConfirm(false); notify('success','已恢复默认设置'); } catch (cause) { notify('error', errorMessage(cause)); } }} />
+        <ConfirmDialog title={t('admin.settings.restore-default-settings')} description={t('admin.settings.text-21')} confirmLabel={t('admin.settings.confirm-restore')} danger onClose={() => setResetConfirm(false)} onConfirm={async () => { try { const next = await call(api.settings.resetDefaults()); setSecurity(next.security); setSecurityModeSnapshot(next.security.mode); setPermissions(next.permissions); setScan(next.scan); setResetConfirm(false); notify('success',t('admin.settings.text-22')); } catch (cause) { notify('error', errorMessage(cause)); } }} />
       ) : null}
       {modeChangeConfirm ? (
         <ConfirmDialog
-          title="切换安全模式并清除封禁？"
-          description="切换简洁/高级模式会清空当前封禁、旧锁定、计数、策略重置时间和 IP 限流记录。此操作不可撤销。"
-          confirmLabel="确认切换并清除"
+          title={t('admin.settings.switch-security-mode-and-clear-bans')}
+          description={t('admin.settings.ip')}
+          confirmLabel={t('admin.settings.confirm-switch-and-clear')}
           danger
           onClose={() => setModeChangeConfirm(false)}
           onConfirm={async () => { setModeChangeConfirm(false); await saveSecurity(true); }}
@@ -1383,10 +1605,10 @@ export function SettingsPage({
         <Modal
           title={
             directoryChange.kind === 'data'
-              ? '更改系统数据目录'
+              ? t('admin.settings.change-system-data-directory')
               : directoryChange.kind === 'storage'
-                ? '更改网盘文件目录'
-                : '更改插件目录'
+                ? t('admin.settings.change-drive-file-directory')
+                : t('admin.settings.change-plugin-directory')
           }
           description={
             <div className="space-y-2">
@@ -1415,7 +1637,7 @@ export function SettingsPage({
                 disabled={directoryPending}
                 className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
               >
-                取消
+                {t('admin.settings.cancel')}
               </button>
               <button
                 type="button"
@@ -1424,7 +1646,7 @@ export function SettingsPage({
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-60"
               >
                 {directoryPending ? <Spinner className="h-4 w-4" /> : null}
-                确认并重启
+                {t('admin.settings.confirmAndRestart')}
               </button>
             </>
           }
@@ -1446,15 +1668,15 @@ export function SettingsPage({
                 className="mt-1 h-4 w-4 accent-amber-500"
               />
               <span className="text-sm leading-6 text-slate-300">
-                <strong className="text-slate-100">仅改路径（不迁移数据）</strong>
+                <strong className="text-slate-100">{t('admin.settings.change-path-only-no-data-migration')}</strong>
                 <br />
-                此操作只会改变未来的存储位置。原目录中的已有数据不会移动。原有文件将暂时无法在系统中看到，需手动搬移。
+                {t('admin.settings.this-only-changes-the-future-storage-location-ex')}
                 <span className="mt-1 block text-[11px] text-amber-300/80">
                   {directoryChange.kind === 'data'
-                    ? '新目录会初始化全新数据库，需要重新创建管理员。'
+                    ? t('admin.settings.the-new-directory-will-initialize-a-new-database')
                     : directoryChange.kind === 'storage'
-                      ? '目标目录会按现有用户初始化空子目录。'
-                      : '新目录不会包含现有插件，需要重新导入。'}
+                      ? t('admin.settings.text-23')
+                      : t('admin.settings.the-new-directory-will-not-contain-existing-plug')}
                 </span>
               </span>
             </label>
@@ -1475,15 +1697,15 @@ export function SettingsPage({
                 className="mt-1 h-4 w-4 accent-indigo-500"
               />
               <span className="text-sm leading-6 text-slate-300">
-                <strong className="text-slate-100">迁移数据（推荐）</strong>
+                <strong className="text-slate-100">{t('admin.settings.migrate-data-recommended')}</strong>
                 <br />
-                服务将暂停，把现有所有数据复制到新目录。请勿关闭软件。
+                {t('admin.settings.restartDirectoryHint')}
                 <span className="mt-1 block text-[11px] text-slate-500">
                   {directoryChange.kind === 'data'
-                    ? '会复制 cloudbox.db 与 config；网盘文件目录保持不变，可单独迁移。'
+                    ? t('admin.settings.copies-cloudbox-db-and-config-the-drive-file-dir')
                     : directoryChange.kind === 'storage'
-                      ? '会复制 storage 下所有用户文件。'
-                      : '会复制 plugins 下所有插件及插件配置。'}
+                      ? t('admin.settings.copies-all-user-files-under-storage')
+                      : t('admin.settings.copies-all-plugins-and-plugin-configuration-unde')}
                 </span>
               </span>
             </label>
@@ -1498,9 +1720,9 @@ export function SettingsPage({
                   className="mt-1 h-4 w-4 accent-rose-500"
                 />
                 <span>
-                  <strong className="text-slate-100">迁移完成后删除旧文件</strong>
+                  <strong className="text-slate-100">{t('admin.settings.delete-old-files-after-migration')}</strong>
                   <br />
-                  应用重启前会删除原目录。请确认新目录已完整复制；此操作不可撤销。
+                  {t('admin.settings.the-old-directory-will-be-deleted-before-restart')}
                 </span>
               </label>
             ) : null}
@@ -1516,3 +1738,6 @@ export function SettingsPage({
     </div>
   );
 }
+
+
+

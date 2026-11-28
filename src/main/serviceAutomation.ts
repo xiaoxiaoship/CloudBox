@@ -17,18 +17,23 @@ export class ServiceAutomation {
   private readonly server: ServerController;
   private readonly frp: FrpService;
   private readonly settings: { get(key: string): unknown };
+  private readonly cleanupCache?: () => Promise<unknown>;
   private timer: NodeJS.Timeout | null = null;
   private lastServerRunning: boolean;
   private lastScheduleState: boolean | null = null;
+  private lastCacheCleanupAt = Date.now();
+  private cacheCleanupRunning = false;
 
   constructor(options: {
     server: ServerController;
     frp: FrpService;
     settings: { get(key: string): unknown };
+    cleanupCache?: () => Promise<unknown>;
   }) {
     this.server = options.server;
     this.frp = options.frp;
     this.settings = options.settings;
+    this.cleanupCache = options.cleanupCache;
     this.lastServerRunning = this.server.getStatus().running;
     this.timer = setInterval(() => {
       void this.tick();
@@ -76,6 +81,18 @@ export class ServiceAutomation {
       }
     } else {
       this.lastScheduleState = null;
+    }
+
+    if (this.cleanupCache && this.settings.get('cacheCleanup.autoEnabled') === true && !this.cacheCleanupRunning) {
+      const hours = Number(this.settings.get('cacheCleanup.intervalHours') ?? 24);
+      const intervalMs = (Number.isFinite(hours) && hours > 0 ? hours : 24) * 60 * 60_000;
+      if (Date.now() - this.lastCacheCleanupAt >= intervalMs) {
+        this.lastCacheCleanupAt = Date.now();
+        this.cacheCleanupRunning = true;
+        void this.cleanupCache().catch((error: unknown) => {
+          logger.warn('[cache] 自动清理失败', { message: error instanceof Error ? error.message : String(error) });
+        }).finally(() => { this.cacheCleanupRunning = false; });
+      }
     }
 
     const running = this.server.getStatus().running;

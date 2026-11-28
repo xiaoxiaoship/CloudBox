@@ -126,6 +126,13 @@ export class SessionRepository {
     return row.n;
   }
 
+  countOnline(now: number, windowMs = 5 * 60_000): number {
+    const row = this.db.prepare(
+      'SELECT COUNT(DISTINCT user_id) AS n FROM sessions WHERE revoked_at IS NULL AND expires_at > ? AND last_seen_at >= ?',
+    ).get(now, now - windowMs) as { n: number };
+    return row.n;
+  }
+
   countActive(userId: number, now: number): number {
     const row = this.db
       .prepare(

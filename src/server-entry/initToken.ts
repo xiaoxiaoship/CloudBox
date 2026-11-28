@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { listLanIps } from '../main/serverController.ts';
+import type { SettingsService } from '../core/services/settingsService.ts';
 
 export const INIT_TOKEN_TTL_MS = 24 * 60 * 60_000;
 
@@ -30,9 +31,11 @@ function safeEqualHex(left: string, right: string): boolean {
 
 export class InitTokenService {
   private readonly file: string;
+  private readonly settings: SettingsService | null;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, settings?: SettingsService) {
     this.file = path.join(dataDir, 'config', 'admin-init-token.json');
+    this.settings = settings ?? null;
     mkdirSync(path.dirname(this.file), { recursive: true });
   }
 
@@ -54,10 +57,12 @@ export class InitTokenService {
 
     const token = randomBytes(32).toString('base64url');
     const now = Date.now();
+    const ttlHours = this.settings?.getLowLevel().adminInitTokenTtlHours ?? 24;
+    const ttlMs = Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours * 60 * 60_000 : INIT_TOKEN_TTL_MS;
     const stored: StoredToken = {
       tokenHash: hashToken(token),
       createdAt: now,
-      expiresAt: now + INIT_TOKEN_TTL_MS,
+      expiresAt: now + ttlMs,
     };
     writeFileSync(this.file, `${JSON.stringify(stored, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
     try { chmodSync(this.file, 0o600); } catch { /* Windows ACL */ }

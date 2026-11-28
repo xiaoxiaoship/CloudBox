@@ -126,7 +126,7 @@ export class RegistrationService {
           status: 'active',
           createdAt,
         });
-        this.quotas.ensure(created.id, DEFAULT_REGISTRATION_QUOTA_BYTES, createdAt);
+        this.quotas.ensure(created.id, this.settings.get('user.defaultQuotaBytes'), createdAt);
         return created;
       })();
     } catch (error) {
@@ -164,7 +164,7 @@ export class RegistrationService {
       detail: {
         username,
         role: 'user',
-        quotaBytes: DEFAULT_REGISTRATION_QUOTA_BYTES,
+        quotaBytes: this.settings.get('user.defaultQuotaBytes'),
       },
     });
 

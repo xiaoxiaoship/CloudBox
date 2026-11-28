@@ -8,11 +8,14 @@ import {
   dialog,
   nativeImage,
   net,
+  nativeTheme,
+  ipcMain,
   protocol,
   type Tray,
 } from 'electron';
 import { disposeMainContext, createMainContext, type MainContext } from './context.ts';
 import { registerIpc } from './ipc.ts';
+import { IPC } from '../shared/ipcTypes.ts';
 import { createAppTray } from './tray.ts';
 import { applyLoginItem } from './loginItem.ts';
 
@@ -22,6 +25,17 @@ let context: MainContext | null = null;
 let isQuitting = false;
 let quitReady = false;
 let trayHintShown = false;
+
+ipcMain.on(IPC.systemThemeGet, (event) => {
+  event.returnValue = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+});
+
+nativeTheme.on('updated', () => {
+  const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(IPC.systemThemeChanged, theme);
+  }
+});
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 

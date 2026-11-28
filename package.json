@@ -1,6 +1,6 @@
 {
   "name": "cloudbox",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "CloudBox - local multi-user network drive (Electron + Express + SQLite)",
   "author": "CloudBox",

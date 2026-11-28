@@ -47,6 +47,8 @@ interface SettingDefinitions {
   'maxConcurrentHeavyPreviews': { schema: z.ZodType<number>; fallback: number };
   'maxConcurrentPreviewsPerUser': { schema: z.ZodType<number>; fallback: number };
   'maxLogSizeMB': { schema: z.ZodType<number>; fallback: number };
+  'cacheCleanup.autoEnabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'cacheCleanup.intervalHours': { schema: z.ZodType<number>; fallback: number };
   'upload.maxFileBytes': { schema: z.ZodType<number>; fallback: number };
   'frp.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'frp.serverAddr': { schema: z.ZodType<string>; fallback: string };
@@ -68,6 +70,11 @@ interface SettingDefinitions {
   allow_user_preview_office: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_extract: { schema: z.ZodType<boolean>; fallback: boolean };
   allow_user_scan: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_user_compress: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_user_direct_share: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_user_archive_preview: { schema: z.ZodType<boolean>; fallback: boolean };
+  allow_guest_mode: { schema: z.ZodType<boolean>; fallback: boolean };
+  'user.defaultQuotaBytes': { schema: z.ZodType<number>; fallback: number };
   'scan.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'scan.mode': { schema: z.ZodType<'api' | 'local'>; fallback: 'api' | 'local' };
   'scan.api_key': { schema: z.ZodType<string>; fallback: string };
@@ -81,6 +88,9 @@ interface SettingDefinitions {
   'ai.admin_model': { schema: z.ZodType<string>; fallback: string };
   'ai.user_daily_limit': { schema: z.ZodType<number>; fallback: number };
   'hosting.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
+  'hosting.mode': { schema: z.ZodType<'auto' | 'public'>; fallback: 'auto' | 'public' };
+  'guest.addressMode': { schema: z.ZodType<'auto' | 'public'>; fallback: 'auto' | 'public' };
+  'share.addressMode': { schema: z.ZodType<'auto' | 'public'>; fallback: 'auto' | 'public' };
   'hosting.base_url': { schema: z.ZodType<string>; fallback: string };
   'mail.enabled': { schema: z.ZodType<boolean>; fallback: boolean };
   'mail.host': { schema: z.ZodType<string>; fallback: string };
@@ -140,6 +150,8 @@ const DEFINITIONS: SettingDefinitions = {
   'maxConcurrentHeavyPreviews': { schema: z.number().int().min(1).max(1000), fallback: 10 },
   'maxConcurrentPreviewsPerUser': { schema: z.number().int().min(1).max(1000), fallback: 10 },
   'maxLogSizeMB': { schema: z.number().int().min(1).max(100000), fallback: 100 },
+  'cacheCleanup.autoEnabled': { schema: z.boolean(), fallback: false },
+  'cacheCleanup.intervalHours': { schema: z.number().int().min(1).max(720), fallback: 24 },
   'upload.maxFileBytes': { schema: z.number().int().min(1), fallback: 2 * 1024 ** 3 },
   'frp.enabled': { schema: z.boolean(), fallback: false },
   'frp.serverAddr': { schema: z.string().max(255), fallback: '' },
@@ -161,6 +173,11 @@ const DEFINITIONS: SettingDefinitions = {
   allow_user_preview_office: { schema: z.boolean(), fallback: true },
   allow_user_extract: { schema: z.boolean(), fallback: true },
   allow_user_scan: { schema: z.boolean(), fallback: true },
+  allow_user_compress: { schema: z.boolean(), fallback: true },
+  allow_user_direct_share: { schema: z.boolean(), fallback: true },
+  allow_user_archive_preview: { schema: z.boolean(), fallback: true },
+  allow_guest_mode: { schema: z.boolean(), fallback: false },
+  'user.defaultQuotaBytes': { schema: z.number().int().min(0).max(1024 ** 5), fallback: 5 * 1024 ** 3 },
   'scan.enabled': { schema: z.boolean(), fallback: false },
   'scan.mode': { schema: z.enum(['api', 'local']), fallback: 'local' },
   'scan.api_key': { schema: z.string().max(256), fallback: '' },
@@ -174,6 +191,9 @@ const DEFINITIONS: SettingDefinitions = {
   'ai.admin_model': { schema: z.string().max(200), fallback: 'gpt-4o-mini' },
   'ai.user_daily_limit': { schema: z.number().int().min(1).max(10_000), fallback: 50 },
   'hosting.enabled': { schema: z.boolean(), fallback: false },
+  'hosting.mode': { schema: z.enum(['auto', 'public']), fallback: 'auto' },
+  'guest.addressMode': { schema: z.enum(['auto', 'public']), fallback: 'auto' },
+  'share.addressMode': { schema: z.enum(['auto', 'public']), fallback: 'auto' },
   'hosting.base_url': { schema: z.string().max(500), fallback: '' },
   'mail.enabled': { schema: z.boolean(), fallback: false },
   'mail.host': { schema: z.string().max(255), fallback: '' },

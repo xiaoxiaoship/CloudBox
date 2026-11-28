@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>测试按钮</title>
+  <style>
+    body { margin: 0; padding: 28px; font: 14px/1.6 system-ui, sans-serif; color: #1e293b; background: #f8fafc; }
+    .card { border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; padding: 22px; box-shadow: 0 12px 40px rgba(15, 23, 42, .08); }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    p { margin: 8px 0; color: #64748b; }
+    code { display: block; margin-top: 12px; padding: 12px; border-radius: 10px; background: #0f172a; color: #c7d2fe; word-break: break-all; }
+    button { margin-top: 16px; border: 0; border-radius: 10px; padding: 10px 16px; background: #4f46e5; color: #fff; font-weight: 600; cursor: pointer; }
+    #count { margin-top: 12px; color: #059669; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>来自插件的 iframe</h1>
+    <p>这个页面运行在 sandbox iframe 中，通过 postMessage 接收宿主传递的 token 和用户信息。</p>
+    <p id="user">等待宿主初始化...</p>
+    <code id="token">token: 未收到</code>
+    <button id="ping" type="button">测试按钮</button>
+    <p id="count"></p>
+  </div>
+  <script>
+    let count = 0;
+    let initData = null;
+    window.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.type !== 'cloudbox:init') return;
+      initData = data;
+      document.getElementById('user').textContent = data.user
+        ? `当前用户：${data.user.username}（ID ${data.user.id}，${data.user.role}）`
+        : '当前用户：未登录';
+      document.getElementById('token').textContent = `token: ${String(data.token || '').slice(0, 18)}...`;
+      window.parent.postMessage({ type: 'cloudbox:ready', plugin: 'web-button-demo' }, '*');
+    });
+    document.getElementById('ping').addEventListener('click', () => {
+      count += 1;
+      document.getElementById('count').textContent = `已点击 ${count} 次${initData ? '，宿主 token 已接收' : ''}`;
+    });
+  </script>
+</body>
+</html>

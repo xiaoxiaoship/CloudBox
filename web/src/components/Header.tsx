@@ -1,28 +1,52 @@
-import { useEffect, useRef, useState } from 'react';
-import { PromptDialog } from './Dialog.tsx';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client.ts';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore.ts';
-import { CloudIcon, FolderIcon, GearIcon, LogoutIcon, PencilIcon, Spinner } from './Icons.tsx';
+import { BellIcon, CloudIcon, FolderIcon, GearIcon, LogoutIcon, Spinner } from './Icons.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { AiSettingsDialog } from './AiAssistant.tsx';
 import { HostingDialog } from './HostingDialog.tsx';
 import { LanguageSwitcher } from './LanguageSwitcher.tsx';
+import { UserSettingsDialog } from './UserSettingsDialog.tsx';
+import { AnnouncementPanel } from './AnnouncementPanel.tsx';
+import type { AnnouncementView } from '../api/client.ts';
 
 export function Header() {
   const { t } = useTranslation();
   const user = useAppStore((state) => state.user);
   const securityMode = user?.securityMode === true;
   const logout = useAppStore((state) => state.logout);
-  const uploadAvatar = useAppStore((state) => state.uploadAvatar);
-  const renameAccount = useAppStore((state) => state.renameAccount);
-  const avatarInput = useRef<HTMLInputElement>(null);
+
   const [pending, setPending] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [hostingEnabled, setHostingEnabled] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [hostingOpen, setHostingOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [userSettingsOpen, setUserSettingsOpen] = useState(false);
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false);
+  const [announcements, setAnnouncements] = useState<AnnouncementView[]>([]);
+  const [unreadAnnouncements, setUnreadAnnouncements] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const loadAnnouncements = async (): Promise<void> => {
+      try {
+        const result = await api.announcements();
+        if (!active) return;
+        setAnnouncements(result.items);
+        setUnreadAnnouncements(result.unread);
+      } catch { /* ignore */ }
+    };
+    void loadAnnouncements();
+    const timer = window.setInterval(() => { void loadAnnouncements(); }, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
+  const openAnnouncements = (): void => {
+    setAnnouncementsOpen(true);
+    setUnreadAnnouncements(0);
+    void api.markAnnouncementsRead().catch(() => {});
+  };
 
   useEffect(() => {
     void api
@@ -62,6 +86,10 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <button type="button" onClick={openAnnouncements} className="relative rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" title="公告" aria-label="公告">
+            <BellIcon className="h-4 w-4" />
+            {unreadAnnouncements > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-950" /> : null}
+          </button>
           <ThemeToggle />
           <LanguageSwitcher />
           {!securityMode && aiEnabled ? (
@@ -87,40 +115,8 @@ export function Header() {
             </button>
           ) : null}
 
-          {!securityMode ? (
-          <button
-            type="button"
-            onClick={() => setRenameOpen(true)}
-            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-            aria-label={t('header.changeUsername')}
-            title={t('header.changeUsername')}
-          >
-            <PencilIcon className="h-4 w-4" />
-          </button>
-          ) : null}
-
           <div className={`flex min-w-0 items-center gap-2 ${securityMode ? 'hidden' : ''}`}>
-            <input
-              ref={avatarInput}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (!file) return;
-                void uploadAvatar(file).catch((error: unknown) => {
-                  window.alert(error instanceof Error ? error.message : t('header.avatarUploadFailed'));
-                });
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => avatarInput.current?.click()}
-              className="h-8 w-8 shrink-0 overflow-hidden rounded-full ring-2 ring-transparent transition hover:ring-indigo-400"
-              title={t('header.changeAvatar')}
-              aria-label={t('header.changeAvatar')}
-            >
+            <div className="h-8 w-8 shrink-0 overflow-hidden rounded-full ring-2 ring-transparent">
               {user?.avatarDataUrl ? (
                 <img src={user.avatarDataUrl} alt={displayName} className="h-full w-full object-cover" />
               ) : (
@@ -128,7 +124,7 @@ export function Header() {
                   {initial || 'U'}
                 </span>
               )}
-            </button>
+            </div>
             <div className="hidden min-w-0 sm:block">
               <p className="max-w-[10rem] truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                 {displayName}
@@ -138,6 +134,15 @@ export function Header() {
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setUserSettingsOpen(true)}
+            className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="用户设置"
+          >
+            <GearIcon className="h-4 w-4" />
+          </button>
 
           <button
             type="button"
@@ -153,20 +158,8 @@ export function Header() {
       </div>
       {aiSettingsOpen ? <AiSettingsDialog onClose={() => setAiSettingsOpen(false)} /> : null}
       {hostingOpen ? <HostingDialog onClose={() => setHostingOpen(false)} /> : null}
-      {renameOpen ? (
-        <PromptDialog
-          title={t('header.changeUsername')}
-          description={t('header.usernameChangedHint')}
-          label={t('header.newUsername')}
-          initialValue={user?.username ?? ''}
-          confirmLabel={t('header.save')}
-          onClose={() => setRenameOpen(false)}
-          onSubmit={async (username) => {
-            await renameAccount(username);
-            setRenameOpen(false);
-          }}
-        />
-      ) : null}
+      {userSettingsOpen ? <UserSettingsDialog onClose={() => setUserSettingsOpen(false)} /> : null}
+      {announcementsOpen ? <AnnouncementPanel items={announcements} onClose={() => setAnnouncementsOpen(false)} /> : null}
     </header>
   );
 }

@@ -153,7 +153,7 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
         return;
       }
     }
-    if (services.settings.get('security.mode') === 'advanced' && deps.cap.enabled()) {
+    if (services.settings.get('security.mode') === 'advanced' && req.secure && deps.cap.enabled() && deps.policy.rule('cap', 'ip') !== null) {
       const since = Date.now() - 10 * 60_000;
       const recent = services.audit
         .list({ limit: 500 })
@@ -171,9 +171,9 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
     const loginUser = services.users.findByUsername(body.username);
     const advancedMode = services.settings.get('security.mode') === 'advanced';
     if (advancedMode && checkLoginPolicy(req, res, loginUser)) return;
-    if (advancedMode && deps.cap.enabled()) {
-      const capAccountRule = deps.policy.rule('cap', 'account');
-      const capIpRule = deps.policy.rule('cap', 'ip');
+    const capAccountRule = deps.policy.rule('cap', 'account');
+    const capIpRule = deps.policy.rule('cap', 'ip');
+    if (advancedMode && req.secure && deps.cap.enabled() && (capAccountRule !== null || capIpRule !== null)) {
       const ip = req.ip ?? 'unknown';
       const accountThreshold = Math.max(1, capAccountRule !== null ? Number(capAccountRule.config.threshold ?? 3) : deps.cap.loginThreshold());
       const accountMode = String(capAccountRule?.config.mode ?? 'window');
@@ -270,23 +270,29 @@ export function createAuthRouter(services: CoreServices, deps: AuthRouterDeps): 
     res.json({ user });
   });
 
-  router.post('/avatar', deps.requireUser, deps.csrf, (req, res) => {
+  router.post('/avatar', deps.requireUser, deps.csrf, async (req, res) => {
     const user = req.user!;
     const avatar = typeof req.body?.avatar === 'string' ? req.body.avatar : '';
     if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(avatar)) {
       res.status(400).json({ error: { code: 'AVATAR_INVALID', message: '头像格式必须是 PNG/JPEG/WebP' } });
       return;
     }
-    if (Buffer.byteLength(avatar, 'utf8') > 900_000) {
-      res.status(413).json({ error: { code: 'AVATAR_TOO_LARGE', message: '头像不能超过 600KB' } });
+    const maxAvatarBytes = services.settings.getLowLevel().maxAvatarBytes;
+    if (Buffer.byteLength(avatar, 'utf8') > maxAvatarBytes) {
+      res.status(413).json({
+        error: {
+          code: 'AVATAR_TOO_LARGE',
+          message: `头像 data URL 不能超过 ${Math.floor(maxAvatarBytes / 1024)}KB`,
+        },
+      });
       return;
     }
-    services.users.updateAvatar(user.id, avatar, Date.now());
-    res.json({ avatarDataUrl: avatar });
+    const saved = await services.auth.changeAvatar(user, avatar, requestContext(req, res));
+    res.json({ avatarDataUrl: saved });
   });
 
-  router.delete('/avatar', deps.requireUser, deps.csrf, (req, res) => {
-    services.users.updateAvatar(req.user!.id, null, Date.now());
+  router.delete('/avatar', deps.requireUser, deps.csrf, async (req, res) => {
+    await services.auth.changeAvatar(req.user!, null, requestContext(req, res));
     res.status(204).end();
   });
 

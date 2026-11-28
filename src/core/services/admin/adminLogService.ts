@@ -1,5 +1,5 @@
 import type { AuditService } from '../auditService.ts';
-import { getRecentLogs } from '../../../shared/logger.ts';
+import { clearRecentLogs, getRecentLogs } from '../../../shared/logger.ts';
 
 export interface AdminLogView {
   runtime: string[];
@@ -7,6 +7,11 @@ export interface AdminLogView {
 }
 
 /** Shared log view for Electron IPC and the headless admin HTTP adapter. */
+export function clearAdminLogs(audit: AuditService): void {
+  clearRecentLogs();
+  audit.clear();
+}
+
 export function getAdminLogView(audit: AuditService, limit = 200): AdminLogView {
   const safeLimit = Math.max(1, Math.min(500, Math.trunc(limit)));
   return {

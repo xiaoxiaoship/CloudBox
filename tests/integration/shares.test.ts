@@ -68,6 +68,36 @@ describe('share links API', () => {
     assert.equal(Buffer.from(await download.arrayBuffer()).toString('utf8'), 'hello');
   });
 
+  it('public 模式优先使用 hosting.base_url 生成分享地址', async () => {
+    t.services.settings.set('hosting.mode', 'public', null);
+    t.services.settings.set('hosting.base_url', 'https://pan.example.com/', null);
+
+    const response = await createShare(300);
+    assert.equal(response.status, 201);
+    const created = await readJson<ShareResponse>(response);
+
+    assert.equal(created.path, `/api/public/s/${created.token}`);
+    assert.equal(created.url, `https://pan.example.com/api/public/s/${created.token}`);
+  });
+
+  it('public 模式未配置 base_url 时回退到当前请求协议 + Host', async () => {
+    t.services.settings.set('hosting.mode', 'public', null);
+    t.services.settings.set('hosting.base_url', '', null);
+
+    const response = await createShare(300);
+    const created = await readJson<ShareResponse>(response);
+    assert.match(created.url, /^http:\/\/127\.0\.0\.1:\d+\/api\/public\/s\//);
+  });
+
+  it('auto 模式忽略已配置的 base_url，使用当前请求地址', async () => {
+    t.services.settings.set('hosting.mode', 'auto', null);
+    t.services.settings.set('hosting.base_url', 'https://pan.example.com', null);
+
+    const response = await createShare(300);
+    const created = await readJson<ShareResponse>(response);
+    assert.equal(created.url, `${t.client.baseUrl}/api/public/s/${created.token}`);
+  });
+
   it('30 秒边界：到期时刻仍可下载，超过 1ms 返回 410', async () => {
     const response = await createShare(30);
     const created = await readJson<ShareResponse>(response);
@@ -99,6 +129,24 @@ describe('share links API', () => {
     assert.equal((await fetch(created.url)).status, 410);
   });
 
+  it('用户可以列出并删除自己的分享记录', async () => {
+    const createdResponse = await createShare(300);
+    assert.equal(createdResponse.status, 201);
+    const created = await readJson<ShareResponse>(createdResponse);
+
+    const list = await t.client.request('/api/shares');
+    assert.equal(list.status, 200);
+    const rows = await readJson<Array<{ id: number; token: string; expired: boolean }>>(list);
+    const row = rows.find((item) => item.token === created.token);
+    assert.ok(row);
+    assert.equal(row.expired, false);
+
+    const removed = await t.client.request(`/api/shares/${row.id}`, { method: 'DELETE' });
+    assert.equal(removed.status, 204);
+    assert.equal((await (await t.client.request('/api/shares')).json() as unknown[]).length, 0);
+    assert.equal((await fetch(created.url)).status, 404);
+  });
+
   it('duration_seconds 严格限制在 30–7200 秒', async () => {
     for (const duration of [29, 7_201, 0, -1]) {
       const response = await createShare(duration);
@@ -124,6 +172,8 @@ describe('share links API', () => {
   });
 
   it('同一用户每分钟最多创建 10 个分享', async () => {
+    // 该用例只验证分享频率限制，关闭默认启用的 Cap，避免默认 WAF 规则先触发。
+    t.services.settings.set('security.capEnabled', false, null);
     for (let index = 0; index < 10; index += 1) {
       const response = await createShare(300);
       assert.equal(response.status, 201, `第 ${index + 1} 个分享应成功`);

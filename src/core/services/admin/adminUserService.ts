@@ -181,14 +181,14 @@ export class AdminUserService {
   }
 
   async createUser(
-    input: { username: string; password: string; quotaBytes: number | null },
+    input: { username: string; password: string; quotaBytes?: number | null },
     actor: AdminActor,
   ): Promise<ManagedUser> {
     return this.createAccount({
       username: input.username,
       password: input.password,
       role: 'user',
-      quotaBytes: input.quotaBytes,
+      quotaBytes: input.quotaBytes === undefined ? this.settings.get('user.defaultQuotaBytes') : input.quotaBytes,
       actorType: 'admin',
       actorId: actor.id,
       auditAction: 'user.create',

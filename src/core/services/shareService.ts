@@ -105,6 +105,28 @@ export class ShareService {
     };
   }
 
+  list(user: SessionUser): ShareRecord[] {
+    return this.shares.listByUser(user.id);
+  }
+
+  revoke(user: SessionUser, id: number, ctx: RequestContext): boolean {
+    const removed = this.shares.deleteForUser(id, user.id);
+    if (removed) {
+      this.audit.record({
+        actorType: ctx.actor?.type ?? (user.role === 'admin' ? 'admin' : 'user'),
+        actorId: ctx.actor?.id ?? user.id,
+        action: 'share.revoke',
+        result: 'success',
+        targetType: 'share',
+        targetId: String(id),
+        ip: ctx.ip ?? null,
+        userAgent: ctx.userAgent ?? null,
+        requestId: ctx.requestId ?? null,
+      });
+    }
+    return removed;
+  }
+
   async resolveDownload(token: string, ctx: RequestContext): Promise<DownloadTarget> {
     if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) {
       throw new ShareError(SHARE_ERROR.NOT_FOUND, '分享链接不存在', 404);

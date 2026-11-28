@@ -4,6 +4,7 @@ export type CoreEvent =
   | 'user.registered'
   | 'user.created'
   | 'security.alert'
+  | 'security.banned'
   | 'security.limit'
   | 'security.global.limit'
   | 'resource.alert'

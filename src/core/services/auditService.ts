@@ -68,6 +68,10 @@ export class AuditService {
     return this.repo.list(options);
   }
 
+  clear(): number {
+    return this.repo.clearAll();
+  }
+
   pruneBefore(ts: number): number {
     return this.repo.pruneBefore(ts);
   }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { FileEntry } from '../api/client.ts';
 import {
@@ -39,6 +39,7 @@ interface FileTableProps {
   onPreview: (entry: FileEntry) => void;
   onDownload: (entry: FileEntry) => void;
   onShare: (entry: FileEntry) => void;
+  allowShare: boolean;
   onExtract: (entry: FileEntry) => void;
   onScan: (entry: FileEntry) => void;
   canPreview: (entry: FileEntry) => boolean;
@@ -156,6 +157,7 @@ export function FileTable({
   onPreview,
   onDownload,
   onShare,
+  allowShare,
   onExtract,
   onScan,
   canPreview,
@@ -170,6 +172,20 @@ export function FileTable({
 }: FileTableProps) {
   const { t } = useTranslation();
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const [sortKey, setSortKey] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortDesc, setSortDesc] = useState(false);
+  const sortedEntries = [...entries].sort((a, b) => {
+    let result = 0;
+    if (sortKey === 'name') result = a.name.localeCompare(b.name, 'zh-CN');
+    else if (sortKey === 'size') result = (a.size ?? -1) - (b.size ?? -1);
+    else result = a.modifiedAt - b.modifiedAt;
+    return sortDesc ? -result : result;
+  });
+  const sort = (key: 'name' | 'size' | 'modified') => {
+    if (sortKey === key) setSortDesc((value) => !value);
+    else { setSortKey(key); setSortDesc(false); }
+  };
+
   const allSelected = entries.length > 0 && entries.every((entry) => selected.includes(entry.path));
 
   useEffect(() => {
@@ -209,14 +225,14 @@ export function FileTable({
           aria-label="全选当前目录"
           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:focus:ring-indigo-400"
         />
-        <span>{t('files.name')}</span>
-        <span className="text-right">{t('files.size')}</span>
-        <span className="text-right">{t('files.modified')}</span>
+        <button type="button" onClick={() => sort('name')} className="text-left">{t('files.name')}</button>
+        <button type="button" onClick={() => sort('size')} className="text-right">{t('files.size')}</button>
+        <button type="button" onClick={() => sort('modified')} className="text-right">{t('files.modified')}</button>
         <span className="text-right">{t('files.actions')}</span>
       </div>
 
       <ul className="divide-y divide-slate-50 dark:divide-slate-800/70">
-        {entries.map((entry) => {
+        {sortedEntries.map((entry) => {
           const checked = selected.includes(entry.path);
 
           return (
@@ -297,7 +313,7 @@ export function FileTable({
                     <ScanIcon className="h-4 w-4" />
                   </button>
                 ) : null}
-                {!readOnly && entry.type === 'file' ? (
+                {!readOnly && allowShare && entry.type === 'file' ? (
                   <button
                     type="button"
                     onClick={() => onShare(entry)}

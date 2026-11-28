@@ -5,7 +5,7 @@ import type { SessionUser } from '../types/models.ts';
 import { toSessionUser } from '../types/models.ts';
 import { maskSecret, type SecretBox } from '../security/secretBox.ts';
 import type { AuditService } from './auditService.ts';
-import { AGENT_TOOLS, AiToolService, type ToolExecution } from './aiToolService.ts';
+import { AGENT_TOOLS, AiToolService, type ToolExecution, type ToolSpec } from './aiToolService.ts';
 import type { FileService, RequestContext } from './fileService.ts';
 import type { SettingsService } from './settingsService.ts';
 
@@ -108,6 +108,11 @@ export class AiService {
   private readonly client: AiChatClient;
   private readonly now: () => number;
   private readonly pending = new Map<string, PendingAction>();
+  private pluginBridge: { tools: () => ToolSpec[]; prompts: () => string[]; call: (name: string, args: Record<string, unknown>) => Promise<unknown> } | null = null;
+
+  setPluginBridge(bridge: { tools: () => ToolSpec[]; prompts: () => string[]; call: (name: string, args: Record<string, unknown>) => Promise<unknown> }): void {
+    this.pluginBridge = bridge;
+  }
 
   constructor(options: {
     files: FileService;
@@ -260,7 +265,8 @@ export class AiService {
         role: 'assistant',
         content:
           '你是 CloudBox 网盘原生 AI 助手。所有文件工具 path 必须使用网盘内相对 POSIX 路径；绝不能使用宿主机绝对路径。' +
-          (locale.toLowerCase().startsWith('en') ? ' Please reply to the user in English.' : ''),
+          (locale.toLowerCase().startsWith('en') ? ' Please reply to the user in English.' : '') +
+          (this.pluginBridge?.prompts().length ? `\n\n插件知识：\n${this.pluginBridge.prompts().join('\n')}` : ''),
       },
       ...messages.map((message) => ({ role: message.role, content: message.content })),
     ];
@@ -272,7 +278,7 @@ export class AiService {
           apiKey,
           model,
           messages: conversation,
-          tools: AGENT_TOOLS,
+          tools: [...AGENT_TOOLS, ...(this.pluginBridge?.tools() ?? [])],
         });
 
         if (result.toolCalls.length === 0) {
@@ -319,11 +325,14 @@ export class AiService {
             return;
           }
 
-          const execution = await this.tools.execute(user, call.name, call.arguments, ctx, {
-            workScope,
-            workDir,
-            allowDestructive: false,
-          });
+          const isPluginTool = this.pluginBridge?.tools().some((tool) => tool.function.name === call.name) ?? false;
+          const execution: ToolExecution = isPluginTool
+            ? await this.pluginBridge!.call(call.name, call.arguments).then((data) => ({ ok: true, data })).catch((error: unknown) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }))
+            : await this.tools.execute(user, call.name, call.arguments, ctx, {
+              workScope,
+              workDir,
+              allowDestructive: false,
+            });
           yield { type: 'tool', name: call.name, result: execution };
           conversation.push({
             role: 'tool',

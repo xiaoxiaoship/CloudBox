@@ -5,6 +5,15 @@ function invoke<T>(channel: string, payload?: unknown): Promise<Result<T>> {
   return ipcRenderer.invoke(channel, payload) as Promise<Result<T>>;
 }
 
+contextBridge.exposeInMainWorld('cloudboxTheme', {
+  current: (): 'light' | 'dark' => (ipcRenderer.sendSync(IPC.systemThemeGet) as 'light' | 'dark') ?? 'light',
+  subscribe: (callback: (theme: 'light' | 'dark') => void): (() => void) => {
+    const listener = (_event: unknown, theme: 'light' | 'dark'): void => callback(theme);
+    ipcRenderer.on(IPC.systemThemeChanged, listener);
+    return () => ipcRenderer.removeListener(IPC.systemThemeChanged, listener);
+  },
+});
+
 /**
  * 只通过 contextBridge 暴露白名单方法，渲染层拿不到 ipcRenderer 本身，
  * 也无法执行任意通道调用。
@@ -56,6 +65,9 @@ const api: CloudboxApi = {
     setAdminWeb: (input) => invoke(IPC.settingsSetAdminWeb, input),
     setSecurity: (input) => invoke(IPC.settingsSetSecurity, input),
     setResources: (input) => invoke(IPC.settingsSetResources, input),
+    setCacheCleanup: (input) => invoke(IPC.settingsSetCacheCleanup, input),
+    setDefaultQuota: (input) => invoke(IPC.settingsSetDefaultQuota, input),
+    setAddressMode: (input) => invoke(IPC.settingsSetAddressMode, input),
     resetDefaults: () => invoke(IPC.settingsResetDefaults),
     clearResourceCache: () => invoke(IPC.resourcesClearCache),
     setPermissions: (input) => invoke(IPC.settingsSetPermissions, input),
@@ -67,6 +79,13 @@ const api: CloudboxApi = {
   },
   logs: {
     get: (input) => invoke(IPC.logsGet, input),
+    export: (input) => invoke(IPC.logsExport, input),
+    clear: () => invoke(IPC.logsClear),
+  },
+  announcements: {
+    list: () => invoke(IPC.announcementsList),
+    create: (input) => invoke(IPC.announcementsCreate, input),
+    delete: (id) => invoke(IPC.announcementsDelete, id),
   },
   system: {
     checkUpdate: () => invoke(IPC.systemCheckUpdate),
@@ -79,6 +98,7 @@ const api: CloudboxApi = {
     securityBans: () => invoke(IPC.systemSecurityBans),
     clearSecurityBan: (input) => invoke(IPC.systemClearSecurityBan, input),
     clearAllSecurityBans: () => invoke(IPC.systemClearAllSecurityBans),
+    taskUsage: () => invoke(IPC.systemTaskUsage),
     securityCounts: () => invoke(IPC.systemSecurityCounts),
     clearSecurityCount: (input) => invoke(IPC.systemClearSecurityCount, input),
     clearAllSecurityCounts: () => invoke(IPC.systemClearAllSecurityCounts),

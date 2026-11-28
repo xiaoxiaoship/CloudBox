@@ -15,6 +15,7 @@ import { createCapRouter } from './routes/cap.routes.ts';
 import { createCapService } from './cap/capService.ts';
 import { createAiRouter } from './routes/ai.routes.ts';
 import { createFilesRouter } from './routes/files.routes.ts';
+import { createGuestRouter, createPublicGuestRouter } from './routes/guest.routes.ts';
 import { createHealthRouter } from './routes/health.routes.ts';
 import { createHostingApiRouter, createHostingSiteRouter } from './routes/hosting.routes.ts';
 import { createPluginsRouter } from './routes/plugins.routes.ts';
@@ -23,6 +24,7 @@ import {
   createSharesRouter,
 } from './routes/shares.routes.ts';
 import { createTasksRouter } from './routes/tasks.routes.ts';
+import { createAnnouncementsRouter, createAdminAnnouncementsRouter } from './routes/announcements.routes.ts';
 import { createSystemRouter } from './routes/system.routes.ts';
 import { recordDownloadBytes } from './traffic.ts';
 
@@ -41,6 +43,7 @@ const WEB_CSP = [
   "base-uri 'self'",
   "frame-ancestors 'none'",
 ].join('; ');
+const WEB_OVERRIDE_CSP = WEB_CSP.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'");
 
 export interface CreateAppOptions {
   services: CoreServices;
@@ -77,7 +80,9 @@ export function createApp(options: CreateAppOptions): Express {
     }
     next();
   });
-  app.set('trust proxy', services.settings.get('network.trustProxy') ? 1 : false);
+  const frpHttpProxy = services.settings.get('frp.enabled')
+    && services.settings.get('frp.tunnelType') !== 'tcp';
+  app.set('trust proxy', services.settings.get('network.trustProxy') || frpHttpProxy ? 1 : false);
 
   app.use(
     helmet({
@@ -118,6 +123,7 @@ export function createApp(options: CreateAppOptions): Express {
         shares: current.shareRateLimit,
         shareDownload: current.shareDownloadRateLimit,
         extract: current.extractRateLimit,
+        compress: current.compressRateLimit,
         scan: current.scanRateLimit,
       };
     },
@@ -127,6 +133,7 @@ export function createApp(options: CreateAppOptions): Express {
       shares: lowLevel.shareRateLimit,
       shareDownload: lowLevel.shareDownloadRateLimit,
       extract: lowLevel.extractRateLimit,
+      compress: lowLevel.compressRateLimit,
       scan: lowLevel.scanRateLimit,
     },
     onAlert: (info) => services.events.emit('security.alert', {
@@ -194,11 +201,17 @@ export function createApp(options: CreateAppOptions): Express {
         allow_user_preview_office: services.settings.get('allow_user_preview_office'),
         allow_user_extract: services.settings.get('allow_user_extract'),
         allow_user_scan: services.settings.get('allow_user_scan'),
+        allow_user_compress: services.settings.get('allow_user_compress'),
+        allow_user_direct_share: services.settings.get('allow_user_direct_share'),
+        allow_user_archive_preview: services.settings.get('allow_user_archive_preview'),
+        allow_guest_mode: services.settings.get('allow_guest_mode'),
       },
       scan_enabled: services.settings.get('scan.enabled'),
       ai_enabled: services.settings.get('ai.enabled'),
       ai_mode: services.settings.get('ai.mode'),
       hosting_enabled: services.settings.get('hosting.enabled'),
+      hosting_mode: services.settings.get('hosting.mode'),
+      guest_address_mode: services.settings.get('guest.addressMode'),
       hosting_base_url: services.settings.get('hosting.base_url'),
       upload_queue_concurrency: services.settings.getLowLevel().uploadQueueConcurrency,
     });
@@ -230,6 +243,15 @@ export function createApp(options: CreateAppOptions): Express {
     createPluginsRouter(services, { csrf }),
   );
 
+  app.get('/plugin-web/:name/ui/*splat', (req, res) => {
+    const name = req.params.name ?? '';
+    const splat = req.params.splat;
+    const relative = Array.isArray(splat) ? splat.join('/') : (splat ?? '');
+    const target = services.plugins.getUiAsset(name, relative === '' ? 'index.html' : relative);
+    if (target === null) { res.status(404).end(); return; }
+    res.sendFile(target);
+  });
+
   app.get('/plugin-web/:name/*splat', (req, res) => {
     const name = req.params.name ?? '';
     const splat = req.params.splat;
@@ -249,6 +271,15 @@ export function createApp(options: CreateAppOptions): Express {
     }),
   );
 
+  // 访客公开接口：不经过 requireUser，只读，独立 cb_guest 会话
+  app.use(
+    '/api/public/guest',
+    createPublicGuestRouter(services, {
+      guestLimiter: limiters.guest,
+      downloadLimiter: limiters.shareDownload,
+    }),
+  );
+
   app.use(
     '/api/shares',
     requireUser,
@@ -259,6 +290,8 @@ export function createApp(options: CreateAppOptions): Express {
       policy: services.securityPolicy,
     }),
   );
+
+  app.use('/api/guest', requireUser, createGuestRouter(services, { csrf }));
 
   const registerLimiter: RequestHandler = (req, res, next) => {
     if (services.settings.get('security.mode') === 'simple') limiters.register(req, res, next);
@@ -285,9 +318,12 @@ export function createApp(options: CreateAppOptions): Express {
       uploadLimiter: limiters.upload,
       extractLimiter: limiters.extract,
       scanLimiter: limiters.scan,
+      compressLimiter: limiters.compress,
     }),
   );
   app.use('/api/tasks', requireUser, createTasksRouter(services));
+  app.use('/api/announcements', requireUser, createAnnouncementsRouter(services, { csrf }));
+  app.use('/api/admin/announcements', createAdminAnnouncementsRouter(services));
 
   const webDist = options.webDist === undefined ? DEFAULT_WEB_DIST : options.webDist;
   if (webDist !== null && existsSync(path.join(webDist, 'index.html'))) {
@@ -323,8 +359,9 @@ export function createApp(options: CreateAppOptions): Express {
       res.setHeader('Content-Security-Policy', WEB_CSP);
       res.setHeader('Cache-Control', 'no-cache');
 
-      const override = services.plugins.getWebOverride();
+      const override = services.plugins.getWebOverride(req.user ? { id: req.user.id, username: req.user.username, role: req.user.role } : null);
       if (override !== null) {
+        res.setHeader('Content-Security-Policy', WEB_OVERRIDE_CSP);
         res.status(200).type('html').send(override.html);
         return;
       }

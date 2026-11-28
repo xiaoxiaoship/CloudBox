@@ -1,0 +1,6 @@
+{
+  "name": "web-button-demo",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js"
+}

@@ -14,6 +14,7 @@ import { ServerController } from '../main/serverController.ts';
 import { FrpService } from '../main/frpService.ts';
 import { CaManager } from '../main/caManager.ts';
 import { ServiceAutomation } from '../main/serviceAutomation.ts';
+import { clearResourceCache } from '../core/services/cacheCleanupService.ts';
 import { loadHeadlessPaths } from './paths.ts';
 
 export { ADMIN_WEB_PORT } from '../shared/admin.ts';
@@ -91,7 +92,7 @@ export function createHeadlessContext(): HeadlessContext {
     settings: services.settings,
     audit: services.audit,
   });
-  const initToken = new InitTokenService(dataDir);
+  const initToken = new InitTokenService(dataDir, services.settings);
   const tls = new TlsManager(dataDir);
   const ca = new CaManager({ dataDir, tls, settings: services.settings, isPackaged: false, appPath: process.cwd() });
   const userServer = new ServerController({
@@ -136,6 +137,7 @@ export function createHeadlessContext(): HeadlessContext {
     server: userServer,
     frp,
     settings: services.settings,
+    cleanupCache: () => clearResourceCache(services),
   });
 
   return {

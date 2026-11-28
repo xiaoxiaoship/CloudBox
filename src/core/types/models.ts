@@ -17,6 +17,7 @@ export interface UserRecord {
   failedAttempts: number;
   lockedUntil: number | null;
   renameLimitedUntil?: number | null;
+  avatarLimitedUntil?: number | null;
   lastLoginAt: number | null;
   avatarDataUrl: string | null;
   createdAt: number;
@@ -57,7 +58,7 @@ export function toPublicUser(user: PublicUserSource): PublicUser {
   return {
     id: user.id,
     username: user.username,
-    displayName: user.displayName,
+    displayName: user.username,
     role: user.role,
     status: user.status,
     securityMode: user.securityMode ?? false,

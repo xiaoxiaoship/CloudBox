@@ -57,13 +57,62 @@ export interface PublicSettings {
     allow_user_preview_office: boolean;
     allow_user_extract: boolean;
     allow_user_scan: boolean;
+    allow_user_compress: boolean;
+    allow_user_direct_share: boolean;
+    allow_user_archive_preview: boolean;
+    allow_guest_mode: boolean;
   };
   scan_enabled: boolean;
   upload_queue_concurrency: number;
   ai_enabled: boolean;
   ai_mode: 'admin' | 'user';
   hosting_enabled: boolean;
+  hosting_mode: 'auto' | 'public';
+  guest_address_mode: 'auto' | 'public';
   hosting_base_url: string;
+}
+
+export type AnnouncementCategory = 'critical' | 'warning' | 'info';
+export interface AnnouncementView {
+  id: number;
+  category: AnnouncementCategory;
+  body: string;
+  createdAt: number;
+  read: boolean;
+}
+
+export interface PluginSlot {
+  id: string;
+  title: string;
+  icon: string;
+  position: 'bottom-right' | 'bottom-left' | 'sidebar';
+  plugin: string;
+  iframeUrl: string;
+  token: string;
+}
+
+export interface GuestLinkView {
+  token: string;
+  url: string;
+  hasPassword: boolean;
+  expiresAt: number;
+}
+
+export interface GuestStatus {
+  enabled: boolean;
+  link: GuestLinkView | null;
+}
+
+export interface GuestPublicInfo {
+  ownerUsername: string;
+  hasPassword: boolean;
+  expiresAt: number;
+}
+
+export interface GuestUnlockResult {
+  unlocked: boolean;
+  expiresAt: number;
+  ownerUsername: string;
 }
 
 export interface HostingSettings {
@@ -73,6 +122,7 @@ export interface HostingSettings {
   url: string;
   hostingEnabled: boolean;
   baseUrl: string;
+  mode: 'auto' | 'public';
 }
 
 export interface AiSettings {
@@ -103,9 +153,12 @@ export interface AiStreamEvent {
 export interface BackgroundTask {
   id: string;
   userId: number;
-  type: 'extract' | 'scan';
+  type: 'extract' | 'scan' | 'compress' | 'upload';
   status:
     | 'pending'
+    | 'queued'
+    | 'paused'
+    | 'cancelled'
     | 'running'
     | 'scanning'
     | 'clean'
@@ -115,6 +168,8 @@ export interface BackgroundTask {
     | 'failed';
   result: unknown;
   error: string | null;
+  queuePosition?: number | null;
+  residualPaths?: string[];
 }
 
 export interface TextPreview {
@@ -242,6 +297,55 @@ export function previewContentUrl(path: string): string {
   return `/api/files/preview/content?path=${encodeURIComponent(path)}`;
 }
 
+export function guestDownloadUrl(token: string, path: string): string {
+  return `/api/public/guest/${encodeURIComponent(token)}/download?path=${encodeURIComponent(path)}`;
+}
+
+interface GuestRequestOptions {
+  method?: 'GET' | 'POST' | 'DELETE';
+  body?: unknown;
+}
+
+/**
+ * 访客公开接口专用请求。
+ * 不带 CSRF 头（访客没有普通会话），但必须 credentials:'include'，
+ * 否则 cb_guest Cookie 不会随请求发送。
+ */
+async function guestRequest<T>(path: string, options: GuestRequestOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) headers['content-type'] = 'application/json';
+
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      credentials: 'include',
+    });
+  } catch {
+    throw new ApiError('Unable to connect to CloudBox service', 0, 'NETWORK_ERROR');
+  }
+
+  if (!response.ok) {
+    let payload: { code?: string; message?: string; details?: unknown } = {};
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      // 非 JSON 错误体（例如网关错误页）
+    }
+    throw new ApiError(
+      payload.message ?? `Request failed (HTTP ${response.status})`,
+      response.status,
+      payload.code ?? 'REQUEST_FAILED',
+      payload.details,
+    );
+  }
+
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
 export const api = {
   async publicSettings(): Promise<PublicSettings> {
     return request<PublicSettings>('/api/public/settings');
@@ -344,6 +448,26 @@ export const api = {
     return request<TextPreview>(`/api/files/preview/content?path=${encodeURIComponent(path)}`);
   },
 
+  pluginSlots(): Promise<PluginSlot[]> {
+    return request<PluginSlot[]>('/api/plugins/slots');
+  },
+
+  announcements(): Promise<{ items: AnnouncementView[]; unread: number }> {
+    return request<{ items: AnnouncementView[]; unread: number }>('/api/announcements');
+  },
+
+  markAnnouncementsRead(): Promise<void> {
+    return request<void>('/api/announcements/read', { method: 'POST', body: {} });
+  },
+
+  listShares(): Promise<Array<{ id: number; token: string; path: string; url: string; file_path: string; expires_at: number; created_at: number; expired: boolean }>> {
+    return request('/api/shares');
+  },
+
+  revokeShare(id: number): Promise<void> {
+    return request<void>(`/api/shares/${id}`, { method: 'DELETE' });
+  },
+
   createShare(filePath: string, durationSeconds: number): Promise<ShareCreated> {
     return request<ShareCreated>('/api/shares', {
       method: 'POST',
@@ -351,10 +475,46 @@ export const api = {
     });
   },
 
-  extract(filePath: string, targetDir: string): Promise<{ taskId: string }> {
+  /** 用户侧访客链接管理（走普通会话 + CSRF） */
+  guestStatus(): Promise<GuestStatus> {
+    return request<GuestStatus>('/api/guest/status');
+  },
+
+  createGuestLink(password?: string): Promise<GuestLinkView> {
+    return request<GuestLinkView>('/api/guest/link', {
+      method: 'POST',
+      body: password === undefined || password === '' ? {} : { password },
+    });
+  },
+
+  revokeGuestLink(): Promise<void> {
+    return request<void>('/api/guest/link', { method: 'DELETE' });
+  },
+
+  /** 访客公开接口（不需要登录，cb_guest Cookie 认证） */
+  guestInfo(token: string): Promise<GuestPublicInfo> {
+    return guestRequest<GuestPublicInfo>(`/api/public/guest/${encodeURIComponent(token)}`);
+  },
+
+  guestUnlock(token: string, password: string): Promise<GuestUnlockResult> {
+    return guestRequest<GuestUnlockResult>(
+      `/api/public/guest/${encodeURIComponent(token)}/unlock`,
+      { method: 'POST', body: { password } },
+    );
+  },
+
+  guestFiles(token: string, path: string): Promise<FileListing> {
+    return guestRequest<FileListing>(
+      `/api/public/guest/${encodeURIComponent(token)}/files?path=${encodeURIComponent(path)}`,
+    );
+  },
+
+  guestDownloadUrl,
+
+  extract(filePath: string, targetDir: string, password?: string): Promise<{ taskId: string }> {
     return request<{ taskId: string }>('/api/files/extract', {
       method: 'POST',
-      body: { file_path: filePath, target_dir: targetDir },
+      body: { file_path: filePath, target_dir: targetDir, ...(password ? { password } : {}) },
     });
   },
 
@@ -363,6 +523,55 @@ export const api = {
       method: 'POST',
       body: { path: filePath },
     });
+  },
+
+  compress(paths: string[], targetDir: string, archiveName: string, level: number, password?: string): Promise<{ taskId: string }> {
+    return request<{ taskId: string }>('/api/files/compress', { method: 'POST', body: { paths, target_dir: targetDir, archive_name: archiveName, level, ...(password ? { password } : {}) } });
+  },
+
+  tasks(): Promise<BackgroundTask[]> {
+    return request<BackgroundTask[]>('/api/tasks');
+  },
+
+  taskUsage(): Promise<Record<'extract' | 'scan' | 'compress', { users: number; running: number; queued: number; paused: number }>> {
+    return request('/api/tasks/usage');
+  },
+
+  async cancelAllTasks(): Promise<void> {
+    await fetch('/api/tasks/cancel-all', {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: csrfToken ? { 'x-csrf-token': csrfToken } : undefined,
+    });
+  },
+
+  restartTask(id: string): Promise<{ taskId: string }> {
+    return request<{ taskId: string }>(`/api/tasks/${encodeURIComponent(id)}/restart`, { method: 'POST' });
+  },
+
+  pauseTask(id: string): Promise<BackgroundTask> {
+    return request<BackgroundTask>(`/api/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' });
+  },
+
+  cancelTask(id: string): Promise<BackgroundTask> {
+    return request<BackgroundTask>(`/api/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+  },
+
+  taskStats(): Promise<{ running: number; queued: number; paused: number }> {
+    return request<{ running: number; queued: number; paused: number }>('/api/tasks/stats');
+  },
+
+  clearTasks(): Promise<{ removed: number }> {
+    return request<{ removed: number }>('/api/tasks', { method: 'DELETE' });
+  },
+
+  archiveEntries(path: string): Promise<Array<{ path: string; size: number; isDirectory: boolean }>> {
+    return request<{ entries: Array<{ path: string; size: number; isDirectory: boolean }> }>(`/api/files/archive?path=${encodeURIComponent(path)}`).then((result) => result.entries);
+  },
+
+  searchFiles(query: string): Promise<FileEntry[]> {
+    return request<{ entries: FileEntry[] }>(`/api/files/search?q=${encodeURIComponent(query)}`).then((result) => result.entries);
   },
 
   task(taskId: string): Promise<BackgroundTask> {
@@ -471,13 +680,25 @@ export function uploadFile(options: UploadFileOptions): Promise<void> {
       xhr.setRequestHeader('x-csrf-token', csrfToken);
     }
 
+    let stallTimer: number | null = null;
+    const resetStallTimer = (): void => {
+      if (stallTimer !== null) window.clearTimeout(stallTimer);
+      stallTimer = window.setTimeout(() => {
+        xhr.abort();
+        reject(new ApiError('上传长时间无响应，已停止；请检查网络后重试', 0, 'UPLOAD_STALLED'));
+      }, 90_000);
+    };
+    resetStallTimer();
     xhr.upload.onprogress = (event) => {
+      resetStallTimer();
       if (event.lengthComputable && event.total > 0) {
         options.onProgress?.(Math.min(1, event.loaded / event.total));
       }
     };
+    const clearStall = (): void => { if (stallTimer !== null) { window.clearTimeout(stallTimer); stallTimer = null; } };
 
     xhr.onload = () => {
+      clearStall();
       if (xhr.status >= 200 && xhr.status < 300) {
         options.onProgress?.(1);
         resolve();
@@ -499,8 +720,9 @@ export function uploadFile(options: UploadFileOptions): Promise<void> {
       );
     };
 
-    xhr.onerror = () => reject(new ApiError('网络中断，上传失败', 0, 'NETWORK_ERROR'));
-    xhr.onabort = () => reject(new ApiError('已取消上传', 0, 'UPLOAD_ABORTED'));
+    xhr.onerror = () => { clearStall(); reject(new ApiError('网络中断，上传失败', 0, 'NETWORK_ERROR')); };
+    xhr.onabort = () => { clearStall(); reject(new ApiError('已取消上传', 0, 'UPLOAD_ABORTED')); };
+    xhr.ontimeout = () => { clearStall(); reject(new ApiError('上传超时，请重试', 0, 'UPLOAD_TIMEOUT')); };
 
     options.onAbortReady?.(() => xhr.abort());
 

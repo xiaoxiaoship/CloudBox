@@ -14,6 +14,7 @@ interface UserDbRow {
   failed_attempts: number;
   locked_until: number | null;
   rename_limited_until: number | null;
+  avatar_limited_until: number | null;
   last_login_at: number | null;
   created_at: number;
   updated_at: number;
@@ -21,7 +22,7 @@ interface UserDbRow {
 }
 
 const COLUMNS = `id, storage_key, username, display_name, password_hash, role, status,
-  security_mode, must_change_password, failed_attempts, locked_until, rename_limited_until, last_login_at, created_at, updated_at, avatar_data`;
+  security_mode, must_change_password, failed_attempts, locked_until, rename_limited_until, last_login_at, created_at, updated_at, avatar_data, avatar_limited_until`;
 
 function mapUser(row: UserDbRow): UserRecord {
   return {
@@ -37,6 +38,7 @@ function mapUser(row: UserDbRow): UserRecord {
     failedAttempts: row.failed_attempts,
     lockedUntil: row.locked_until,
     renameLimitedUntil: row.rename_limited_until,
+    avatarLimitedUntil: row.avatar_limited_until,
     lastLoginAt: row.last_login_at,
     avatarDataUrl: row.avatar_data,
     createdAt: row.created_at,
@@ -136,7 +138,7 @@ export class UserRepository {
           .prepare(
             `UPDATE users
                 SET username = ?,
-                    display_name = CASE WHEN display_name = '' THEN ? ELSE display_name END,
+                    display_name = ?,
                     updated_at = ?
               WHERE id = ?`,
           )
@@ -194,6 +196,10 @@ export class UserRepository {
 
   setRenameLimitedUntil(id: number, until: number | null, now: number): boolean {
     return this.db.prepare('UPDATE users SET rename_limited_until = ?, updated_at = ? WHERE id = ?').run(until, now, id).changes > 0;
+  }
+
+  setAvatarLimitedUntil(id: number, until: number | null, now: number): boolean {
+    return this.db.prepare('UPDATE users SET avatar_limited_until = ?, updated_at = ? WHERE id = ?').run(until, now, id).changes > 0;
   }
 
   setSecurityMode(id: number, enabled: boolean, now: number): boolean {

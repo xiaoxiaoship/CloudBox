@@ -13,6 +13,13 @@ export function buildAdminSettings(services: CoreServices): AdminSettings {
     dailyLimit: number;
   };
 
+  const lowLevel = services.settings.getLowLevel();
+  lowLevel.maxConcurrentExtractions = services.settings.get('maxConcurrentExtractions');
+  lowLevel.maxConcurrentScans = services.settings.get('maxConcurrentScans');
+  lowLevel.maxConcurrentHeavyPreviews = services.settings.get('maxConcurrentHeavyPreviews');
+  lowLevel.maxConcurrentPreviewsPerUser = services.settings.get('maxConcurrentPreviewsPerUser');
+  lowLevel.maxLogSizeMB = services.settings.get('maxLogSizeMB');
+
   return {
     allowPublicRegistration: services.settings.get('allow_public_registration'),
     trustProxy: services.settings.get('network.trustProxy'),
@@ -38,7 +45,11 @@ export function buildAdminSettings(services: CoreServices): AdminSettings {
       policy: services.settings.get('security.policy'),
       adminIdleEnabled: services.settings.get('security.adminIdleEnabled'),
       adminIdleMinutes: services.settings.get('security.adminIdleMinutes'),
-      lowLevel: services.settings.getLowLevel(),
+      lowLevel,
+    },
+    cacheCleanup: {
+      autoEnabled: services.settings.get('cacheCleanup.autoEnabled'),
+      intervalHours: services.settings.get('cacheCleanup.intervalHours'),
     },
     resources: {
       maxConcurrentExtractions: services.settings.get('maxConcurrentExtractions'),
@@ -47,6 +58,7 @@ export function buildAdminSettings(services: CoreServices): AdminSettings {
       maxConcurrentPreviewsPerUser: services.settings.get('maxConcurrentPreviewsPerUser'),
       maxLogSizeMB: services.settings.get('maxLogSizeMB'),
     },
+    defaultQuotaBytes: services.settings.get('user.defaultQuotaBytes'),
     permissions: {
       allowUserPreviewImage: services.settings.get('allow_user_preview_image'),
       allowUserPreviewVideo: services.settings.get('allow_user_preview_video'),
@@ -54,6 +66,10 @@ export function buildAdminSettings(services: CoreServices): AdminSettings {
       allowUserPreviewOffice: services.settings.get('allow_user_preview_office'),
       allowUserExtract: services.settings.get('allow_user_extract'),
       allowUserScan: services.settings.get('allow_user_scan'),
+      allowUserCompress: services.settings.get('allow_user_compress'),
+      allowUserDirectShare: services.settings.get('allow_user_direct_share'),
+      allowUserArchivePreview: services.settings.get('allow_user_archive_preview'),
+      allowGuestMode: services.settings.get('allow_guest_mode'),
     },
     scan: {
       enabled: services.settings.get('scan.enabled'),
@@ -70,9 +86,12 @@ export function buildAdminSettings(services: CoreServices): AdminSettings {
       apiKeyMasked: ai.apiKeyMasked,
       dailyLimit: ai.dailyLimit,
     },
+    guestAddressMode: services.settings.get('guest.addressMode'),
+    shareAddressMode: services.settings.get('share.addressMode'),
     hosting: {
       enabled: services.settings.get('hosting.enabled'),
       baseUrl: services.settings.get('hosting.base_url'),
+      mode: services.settings.get('hosting.mode'),
     },
     mail: services.mail.adminSettings() as AdminSettings['mail'],
   };

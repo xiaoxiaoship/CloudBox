@@ -14,6 +14,7 @@ import { ServiceAutomation } from './serviceAutomation.ts';
 import { logger } from '../shared/logger.ts';
 import { TlsManager } from './tlsManager.ts';
 import { UpdateManager } from '../core/services/updateManager.ts';
+import { clearResourceCache } from '../core/services/cacheCleanupService.ts';
 import { scheduleGuiUpdate } from './updateInstaller.ts';
 
 export interface MainContext {
@@ -150,6 +151,7 @@ export function createMainContext(): MainContext {
     server,
     frp,
     settings: services.settings,
+    cleanupCache: () => clearResourceCache(services),
   });
 
   if (services.settings.get('server.autoStart')) {

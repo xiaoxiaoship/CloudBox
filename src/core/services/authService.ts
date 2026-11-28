@@ -34,6 +34,7 @@ export const AUTH_ERROR = {
   USER_NOT_FOUND: 'AUTH_USER_NOT_FOUND',
   USERNAME_TAKEN: 'AUTH_USERNAME_TAKEN',
   RENAME_LIMITED: 'AUTH_RENAME_LIMITED',
+  AVATAR_LIMITED: 'AUTH_AVATAR_LIMITED',
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR)[keyof typeof AUTH_ERROR];
@@ -510,6 +511,68 @@ export class AuthService {
       detail: { before: current.username, after: next },
     });
     return toPublicUser(this.users.findById(current.id)!);
+  }
+
+  async changeAvatar(user: SessionUser, avatar: string | null, context: AuthContext = {}): Promise<string | null> {
+    const current = this.users.findById(user.id);
+    if (current === null) {
+      throw new AuthError(AUTH_ERROR.USER_NOT_FOUND, '用户不存在', 404);
+    }
+
+    const policy = this.securityPolicy?.rule('avatarLimit', 'account') ?? null;
+    if (current.role !== 'admin' && policy !== null) {
+      const lockedUntil = current.avatarLimitedUntil ?? 0;
+      if (lockedUntil > this.now()) {
+        throw new AuthError(
+          AUTH_ERROR.AVATAR_LIMITED,
+          '头像修改限制中，请稍后再试',
+          429,
+          lockedUntil - this.now(),
+        );
+      }
+      const windowMs = Number(policy.config.windowHours ?? 24) * 3_600_000;
+      const resetAt = this.securityPolicy?.resetAt('account', String(current.id)) ?? 0;
+      const since = Math.max(this.now() - windowMs, resetAt);
+      const recent = this.audit
+        .list({ limit: 500 })
+        .filter((entry) => entry.action === 'user.avatar' && entry.actorId === current.id && entry.ts >= since);
+      const limit = Number(policy.config.threshold ?? 1);
+      if (recent.length >= limit) {
+        const lockHours = Number(policy.config.banHours ?? 24);
+        const lockMs = Math.max(1_000, lockHours * 3_600_000);
+        this.users.setAvatarLimitedUntil(current.id, this.now() + lockMs, this.now());
+        this.securityPolicy?.ban('account', String(current.id), 'avatarLimit', lockHours * 60);
+        this.recordAudit({
+          actorType: 'user',
+          actorId: current.id,
+          action: 'user.avatar',
+          result: 'denied',
+          targetType: 'user',
+          targetId: String(current.id),
+          context,
+          detail: { reason: 'rate_limited' },
+        });
+        throw new AuthError(
+          AUTH_ERROR.AVATAR_LIMITED,
+          '头像修改次数已达上限，请稍后再试',
+          429,
+          lockMs,
+        );
+      }
+    }
+
+    this.users.updateAvatar(current.id, avatar, this.now());
+    this.recordAudit({
+      actorType: current.role === 'admin' ? 'admin' : 'user',
+      actorId: current.id,
+      action: 'user.avatar',
+      result: 'success',
+      targetType: 'user',
+      targetId: String(current.id),
+      context,
+      detail: { removed: avatar === null },
+    });
+    return avatar;
   }
 
   async resetPassword(input: ResetPasswordInput): Promise<void> {

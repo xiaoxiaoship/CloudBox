@@ -205,33 +205,13 @@ async function main(): Promise<void> {
     await win.locator('button[aria-expanded="false"]').evaluateAll((elements) => {
       for (const element of elements) (element as { click?: () => void }).click?.();
     });
-    const trustProxySwitch = win.getByRole('switch', {
-      name: '信任反向代理的真实 IP',
-    });
-    await trustProxySwitch.waitFor();
-    await trustProxySwitch.click();
-    await win.getByRole('button', { name: '确认开启' }).click();
-    await win.getByText('已开启信任反向代理真实 IP').waitFor();
-    assert.equal(await trustProxySwitch.getAttribute('aria-checked'), 'true');
-
+    assert.equal(await win.getByRole('switch', { name: '信任反向代理的真实 IP' }).count(), 0);
     const settingsWithProxy = await win.evaluate(async () =>
-      (globalThis as unknown as {
-        cloudbox: {
-          settings: {
-            get: () => Promise<{
-              ok: boolean;
-              data: { trustProxy: boolean; allowPublicRegistration: boolean };
-            }>;
-          };
-        };
-      }).cloudbox.settings.get(),
+      (globalThis as unknown as { cloudbox: { settings: { get: () => Promise<{ ok: boolean; data: { trustProxy: boolean; allowPublicRegistration: boolean } }> } } }).cloudbox.settings.get(),
     );
     assert.equal(settingsWithProxy.ok, true);
-    assert.equal(settingsWithProxy.data.trustProxy, true);
-    await win.screenshot({ path: shot('electron-trust-proxy.png') });
-    await trustProxySwitch.click();
-    await win.getByRole('button', { name: '确认关闭' }).click();
-    await win.getByText('已关闭信任反向代理真实 IP').waitFor();
+    assert.equal(settingsWithProxy.data.trustProxy, false);
+    await win.screenshot({ path: shot('electron-trust-proxy-removed.png') });
 
     await win.locator('#frp-server').fill('127.0.0.1');
     await win.locator('#frp-type').selectOption('http');
@@ -346,6 +326,7 @@ async function main(): Promise<void> {
     console.log('10.6 内嵌静态托管总控');
     const hostingSwitch = win.getByRole('switch', { name: '静态托管总开关' });
     if ((await hostingSwitch.getAttribute('aria-checked')) !== 'true') await hostingSwitch.click();
+    await win.getByRole('radio', { name: '公网固定地址' }).check();
     await win.locator('#hosting-base-url').fill('https://pan.example.com');
     await win.getByRole('button', { name: '保存托管设置' }).click();
     await win.getByText('静态托管设置已保存').waitFor();
@@ -355,13 +336,14 @@ async function main(): Promise<void> {
           settings: {
             get: () => Promise<{
               ok: boolean;
-              data: { hosting: { enabled: boolean; baseUrl: string } };
+              data: { hosting: { enabled: boolean; baseUrl: string; mode: string } };
             }>;
           };
         };
       }).cloudbox.settings.get(),
     );
     assert.equal(hostingSettings.data.hosting.enabled, true);
+    assert.equal(hostingSettings.data.hosting.mode, 'public');
     assert.equal(hostingSettings.data.hosting.baseUrl, 'https://pan.example.com');
 
     // 关闭窗口应最小化到托盘，而不是退出

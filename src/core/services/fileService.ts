@@ -33,6 +33,8 @@ export const FILE_ERROR = {
   PREVIEW_UNSUPPORTED: 'PREVIEW_UNSUPPORTED',
   FEATURE_DISABLED: 'FEATURE_DISABLED',
   FILE_INFECTED: 'FILE_INFECTED',
+  ARCHIVE_PASSWORD_REQUIRED: 'ARCHIVE_PASSWORD_REQUIRED',
+  ARCHIVE_PASSWORD_INVALID: 'ARCHIVE_PASSWORD_INVALID',
 } as const;
 
 export type FileErrorCode = (typeof FILE_ERROR)[keyof typeof FILE_ERROR];
@@ -348,6 +350,10 @@ export class FileService {
     return this.tempDir;
   }
 
+  getStorageRoot(): string {
+    return this.storageRoot;
+  }
+
   runExclusive<T>(userId: number, task: () => Promise<T>): Promise<T> {
     return this.mutex.runExclusive(userId, task);
   }
@@ -387,6 +393,29 @@ export class FileService {
       entries: truncated ? entries.slice(0, maxListEntries) : entries,
       truncated,
     };
+  }
+
+  async search(user: SessionUser, query: string, limit = 200): Promise<FileEntry[]> {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    const results: FileEntry[] = [];
+    const walk = async (relative: string): Promise<void> => {
+      if (results.length >= limit) return;
+      const dir = resolveUserPath(this.userRoot(user), relative);
+      let rows;
+      try { rows = await readdir(dir.absolutePath, { withFileTypes: true }); } catch { return; }
+      for (const row of rows) {
+        if (results.length >= limit) return;
+        const child = relative ? `${relative}/${row.name}` : row.name;
+        try {
+          const info = await lstat(path.join(dir.absolutePath, row.name));
+          if (row.name.toLowerCase().includes(needle)) results.push(entryOf(child, row.name, info));
+          if (info.isDirectory() && row.name !== '.storage') await walk(child);
+        } catch { /* skip unreadable */ }
+      }
+    };
+    await walk('');
+    return results.slice(0, limit);
   }
 
   async createFolder(
@@ -1118,6 +1147,17 @@ export class FileService {
 
     const now = this.now();
     const delta = size - prepared.existingSize;
+    const current = this.quotas.get(user.id);
+    if (current !== null && current.quotaBytes !== null && delta > 0) {
+      const remaining = current.quotaBytes - current.usedBytes + prepared.existingSize;
+      if (delta > Math.max(0, remaining)) {
+        throw new FileServiceError(FILE_ERROR.QUOTA_EXCEEDED, '可用配额不足，无法完成上传', 413, {
+          quotaBytes: current.quotaBytes,
+          usedBytes: current.usedBytes,
+          remainingBytes: Math.max(0, current.quotaBytes - current.usedBytes),
+        });
+      }
+    }
 
     this.db.transaction(() => {
       this.quotas.addUsed(user.id, delta, now);

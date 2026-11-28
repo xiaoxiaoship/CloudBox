@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import type { CoreServices } from '../../core/container.ts';
 import { clearLimitedIp, listLimitedIps } from '../../server/middleware/rateLimit.ts';
-import { getAdminLogView } from '../../core/services/admin/adminLogService.ts';
+import { clearAdminLogs, getAdminLogView } from '../../core/services/admin/adminLogService.ts';
 import type { UpdateManager } from '../../core/services/updateManager.ts';
 
 const countKey = z.object({
@@ -90,6 +90,22 @@ export function createAdminSystemRouter(
     }
     void updateManager.install().catch(() => { /* status exposes the error */ });
     res.status(202).json(updateManager.status());
+  });
+
+  router.get('/task-usage', (_req, res) => {
+    res.json({ ...services.tasks.featureUsage(), overall: services.tasks.stats() });
+  });
+
+  router.get('/logs/export', (_req, res) => {
+    res.setHeader('Content-Disposition', 'attachment; filename="cloudbox-logs.json"');
+    res.json({ exportedAt: new Date().toISOString(), ...getAdminLogView(services.audit, 500) });
+  });
+
+  router.post('/logs/clear', csrf, (_req, res) => {
+    const actor = res.locals.adminUser as { id?: number } | undefined;
+    clearAdminLogs(services.audit);
+    services.audit.record({ actorType: 'admin', actorId: actor?.id ?? null, action: 'logs.clear', result: 'success', targetType: 'logs' });
+    res.json({ ok: true });
   });
 
   router.get('/logs', (req, res) => {

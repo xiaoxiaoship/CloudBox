@@ -4,11 +4,12 @@ import type { CoreServices } from '../../core/container.ts';
 import type { CapService } from '../cap/capService.ts';
 import type { SecurityPolicyService } from '../../core/services/securityPolicyService.ts';
 import { requestContext } from '../http/context.ts';
+import { requestOrigin } from '../http/origin.ts';
 import { sendDownload } from '../http/download.ts';
 
 const createShareSchema = z.object({
   file_path: z.string().min(1).max(900),
-  duration_seconds: z.number().int().min(30).max(31_536_000),
+  duration_seconds: z.number().int().min(30).max(7_200),
 });
 
 export interface SharesRouterDeps {
@@ -21,14 +22,47 @@ export interface SharesRouterDeps {
 export function createSharesRouter(services: CoreServices, deps: SharesRouterDeps): Router {
   const router = Router();
 
+  router.get('/', deps.shareLimiter, (req, res) => {
+    const origin = requestOrigin(req);
+    const mode = services.settings.get('share.addressMode');
+    const now = Date.now();
+    res.json(services.shares.list(req.user!).map((share) => {
+      const path = `/api/public/s/${share.token}`;
+      return {
+        id: share.id,
+        token: share.token,
+        path,
+        url: services.hosting.absoluteUrl(path, origin, mode),
+        file_path: share.filePath,
+        expires_at: share.expiresAt,
+        created_at: share.createdAt,
+        expired: now > share.expiresAt,
+      };
+    }));
+  });
+
+  router.delete('/:id', deps.shareLimiter, deps.csrf, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) { res.status(400).json({ code: 'INVALID_SHARE_ID', message: '分享记录 ID 不合法' }); return; }
+    if (!services.shares.revoke(req.user!, id, requestContext(req, res))) {
+      res.status(404).json({ code: 'SHARE_NOT_FOUND', message: '分享记录不存在' });
+      return;
+    }
+    res.status(204).end();
+  });
+
   router.post('/', deps.shareLimiter, deps.csrf, async (req, res) => {
+    if (!services.settings.get('allow_user_direct_share')) {
+      res.status(403).json({ code: 'FEATURE_DISABLED', message: '管理员已关闭直链分享' });
+      return;
+    }
     const body = createShareSchema.parse(req.body);
     const shareMaxSeconds = services.settings.getLowLevel().shareMaxSeconds;
     if (body.duration_seconds > shareMaxSeconds) {
       res.status(400).json({ code: 'SHARE_DURATION_TOO_LONG', message: `分享有效期不能超过 ${shareMaxSeconds} 秒` });
       return;
     }
-    if (deps.cap.enabled() && !deps.cap.hasValidToken(req)) {
+    if (req.secure && deps.cap.enabled() && deps.policy.rule('cap', 'ip') !== null && !deps.cap.hasValidToken(req)) {
       const capRule = deps.policy.rule('cap', 'ip');
       const limit = capRule !== null ? Number(capRule.config.threshold ?? 10) : deps.cap.shareLimit();
       const since = Date.now() - 60_000;
@@ -47,9 +81,9 @@ export function createSharesRouter(services: CoreServices, deps: SharesRouterDep
       requestContext(req, res),
     );
 
-    const host = req.get('host');
+    // 与静态托管共用地址解析：public 模式优先公网固定地址，否则用当前请求协议 + Host。
     const path = `/api/public/s/${created.token}`;
-    const url = host ? `${req.protocol}://${host}${path}` : path;
+    const url = services.hosting.absoluteUrl(path, requestOrigin(req));
 
     res.status(201).json({
       token: created.token,

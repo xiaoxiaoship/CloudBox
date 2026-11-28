@@ -7,6 +7,7 @@ import {
   type BackgroundTask,
   type HostingSettings,
   api,
+  ApiError,
 } from '../api/client.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { Breadcrumbs } from './Breadcrumbs.tsx';
@@ -16,6 +17,7 @@ import { FileTable } from './FileTable.tsx';
 import { Header } from './Header.tsx';
 import {
   AlertIcon,
+  ArchiveIcon,
   CopyIcon,
   DownloadIcon,
   FolderIcon,
@@ -28,11 +30,14 @@ import {
   UploadIcon,
   XIcon,
 } from './Icons.tsx';
-import { isAudioName, isImageName, isOfficeName, isPdfName, isVideoName } from '../lib/format.ts';
+import { isArchiveName, isAudioName, isImageName, isOfficeName, isPdfName, isVideoName } from '../lib/format.ts';
 import { PreviewModal } from './PreviewModal.tsx';
 import { QuotaBar } from './QuotaBar.tsx';
 import { ShareDialog } from './ShareDialog.tsx';
-import { UploadPanel } from './UploadPanel.tsx';
+import { CompressDialog } from './CompressDialog.tsx';
+import { ArchiveBrowser } from './ArchiveBrowser.tsx';
+import { ExtractPasswordDialog } from './ExtractPasswordDialog.tsx';
+import { TaskQueuePanel } from './TaskQueuePanel.tsx';
 
 type DialogState =
   | { kind: 'folder' }
@@ -77,6 +82,10 @@ export function FilesPage() {
   const [dragging, setDragging] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [previewEntry, setPreviewEntry] = useState<FileEntry | null>(null);
+  const [compressEntries, setCompressEntries] = useState<FileEntry[] | null>(null);
+  const [archiveEntry, setArchiveEntry] = useState<FileEntry | null>(null);
+  const [extractPasswordEntry, setExtractPasswordEntry] = useState<FileEntry | null>(null);
+  const [extractPasswordError, setExtractPasswordError] = useState<string | null>(null);
   const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
   const [actionNotice, setActionNotice] = useState<{
@@ -85,6 +94,9 @@ export function FilesPage() {
   } | null>(null);
   const [scanAlert, setScanAlert] = useState<{ name: string } | null>(null);
   const [hosting, setHosting] = useState<HostingSettings | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<FileEntry[] | null>(null);
+  const [searchPending, setSearchPending] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -111,6 +123,26 @@ export function FilesPage() {
   const allowOfficePreview = permissions?.allow_user_preview_office ?? true;
   const allowExtract = permissions?.allow_user_extract ?? false;
   const allowScan = Boolean(permissions?.allow_user_scan && publicSettings?.scan_enabled);
+  const allowCompress = Boolean(permissions?.allow_user_compress);
+  const allowArchivePreview = Boolean(permissions?.allow_user_archive_preview);
+  const allowDirectShare = Boolean(permissions?.allow_user_direct_share);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) { setSearchResults(null); return; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setSearchPending(true);
+      void api.searchFiles(query).then((rows) => { if (active) setSearchResults(rows); }).catch(() => { if (active) setSearchResults([]); }).finally(() => { if (active) setSearchPending(false); });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const cancelOnLeave = (): void => { void api.cancelAllTasks().catch(() => {}); };
+    window.addEventListener('pagehide', cancelOnLeave);
+    return () => window.removeEventListener('pagehide', cancelOnLeave);
+  }, []);
 
   const canPreview = (entry: FileEntry): boolean => {
     if (entry.type !== 'file') return false;
@@ -123,6 +155,7 @@ export function FilesPage() {
   };
 
   const openPreview = (entry: FileEntry): void => {
+    if (allowArchivePreview && isArchiveName(entry.name)) { setArchiveEntry(entry); return; }
     if (isAudioName(entry.name)) {
       const queue = entries.filter((item) => item.type === 'file' && isAudioName(item.name));
       playAudio(entry, queue);
@@ -140,6 +173,8 @@ export function FilesPage() {
     });
   };
 
+  const syncQueue = (): void => { window.dispatchEvent(new Event('cloudbox:tasks-changed')); };
+
   const waitForTask = async (taskId: string): Promise<BackgroundTask> => {
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const task = await api.task(taskId);
@@ -151,11 +186,14 @@ export function FilesPage() {
     throw new Error('任务执行超时，请稍后刷新查看');
   };
 
-  const extractEntry = async (entry: FileEntry): Promise<void> => {
+  const extractEntry = async (entry: FileEntry, password?: string): Promise<void> => {
     markBusy(entry.path, true);
     setActionNotice({ kind: 'info', text: `正在解压 ${entry.name}…` });
     try {
-      const { taskId } = await api.extract(entry.path, currentPath);
+      const { taskId } = await api.extract(entry.path, currentPath, password);
+      setExtractPasswordEntry(null);
+      setExtractPasswordError(null);
+      syncQueue();
       const task = await waitForTask(taskId);
       if (task.status === 'completed') {
         setActionNotice({ kind: 'success', text: `${entry.name} 已解压` });
@@ -167,6 +205,18 @@ export function FilesPage() {
         });
       }
     } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'ARCHIVE_PASSWORD_REQUIRED') {
+        setExtractPasswordEntry(entry);
+        setExtractPasswordError(null);
+        setActionNotice(null);
+        return;
+      }
+      if (cause instanceof ApiError && cause.code === 'ARCHIVE_PASSWORD_INVALID') {
+        setExtractPasswordEntry(entry);
+        setExtractPasswordError('密码不正确，请重新输入');
+        setActionNotice(null);
+        return;
+      }
       setActionNotice({
         kind: 'error',
         text: cause instanceof Error ? cause.message : '解压失败',
@@ -182,6 +232,7 @@ export function FilesPage() {
     setActionNotice({ kind: 'info', text: `正在查杀 ${entry.name}…` });
     try {
       const { taskId } = await api.scan(entry.path);
+      syncQueue();
       const task = await waitForTask(taskId);
       if (task.status === 'infected') {
         setScanAlert({ name: entry.name });
@@ -290,6 +341,11 @@ export function FilesPage() {
           <QuotaBar usage={usage} />
         </div>
 
+        <div className="mb-3 flex items-center justify-start">
+          <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="搜索个人盘" className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-slate-900" />
+          {searchPending ? <span className="ml-2 text-[11px] text-slate-400">搜索中…</span> : null}
+        </div>
+
         {error ? (
           <div className="mb-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
             <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
@@ -344,8 +400,7 @@ export function FilesPage() {
             }`}
           >
             <span className="flex-1">{actionNotice.text}</span>
-            {busyPaths.size > 0 || actionNotice.kind !== 'info' ? (
-              <button
+            <button
                 type="button"
                 onClick={() => setActionNotice(null)}
                 className="rounded p-0.5 opacity-70 transition hover:opacity-100"
@@ -353,13 +408,14 @@ export function FilesPage() {
               >
                 <XIcon className="h-4 w-4" />
               </button>
-            ) : null}
           </div>
         ) : null}
 
+        {archiveEntry ? <ArchiveBrowser entry={archiveEntry} onClose={() => setArchiveEntry(null)} /> : null}
+
         <section
           aria-busy={listingLoading}
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          className={`${archiveEntry ? 'hidden' : ''} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900`}
         >
           <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
@@ -428,6 +484,7 @@ export function FilesPage() {
               </button>
               ) : null}
 
+              {allowDirectShare ? (
               <button
                 type="button"
                 disabled={!canDownload}
@@ -438,6 +495,20 @@ export function FilesPage() {
                 <ShareIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('common.share')}</span>
               </button>
+              ) : null}
+
+              {allowCompress ? (
+              <button
+                type="button"
+                disabled={selected.length === 0}
+                onClick={() => setCompressEntries(entries.filter((entry) => selected.includes(entry.path)))}
+                className={SECONDARY_BUTTON}
+                title="压缩"
+              >
+                <ArchiveIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">压缩</span>
+              </button>
+              ) : null}
 
               <button
                 type="button"
@@ -488,7 +559,7 @@ export function FilesPage() {
           </div>
 
           <FileTable
-            entries={entries}
+            entries={searchResults ?? entries}
             loading={listingLoading}
             selected={selected}
             truncated={truncated}
@@ -496,6 +567,7 @@ export function FilesPage() {
             onPreview={openPreview}
             onDownload={download}
             onShare={(entry) => setDialog({ kind: 'share', entry })}
+            allowShare={!readOnly && allowDirectShare}
             onExtract={(entry) => void extractEntry(entry)}
             onScan={(entry) => void scanEntry(entry)}
             canPreview={canPreview}
@@ -632,6 +704,10 @@ export function FilesPage() {
         />
       ) : null}
 
+      {compressEntries ? (
+        <CompressDialog entries={compressEntries} currentPath={currentPath} onClose={() => setCompressEntries(null)} onStarted={(taskId) => { setActionNotice({ kind: 'info', text: '压缩任务已创建' }); syncQueue(); void waitForTask(taskId).then(() => refresh()).catch(() => {}); }} />
+      ) : null}
+
       {dialog?.kind === 'share' ? (
         <ShareDialog entry={dialog.entry} onClose={() => setDialog(null)} />
       ) : null}
@@ -640,7 +716,16 @@ export function FilesPage() {
         <PreviewModal entry={previewEntry} onClose={() => setPreviewEntry(null)} />
       ) : null}
 
-      {!readOnly ? <UploadPanel /> : null}
+      {extractPasswordEntry ? (
+        <ExtractPasswordDialog
+          name={extractPasswordEntry.name}
+          error={extractPasswordError}
+          onClose={() => { setExtractPasswordEntry(null); setExtractPasswordError(null); }}
+          onSubmit={async (password) => { await extractEntry(extractPasswordEntry, password); }}
+        />
+      ) : null}
+
+      {!readOnly ? <TaskQueuePanel /> : null}
       {!readOnly ? <AiAssistant enabled={publicSettings?.ai_enabled ?? false} /> : null}
     </div>
   );

@@ -1,0 +1,7 @@
+{
+  "name": "web-button-demo",
+  "version": "1.0.0",
+  "description": "演示插件：在用户 Web 右侧注入测试按钮，并在 iframe 中显示宿主传递的用户信息。",
+  "author": "CloudBox",
+  "previews": []
+}

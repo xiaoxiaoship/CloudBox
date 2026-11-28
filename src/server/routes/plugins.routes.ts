@@ -10,6 +10,10 @@ export function createPluginsRouter(
 ): Router {
   const router = Router();
 
+  router.get('/slots', (req, res) => {
+    res.json(services.plugins.getUiSlots(req.user!.id));
+  });
+
   router.get('/previewers', (_req, res) => {
     res.json(services.plugins.previewers());
   });

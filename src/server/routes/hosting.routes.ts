@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { Router, type RequestHandler } from 'express';
+import { Router, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import type { CoreServices } from '../../core/container.ts';
 import { SESSION_COOKIE, readCookie } from '../http/cookies.ts';
 import { requestContext } from '../http/context.ts';
+import { requestOrigin } from '../http/origin.ts';
 
 const deployBody = z.object({
   rootPath: z.string().min(1).max(900),
@@ -29,6 +30,39 @@ const HOST_CSP = [
   "sandbox allow-scripts allow-forms allow-same-origin",
 ].join('; ');
 
+const HOST_PERMISSIONS_POLICY = [
+  'accelerometer=()',
+  'camera=()',
+  'geolocation=()',
+  'microphone=()',
+  'payment=()',
+  'usb=()',
+].join(', ');
+
+/**
+ * 静态站点安全响应头：CSP 保留，其余按访问协议生成。
+ * HSTS 只允许在 HTTPS 响应上出现，避免 HTTP 场景污染浏览器缓存。
+ */
+function applyHostingSecurityHeaders(res: Response, protocol: string): void {
+  res.setHeader('Content-Security-Policy', HOST_CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', HOST_PERMISSIONS_POLICY);
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'no-cache');
+  if (protocol === 'https') {
+    // helmet 默认已下发 HSTS；仅在缺失时补齐，避免覆盖更严格的全局值。
+    if (!res.hasHeader('Strict-Transport-Security')) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    }
+  } else {
+    // 非 HTTPS 响应不携带 HSTS，避免协议与头不一致。
+    res.removeHeader('Strict-Transport-Security');
+  }
+}
+
 export function createHostingApiRouter(
   services: CoreServices,
   deps: { csrf: RequestHandler },
@@ -39,15 +73,20 @@ export function createHostingApiRouter(
       res.status(403).json({ code: 'HOSTING_DISABLED', message: '管理员尚未开启静态托管' });
       return;
     }
-    res.json(services.hosting.get(req.user!));
+    res.json(services.hosting.get(req.user!, requestOrigin(req)));
   });
   router.put('/settings', deps.csrf, async (req, res) => {
     const body = deployBody.parse(req.body);
-    const result = await services.hosting.save(req.user!, body, requestContext(req, res));
+    const result = await services.hosting.save(
+      req.user!,
+      body,
+      requestContext(req, res),
+      requestOrigin(req),
+    );
     res.json(result);
   });
   router.post('/disable', deps.csrf, (req, res) => {
-    res.json(services.hosting.disable(req.user!));
+    res.json(services.hosting.disable(req.user!, requestOrigin(req)));
   });
   return router;
 }
@@ -79,11 +118,7 @@ export function createHostingSiteRouter(services: CoreServices): Router {
     try {
       const content = await readFile(resolved.absolutePath);
       res.type(resolved.mimeHint || 'bin');
-      res.setHeader('Content-Security-Policy', HOST_CSP);
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-cache');
+      applyHostingSecurityHeaders(res, req.protocol);
       res.status(200).send(content);
     } catch {
       res.status(404).json({ code: 'HOSTING_NOT_FOUND', message: '静态资源不存在' });

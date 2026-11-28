@@ -9,6 +9,14 @@ import { normalizeRelativePath, resolveUserPath } from '../security/safePath.ts'
 import type { FileService, RequestContext } from './fileService.ts';
 import type { SettingsService } from './settingsService.ts';
 
+export type HostingMode = 'auto' | 'public';
+
+/** 当前 HTTP 请求的协议与 Host，用于 auto 模式生成绝对地址。 */
+export interface RequestOrigin {
+  protocol: 'http' | 'https';
+  host: string;
+}
+
 export interface HostingSettings {
   enabled: boolean;
   rootPath: string;
@@ -16,6 +24,7 @@ export interface HostingSettings {
   url: string;
   hostingEnabled: boolean;
   baseUrl: string;
+  mode: HostingMode;
 }
 
 export class HostingService {
@@ -46,20 +55,48 @@ export class HostingService {
     return this.settings.get('hosting.enabled');
   }
 
-  urlFor(user: { username: string }): string {
-    const base = this.settings.get('hosting.base_url').trim().replace(/\/+$/, '');
-    return `${base}/host/${encodeURIComponent(user.username)}/`;
+  /** 公网固定基础地址（已去除末尾斜杠），未配置时返回空串。 */
+  configuredBaseUrl(): string {
+    return this.settings.get('hosting.base_url').trim().replace(/\/+$/, '');
   }
 
-  get(user: SessionUser): HostingSettings {
+  mode(): HostingMode {
+    return this.settings.get('hosting.mode');
+  }
+
+  /**
+   * 链接基础地址：
+   *  - public 模式且配置了 base_url：优先使用公网固定地址；
+   *  - 其余情况（auto 模式或未配置公网地址）：使用当前请求的协议 + Host；
+   *  - 没有请求上下文时退回已配置的 base_url，避免拼出 "undefined"。
+   */
+  resolveBaseUrl(origin?: RequestOrigin | null, mode?: HostingMode): string {
+    const configured = this.configuredBaseUrl();
+    if ((mode ?? this.mode()) === 'public' && configured !== '') return configured;
+    if (origin && origin.host !== '') return `${origin.protocol}://${origin.host}`;
+    return configured;
+  }
+
+  /** 拼接绝对地址；没有可用基础地址时保留以 "/" 开头的相对路径。 */
+  absoluteUrl(pathname: string, origin?: RequestOrigin | null, mode?: HostingMode): string {
+    const base = this.resolveBaseUrl(origin, mode);
+    return `${base}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
+  }
+
+  urlFor(user: { username: string }, origin?: RequestOrigin | null): string {
+    return this.absoluteUrl(`/host/${encodeURIComponent(user.username)}/`, origin);
+  }
+
+  get(user: SessionUser, origin?: RequestOrigin | null): HostingSettings {
     const record = this.repo.get(user.id);
     return {
       enabled: record?.enabled ?? false,
       rootPath: record?.rootPath ?? '',
       visibility: record?.visibility ?? 'private',
-      url: this.urlFor(user),
+      url: this.urlFor(user, origin),
       hostingEnabled: this.isEnabled(),
       baseUrl: this.settings.get('hosting.base_url'),
+      mode: this.mode(),
     };
   }
 
@@ -67,6 +104,7 @@ export class HostingService {
     user: SessionUser,
     input: { rootPath: string; enabled: boolean; visibility: 'public' | 'private' },
     ctx: RequestContext,
+    origin?: RequestOrigin | null,
   ): Promise<HostingSettings> {
     if (!this.isEnabled()) throw new Error('管理员尚未开启静态托管');
     const rootPath = input.rootPath.trim();
@@ -91,15 +129,15 @@ export class HostingService {
       updatedAt: this.now(),
     };
     this.repo.upsert(record);
-    return this.get(user);
+    return this.get(user, origin);
   }
 
-  disable(user: SessionUser): HostingSettings {
+  disable(user: SessionUser, origin?: RequestOrigin | null): HostingSettings {
     const existing = this.repo.get(user.id);
     if (existing) {
       this.repo.upsert({ ...existing, enabled: false, updatedAt: this.now() });
     }
-    return this.get(user);
+    return this.get(user, origin);
   }
 
   findByUsername(username: string): {

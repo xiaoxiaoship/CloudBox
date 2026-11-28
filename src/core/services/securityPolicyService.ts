@@ -7,8 +7,28 @@ export interface AccessLists { ipAllow: string[]; ipDeny: string[]; accountAllow
 export interface SecurityPolicy { rules: PolicyRule[]; ipBan?: { threshold: number; minutes: number }; accountBan?: { threshold: number; minutes: number }; globalBan?: { threshold: number; recoveryMinutes: number }; accessLists?: AccessLists; }
 export interface SecurityBan { id: number; scope: PolicyScope; target: string; feature: string; until: number; createdAt: number; }
 
+/** 与 WAF 面板默认值保持一致；security.policy 为空时直接使用。 */
+const DEFAULT_POLICY: SecurityPolicy = {
+  rules: [
+    { feature: 'loginFailure', scope: 'ip', config: { recordValue: 1, mode: 'window', windowMinutes: 15, threshold: 30, banMode: 'fixed', fixedMinutes: 5, baseMinutes: 1, maxMinutes: 60 } },
+    { feature: 'loginFailure', scope: 'account', config: { recordValue: 1, mode: 'window', windowMinutes: 15, threshold: 10, banMode: 'variable', fixedMinutes: 2, baseMinutes: 1, maxMinutes: 60 } },
+    { feature: 'concurrentSessions', scope: 'account', config: { recordValue: 1, max: 10, banMinutes: 5 } },
+    { feature: 'renameLimit', scope: 'account', config: { recordValue: 1, windowHours: 24, threshold: 3, banHours: 24 } },
+    { feature: 'avatarLimit', scope: 'account', config: { recordValue: 1, windowHours: 24, threshold: 3, banHours: 24 } },
+    { feature: 'apiFlood', scope: 'global', config: { recordValue: 1, windowMinutes: 1, threshold: 256 } },
+    { feature: 'ips', scope: 'ip', config: { recordValue: 5 } },
+    { feature: 'concurrentSessions', scope: 'global', config: { recordValue: 1, max: 500, banMinutes: 5 } },
+    { feature: 'registrationLimit', scope: 'ip', config: { recordValue: 1, windowMinutes: 10, threshold: 2, banMinutes: 10 } },
+  ],
+  ipBan: { threshold: 10, minutes: 30 },
+  accountBan: { threshold: 10, minutes: 30 },
+  globalBan: { threshold: 15, recoveryMinutes: 5 },
+  accessLists: { ipAllow: [], ipDeny: [], accountAllow: [], accountDeny: [] },
+};
+
 export class SecurityPolicyService {
   onGlobalLimit?: () => void;
+  onBan?: (ban: SecurityBan) => void;
   private globalLimitTriggered = false;
   private readonly db: Db;
   private readonly settings: SettingsService;
@@ -22,11 +42,16 @@ export class SecurityPolicyService {
 
   policy(): SecurityPolicy {
     const raw = this.settings.get('security.policy');
-    if (!raw) return { rules: [] };
+    if (!raw) return DEFAULT_POLICY;
     try {
       const parsed = JSON.parse(raw) as SecurityPolicy;
-      return { rules: Array.isArray(parsed.rules) ? parsed.rules : [], ...(parsed.ipBan ? { ipBan: parsed.ipBan } : {}), ...(parsed.accountBan ? { accountBan: parsed.accountBan } : {}), ...(parsed.globalBan ? { globalBan: parsed.globalBan } : {}), ...(parsed.accessLists ? { accessLists: parsed.accessLists } : {}) };
-    } catch { return { rules: [] }; }
+      const rules = Array.isArray(parsed.rules) ? parsed.rules : [];
+      const extra = parsed as SecurityPolicy & { savedRules?: Array<{ feature?: string }> };
+      if (!rules.some((rule) => rule.feature === 'avatarLimit') && !extra.savedRules?.some((rule) => rule.feature === 'avatarLimit')) {
+        rules.push(DEFAULT_POLICY.rules.find((rule) => rule.feature === 'avatarLimit')!);
+      }
+      return { rules, ...(parsed.ipBan ? { ipBan: parsed.ipBan } : {}), ...(parsed.accountBan ? { accountBan: parsed.accountBan } : {}), ...(parsed.globalBan ? { globalBan: parsed.globalBan } : {}), ...(parsed.accessLists ? { accessLists: parsed.accessLists } : {}) };
+    } catch { return DEFAULT_POLICY; }
   }
 
   accessLists(): AccessLists {
@@ -162,7 +187,9 @@ export class SecurityPolicyService {
     const result = this.db.prepare(
       'INSERT INTO security_bans (scope, target, feature, until, created_at) VALUES (?, ?, ?, ?, ?)',
     ).run(scope, target, feature, until, now);
-    return { id: Number(result.lastInsertRowid), scope, target, feature, until, createdAt: now };
+    const ban = { id: Number(result.lastInsertRowid), scope, target, feature, until, createdAt: now };
+    this.onBan?.(ban);
+    return ban;
   }
 
   private clearFeatureBans(scope: PolicyScope, target: string): void {
@@ -185,7 +212,7 @@ export class SecurityPolicyService {
       for (const user of users) markReset.run('account', String(user.id), now);
       const ips = this.db.prepare("SELECT DISTINCT ip FROM audit_logs WHERE ip IS NOT NULL AND ip != '' UNION SELECT DISTINCT ip FROM sessions WHERE ip IS NOT NULL AND ip != ''").all() as Array<{ ip: string }>;
       for (const ip of ips) markReset.run('ip', ip.ip, now);
-      this.db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL, rename_limited_until = NULL').run();
+      this.db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL, rename_limited_until = NULL, avatar_limited_until = NULL').run();
       this.db.prepare('DELETE FROM security_policy_counts').run();
       return removed;
     })();
@@ -207,6 +234,9 @@ export class SecurityPolicyService {
         }
         if (row.feature === 'global' || row.feature === 'renameLimit') {
           this.db.prepare('UPDATE users SET rename_limited_until = NULL WHERE id = ?').run(userId);
+        }
+        if (row.feature === 'global' || row.feature === 'avatarLimit') {
+          this.db.prepare('UPDATE users SET avatar_limited_until = NULL WHERE id = ?').run(userId);
         }
       }
     }

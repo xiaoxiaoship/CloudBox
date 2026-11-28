@@ -11,6 +11,7 @@ export type PolicyFeatureId =
   | 'registrationLimit'
   | 'cap'
   | 'renameLimit'
+  | 'avatarLimit'
   | 'concurrentSessions'
   | 'historyIpLimit'
   | 'concurrentIpLimit'
@@ -84,6 +85,14 @@ const FEATURES: FeatureDefinition[] = [
     id: 'renameLimit',
     name: '改名限制',
     description: '限制账户在时间窗口内的改名次数。',
+    group: '适用于账户与全局',
+    scopes: ['account'],
+    defaults: { windowHours: 24, threshold: 1, banHours: 24 },
+  },
+  {
+    id: 'avatarLimit',
+    name: '头像修改限制',
+    description: '限制账户在时间窗口内的头像修改次数。',
     group: '适用于账户与全局',
     scopes: ['account'],
     defaults: { windowHours: 24, threshold: 1, banHours: 24 },
@@ -174,7 +183,7 @@ export function defaultPolicy(): SecurityPolicyData {
       { feature: 'loginFailure', scope: 'account', config: { recordValue: 1, mode: 'window', windowMinutes: 15, threshold: 10, banMode: 'variable', fixedMinutes: 2, baseMinutes: 1, maxMinutes: 60 } },
       { feature: 'concurrentSessions', scope: 'account', config: { recordValue: 1, max: 10, banMinutes: 5 } },
       { feature: 'renameLimit', scope: 'account', config: { recordValue: 1, windowHours: 24, threshold: 3, banHours: 24 } },
-      { feature: 'cap', scope: 'ip', config: { recordValue: 1, threshold: 3, mode: 'window', windowMinutes: 15 } },
+      { feature: 'avatarLimit', scope: 'account', config: { recordValue: 1, windowHours: 24, threshold: 3, banHours: 24 } },
       { feature: 'apiFlood', scope: 'global', config: { recordValue: 1, windowMinutes: 1, threshold: 256 } },
       { feature: 'ips', scope: 'ip', config: { recordValue: 5 } },
       { feature: 'concurrentSessions', scope: 'global', config: { recordValue: 1, max: 500, banMinutes: 5 } },
@@ -182,7 +191,7 @@ export function defaultPolicy(): SecurityPolicyData {
     ],
     savedRules: [
       { feature: 'concurrentIpLimit', scope: 'account', config: { max: 1, banMinutes: 5 } },
-      { feature: 'cap', scope: 'ip', config: { threshold: 3 } },
+      { feature: 'cap', scope: 'ip', config: { recordValue: 1, threshold: 3, mode: 'window', windowMinutes: 15 } },
       { feature: 'globalAccountBanCount', scope: 'global', config: { recordValue: 1 } },
     ],
     ipBan: { threshold: 10, minutes: 30 },
@@ -203,6 +212,9 @@ export function parsePolicy(raw: string | undefined): SecurityPolicyData {
       accountBan: { ...defaultPolicy().accountBan, ...(parsed.accountBan ?? {}) },
       globalBan: { ...defaultPolicy().globalBan!, ...(parsed.globalBan ?? {}) },
       accessLists: { ...defaultPolicy().accessLists, ...(parsed.accessLists ?? {}) } as SecurityPolicyData['accessLists'],
+      ...(parsed.savedRules?.some((rule) => rule.feature === 'avatarLimit') || (parsed.rules ?? []).some((rule) => rule.feature === 'avatarLimit')
+        ? {}
+        : { rules: [...(Array.isArray(parsed.rules) ? parsed.rules.filter((rule) => FEATURE_BY_ID.has(rule.feature)) : []), { feature: 'avatarLimit', scope: 'account' as const, config: { recordValue: 1, windowHours: 24, threshold: 3, banHours: 24 } }] }),
     };
   } catch {
     return defaultPolicy();
@@ -755,6 +767,7 @@ function RuleSettingsDialog({
         {feature.id === 'ips' ? <p className="col-span-2 text-[10px] text-slate-500">命中后仅拦截当前请求并累计计数，不写入 IP 封禁。</p> : null}
         {feature.id === 'apiFlood' ? <>{number('windowMinutes', '统计窗口（分钟）', 1, 60)}{number('threshold', '窗口内请求阈值', 1, 1000000)}</> : null}
         {feature.id === 'renameLimit' ? <>{number('windowHours', '统计窗口（小时）', 1, 8760)}{number('threshold', '改名次数阈值')}{number('banHours', '封禁（小时）', 0, 8760, true)}</> : null}
+        {feature.id === 'avatarLimit' ? <>{number('windowHours', '统计窗口（小时）', 1, 8760)}{number('threshold', '头像修改次数阈值')}{number('banHours', '封禁（小时）', 0, 8760, true)}</> : null}
         {feature.id === 'concurrentSessions' ? <>{number('max', '最大同时连接数')}{number('banMinutes', '封禁（分钟）', 0, 10080, true)}</> : null}
         {feature.id === 'historyIpLimit' ? <>{number('max', '最大不同 IP 数')}{number('windowDays', '统计周期（天）')}{number('banMinutes', '封禁（分钟）', 0, 10080, true)}</> : null}
         {feature.id === 'concurrentIpLimit' ? <>{number('max', '最大同时在线 IP 数')}{number('banMinutes', '封禁（分钟）')}</> : null}

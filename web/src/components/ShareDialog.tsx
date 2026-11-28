@@ -17,14 +17,6 @@ function durationLabel(seconds: number): string {
   return option?.label ?? `${seconds} 秒`;
 }
 
-function absoluteUrl(url: string): string {
-  try {
-    return new URL(url, window.location.origin).href;
-  } catch {
-    return url;
-  }
-}
-
 async function copyText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     try {
@@ -69,7 +61,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
   const copy = async (): Promise<void> => {
     if (!share) return;
     try {
-      await copyText(absoluteUrl(share.url));
+      await copyText(share.url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_800);
     } catch {
@@ -165,7 +157,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               <input
                 id="share-url"
                 readOnly
-                value={absoluteUrl(share.url)}
+                value={share.url}
                 onFocus={(event) => event.target.select()}
                 className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
               />

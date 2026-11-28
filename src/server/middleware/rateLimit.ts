@@ -113,8 +113,10 @@ export interface RateLimiters {
   upload: RateLimitRequestHandler;
   shares: RateLimitRequestHandler;
   shareDownload: RateLimitRequestHandler;
+  guest: RateLimitRequestHandler;
   register: RateLimitRequestHandler;
   extract: RateLimitRequestHandler;
+  compress: RateLimitRequestHandler;
   scan: RateLimitRequestHandler;
 }
 
@@ -134,10 +136,12 @@ export function createRateLimiters(options: {
     upload?: number;
     shares?: number;
     shareDownload?: number;
+    guest?: number;
     extract?: number;
+    compress?: number;
     scan?: number;
   };
-  dynamicLimits?: () => { api?: number; upload?: number; shares?: number; shareDownload?: number; extract?: number; scan?: number };
+  dynamicLimits?: () => { api?: number; upload?: number; shares?: number; shareDownload?: number; guest?: number; extract?: number; compress?: number; scan?: number };
 } = {}): RateLimiters {
   onRateLimitAlert = options.onAlert;
   const securityEnabled = options.securityEnabled !== false;
@@ -152,7 +156,7 @@ export function createRateLimiters(options: {
   // Keep the middleware shape so existing route wiring remains harmless.
   const loginGuard: RequestHandler = (_req, _res, next) => next();
 
-  const currentLimit = (key: 'api' | 'upload' | 'shares' | 'shareDownload' | 'extract' | 'scan', fallback: number): (() => number) => () =>
+  const currentLimit = (key: 'api' | 'upload' | 'shares' | 'shareDownload' | 'guest' | 'extract' | 'compress' | 'scan', fallback: number): (() => number) => () =>
     options.dynamicLimits?.()[key] ?? options.limits?.[key] ?? fallback;
 
   return {
@@ -191,6 +195,15 @@ export function createRateLimiters(options: {
         `share:${ipKeyGenerator(req.ip ?? '0.0.0.0')}:${req.params.token ?? ''}`,
       handler: jsonRateLimitHandler('分享下载请求过于频繁，请稍后再试', 'shareDownloadRateLimit', '分享下载基础限流', 60),
     }),
+    guest: rateLimit({
+      windowMs: 60_000,
+      limit: currentLimit('guest', 60),
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      keyGenerator: (req) =>
+        `guest:${ipKeyGenerator(req.ip ?? '0.0.0.0')}:${req.params.token ?? ''}`,
+      handler: jsonRateLimitHandler('访客请求过于频繁，请稍后再试', 'guestRateLimit', '访客基础限流', 60),
+    }),
     register: rateLimit({
       windowMs: 60 * 60_000,
       limit: () => options.registerLimit?.() ?? 2,
@@ -207,6 +220,14 @@ export function createRateLimiters(options: {
       legacyHeaders: false,
       keyGenerator: (req) => `extract:${req.user?.id ?? ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
       handler: jsonRateLimitHandler('解压请求过于频繁，请稍后再试', 'extractRateLimit', '解压基础限流', 60),
+    }),
+    compress: rateLimit({
+      windowMs: 60_000,
+      limit: currentLimit('compress', 10),
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      keyGenerator: (req) => `compress:${req.user?.id ?? ipKeyGenerator(req.ip ?? '0.0.0.0')}`,
+      handler: jsonRateLimitHandler('压缩请求过于频繁，请稍后再试', 'compressRateLimit', '压缩基础限流', 60),
     }),
     scan: rateLimit({
       windowMs: 60_000,
