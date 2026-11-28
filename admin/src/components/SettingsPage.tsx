@@ -536,6 +536,22 @@ export function SettingsPage({
   const changePassword = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
 
+    if (currentPassword === '') {
+      setPasswordError('请输入当前密码');
+      return;
+    }
+    if (newPassword === '') {
+      setPasswordError('请输入新密码');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError('新密码至少需要 8 位');
+      return;
+    }
+    if (confirmPassword === '') {
+      setPasswordError('请再次输入新密码');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setPasswordError(t('admin.settings.the-new-passwords-do-not-match'));
       return;

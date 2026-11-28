@@ -110,8 +110,8 @@ export function createAdminAuthRouter(
   router.post('/auth/password', requireAdmin, csrf, async (req, res) => {
     try {
       const input = z.object({
-        currentPassword: z.string().min(1).max(1_024),
-        newPassword: z.string().min(8).max(128),
+        currentPassword: z.string().min(1, '请输入当前密码').max(1_024, '当前密码过长'),
+        newPassword: z.string().min(8, '新密码至少需要 8 位').max(128, '新密码过长'),
       }).parse(req.body);
       const user = adminUser(res);
       await auth.changePassword(user.id, input.currentPassword, input.newPassword);
