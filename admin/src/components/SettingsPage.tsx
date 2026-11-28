@@ -665,6 +665,17 @@ export function SettingsPage({
         </div>
         <LanguageSwitcher />
       </div>
+
+      <section className="rounded-2xl border border-indigo-900/60 bg-indigo-950/20 p-4">
+        <h2 className="text-sm font-semibold text-indigo-200">{t('admin.settings.quickStart')}</h2>
+        <ol className="mt-2 grid gap-2 text-xs leading-5 text-slate-300 sm:grid-cols-2">
+          <li>1. {t('admin.settings.quickStartNetwork')}</li>
+          <li>2. {t('admin.settings.quickStartUsers')}</li>
+          <li>3. {t('admin.settings.quickStartPermissions')}</li>
+          <li>4. {t('admin.settings.quickStartBackup')}</li>
+        </ol>
+      </section>
+
             <div className="pt-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-400">{t('admin.settings.administrator-account')}</p>
         <p className="mt-1 text-[11px] text-slate-500">{t('admin.settings.administrator-password-account-details-and-sign-')}</p>

@@ -551,7 +551,12 @@
       "copies-all-user-files-under-storage": "Copies all user files under storage.",
       "copies-all-plugins-and-plugin-configuration-unde": "copies all plugins and plugin configuration unde",
       "delete-old-files-after-migration": "Delete old files after migration",
-      "the-old-directory-will-be-deleted-before-restart": "the old directory will be deleted before restart"
+      "the-old-directory-will-be-deleted-before-restart": "the old directory will be deleted before restart",
+      "quickStart": "Quick start",
+      "quickStartNetwork": "Open Network settings, confirm the port, HTTPS and access address, then decide whether to start the online service.",
+      "quickStartUsers": "Create regular users, assign quotas and initial passwords in Users.",
+      "quickStartPermissions": "Enable previews, extraction, compression, direct sharing and guest mode as needed in Feature controls.",
+      "quickStartBackup": "Change the administrator password and back up the database under System and storage before going live."
     }
   },
   "header": {

@@ -551,7 +551,12 @@
       "copies-all-user-files-under-storage": "会复制 storage 下所有用户文件。",
       "copies-all-plugins-and-plugin-configuration-unde": "复制所有插件和插件配置。",
       "delete-old-files-after-migration": "迁移完成后删除旧文件",
-      "the-old-directory-will-be-deleted-before-restart": "迁移完成后删除旧目录。"
+      "the-old-directory-will-be-deleted-before-restart": "迁移完成后删除旧目录。",
+      "quickStart": "快速开始",
+      "quickStartNetwork": "先到「网络设置」确认端口、HTTPS 与访问地址，再决定是否开启在线服务。",
+      "quickStartUsers": "在「用户管理」创建普通用户、分配配额并设置初始密码。",
+      "quickStartPermissions": "在「功能控制」按需开启预览、解压、压缩、直链分享和访客模式。",
+      "quickStartBackup": "上线前修改管理员密码，并在「系统与存储」备份数据库和规划数据目录。"
     }
   },
   "header": {

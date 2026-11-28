@@ -86,10 +86,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <button type="button" onClick={openAnnouncements} className="relative rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" title="公告" aria-label="公告">
-            <BellIcon className="h-4 w-4" />
-            {unreadAnnouncements > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-950" /> : null}
-          </button>
           <ThemeToggle />
           <LanguageSwitcher />
           {!securityMode && aiEnabled ? (
@@ -134,6 +130,11 @@ export function Header() {
               </p>
             </div>
           </div>
+
+          <button type="button" onClick={openAnnouncements} className="relative rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" title="公告" aria-label="公告">
+            <BellIcon className="h-4 w-4" />
+            {unreadAnnouncements > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-950" /> : null}
+          </button>
 
           <button
             type="button"

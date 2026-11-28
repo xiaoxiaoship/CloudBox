@@ -1,7 +1,7 @@
 # CloudBox 插件开发与 API / Plugin Development & API
 
-> 适用版本：1.0.2  
-> Applies to: 1.0.2
+> 适用版本：1.0.3  
+> Applies to: 1.0.3
 
 ## 本文目录 / Contents
 
@@ -490,3 +490,55 @@ npm run electron:start
 ```
 
 The main process logs print the `[plugin:name]` stdout/stderr and logger.
+
+---
+
+## 12. 平台级 ctx API（1.0.3）
+
+插件通过宿主白名单 RPC 使用以下能力；均为 Promise：
+
+| 分类 | API | 说明 |
+|---|---|---|
+| 配置 | `ctx.config.get/set` | 插件私有配置 |
+| 调度 | `ctx.schedule(cron, handler)` | 5 段 cron，进程内执行 |
+| 系统 | `ctx.system.getStats()` | CPU、内存、在线人数、uptime |
+| 安全只读 | `ctx.security.getBannedList()` | 当前封禁列表；无写接口 |
+| 日志 | `ctx.logger.info/warn/error` | 转发到主进程日志 |
+| 用户 | `getInfo / updateQuota / getMeta / setMeta` | 配额、64KB JSON 元数据 |
+| 文件 | `read / write / list / getUrl` | 文本读写、目录、1 小时内部直链；全部 safePath |
+| AI | `registerTool / injectPrompt` | 注册工具和系统提示词 |
+| 事件 | `ctx.on(event, handler)` | file.uploaded、security.banned 等 |
+| UI | `ctx.ui.registerComponent` | Web 悬浮按钮，sandbox iframe |
+
+插件页面放在 `web-ui/index.html`，宿主通过 `postMessage` 发送：
+
+```js
+{ type: 'cloudbox:init', token, user: { id, username, role } }
+```
+
+不能调用：修改 WAF/安全模式、封禁/解封、清除安全计数。
+
+## 12. Platform ctx API (1.0.3)
+
+All capabilities are asynchronous and whitelisted by the host:
+
+| Category | API | Notes |
+|---|---|---|
+| Config | `ctx.config.get/set` | Per-plugin storage |
+| Scheduling | `ctx.schedule(cron, handler)` | 5-field cron, child-process timer |
+| System | `ctx.system.getStats()` | CPU, memory, online users, uptime |
+| Security (read-only) | `ctx.security.getBannedList()` | No ban/unban/WAF write API |
+| Logging | `ctx.logger.info/warn/error` | Forwarded to host logs |
+| Users | `getInfo / updateQuota / getMeta / setMeta` | Quota and 64KB JSON metadata |
+| Files | `read / write / list / getUrl` | UTF-8 text, safePath, 1-hour internal link |
+| AI | `registerTool / injectPrompt` | Native assistant tools/prompts |
+| Events | `ctx.on(event, handler)` | `file.uploaded`, `security.banned`, etc. |
+| UI | `ctx.ui.registerComponent` | Web slot rendered in a sandbox iframe |
+
+Custom UI lives in `web-ui/index.html`; the host posts:
+
+```js
+{ type: 'cloudbox:init', token, user: { id, username, role } }
+```
+
+Forbidden: modifying WAF/security mode, banning/unbanning, clearing security counters.
