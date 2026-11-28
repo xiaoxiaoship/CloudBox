@@ -10,7 +10,7 @@
 ;   dist\headless, dist\admin, dist\web, node_modules, resources, node.exe
 
 #define MyAppName "CloudBox"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "CloudBox"
 #define MyAppURL "https://github.com/xiaoxiaoship/CloudBox"
 
