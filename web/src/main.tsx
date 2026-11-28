@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import GuestPage from './components/GuestPage.tsx';
 import './styles.css';
 import './i18n.ts';
+import { installWebTextFallback } from './i18nText.ts';
 
 // iOS 16 Safari/WebKit lacks Promise.withResolvers, which pdf.js 4.x uses.
 if (typeof (Promise as unknown as { withResolvers?: unknown }).withResolvers !== 'function') {
@@ -19,6 +20,8 @@ const App = lazy(() => import('./App.tsx'));
 
 const guestMatch = /^\/guest\/([a-f0-9]+)\/?$/.exec(window.location.pathname);
 const guestToken = guestMatch?.[1] ?? null;
+
+installWebTextFallback();
 
 const container = document.getElementById('root');
 if (!container) {

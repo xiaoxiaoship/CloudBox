@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, type GuestLinkView } from '../api/client.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { DialogShell } from './Dialog.tsx';
@@ -19,6 +20,7 @@ async function copyText(text: string): Promise<void> {
 }
 
 export function UserSettingsDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const user = useAppStore((state) => state.user);
   const renameAccount = useAppStore((state) => state.renameAccount);
   const uploadAvatar = useAppStore((state) => state.uploadAvatar);
@@ -231,12 +233,12 @@ export function UserSettingsDialog({ onClose }: { onClose: () => void }) {
         ) : null}
 
         {allowDirectShare ? (
-          <section className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700" aria-label="我的直链分享">
+          <section className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700" aria-label={t('userSettings.myShares')}>
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium text-slate-800 dark:text-slate-100">我的直链分享</h3>
-              <span className="text-[11px] text-slate-500">{shares.length} 条</span>
+              <h3 className="text-sm font-medium text-slate-800 dark:text-slate-100">{t('userSettings.myShares')}</h3>
+              <span className="text-[11px] text-slate-500">{t('userSettings.shareCount', { count: shares.length })}</span>
             </div>
-            {shares.length === 0 ? <p className="text-xs text-slate-500">暂无直链分享</p> : (
+            {shares.length === 0 ? <p className="text-xs text-slate-500">{t('userSettings.noShares')}</p> : (
               <ul className="max-h-72 space-y-2 overflow-auto">
                 {shares.map((share) => (
                   <li key={share.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700">

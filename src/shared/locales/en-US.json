@@ -103,7 +103,16 @@
     "copy": "Copy",
     "move": "Move",
     "copySelected": "Copy selected",
-    "moveSelected": "Move selected"
+    "moveSelected": "Move selected",
+    "selectAll": "Select all in current folder",
+    "selectItem": "Select {{name}}",
+    "extractItem": "Extract {{name}}",
+    "scanItem": "Scan {{name}}",
+    "shareItem": "Share {{name}}",
+    "downloadItem": "Download {{name}}",
+    "renameItem": "Rename {{name}}",
+    "deleteItem": "Delete {{name}}",
+    "folderNamePlaceholder": "e.g. Photos"
   },
   "settings": {
     "title": "Settings",
@@ -557,5 +566,47 @@
     "newUsername": "New username",
     "usernameChangedHint": "Use the new username for your next sign-in. Your password and files are unchanged.",
     "save": "Save"
+  },
+  "userSettings": {
+    "myShares": "My direct shares",
+    "shareCount": "{{count}} items",
+    "noShares": "No direct shares yet"
+  },
+  "share": {
+    "title": "Share link",
+    "file": "File: {{name}}",
+    "warning": "Anyone with this link can download the file. Do not share it with untrusted people. The link expires after {{duration}}.",
+    "validity": "Link validity",
+    "link": "Share link",
+    "generate": "Generate link",
+    "regenerate": "Regenerate",
+    "copied": "Copied",
+    "copy": "Copy",
+    "expiresAt": "Expires at {{time}}",
+    "createFailed": "Failed to create share link",
+    "copyFailed": "Copy failed. Select the link and copy it manually.",
+    "duration": {
+      "30": "30 seconds",
+      "60": "1 minute",
+      "300": "5 minutes",
+      "1800": "30 minutes",
+      "3600": "1 hour",
+      "7200": "2 hours"
+    }
+  },
+  "compress": {
+    "title": "Compress files",
+    "description": "Compress {{count}} selected files into a ZIP archive",
+    "name": "Archive name",
+    "level": "Compression level",
+    "levelOption": "Level {{level}}",
+    "encrypt": "Encrypt archive (ZIP AES-256)",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "start": "Start compression",
+    "running": "Compressing…",
+    "failed": "Compression failed",
+    "passwordRequired": "Enter a compression password",
+    "passwordMismatch": "Passwords do not match"
   }
 }

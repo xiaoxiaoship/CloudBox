@@ -1,20 +1,13 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, type FileEntry, type ShareCreated } from '../api/client.ts';
 import { DialogShell } from './Dialog.tsx';
 import { ShareIcon, Spinner } from './Icons.tsx';
 
-const DURATION_OPTIONS = [
-  { value: 30, label: '30 秒' },
-  { value: 60, label: '1 分钟' },
-  { value: 300, label: '5 分钟' },
-  { value: 1_800, label: '30 分钟' },
-  { value: 3_600, label: '1 小时' },
-  { value: 7_200, label: '2 小时' },
-] as const;
+const DURATION_OPTIONS = [30, 60, 300, 1_800, 3_600, 7_200] as const;
 
-function durationLabel(seconds: number): string {
-  const option = DURATION_OPTIONS.find((item) => item.value === seconds);
-  return option?.label ?? `${seconds} 秒`;
+function durationLabel(seconds: number, t: (key: string, options?: Record<string, unknown>) => string): string {
+  return t(`share.duration.${seconds}`, { defaultValue: `${seconds}s` });
 }
 
 async function copyText(text: string): Promise<void> {
@@ -38,6 +31,7 @@ async function copyText(text: string): Promise<void> {
 }
 
 export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () => void }) {
+  const { t, i18n } = useTranslation();
   const [duration, setDuration] = useState(300);
   const [share, setShare] = useState<ShareCreated | null>(null);
   const [pending, setPending] = useState(false);
@@ -52,7 +46,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
       const created = await api.createShare(entry.path, duration);
       setShare(created);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '生成分享链接失败');
+      setError(cause instanceof Error ? cause.message : t('share.createFailed'));
     } finally {
       setPending(false);
     }
@@ -65,18 +59,16 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1_800);
     } catch {
-      setError('复制失败，请手动选中链接复制');
+      setError(t('share.copyFailed'));
     }
   };
 
-  const warning = `任何人获得此链接均可下载该文件，请勿分享给不信任的人。链接将在 ${durationLabel(
-    duration,
-  )}后自动失效。`;
+  const warning = t('share.warning', { duration: durationLabel(duration, t) });
 
   return (
     <DialogShell
-      title="分享直链"
-      description={`文件：${entry.name}`}
+      title={t('share.title')}
+      description={t('share.file', { name: entry.name })}
       onClose={pending ? () => {} : onClose}
       footer={
         share ? (
@@ -86,7 +78,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               onClick={onClose}
               className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              关闭
+              {t('common.close')}
             </button>
             <button
               type="button"
@@ -96,7 +88,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               }}
               className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500"
             >
-              重新生成
+              {t('share.regenerate')}
             </button>
           </>
         ) : (
@@ -107,7 +99,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               disabled={pending}
               className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -116,7 +108,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-60"
             >
               {pending ? <Spinner className="h-4 w-4" /> : <ShareIcon className="h-4 w-4" />}
-              生成直链
+              {t('share.generate')}
             </button>
           </>
         )
@@ -128,7 +120,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
             htmlFor="share-duration"
             className="block text-sm font-medium text-slate-700 dark:text-slate-300"
           >
-            链接有效期
+            {t('share.validity')}
           </label>
           <select
             id="share-duration"
@@ -137,9 +129,9 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
             disabled={pending || share !== null}
             className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:opacity-70 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-950/60"
           >
-            {DURATION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {DURATION_OPTIONS.map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {durationLabel(seconds, t)}
               </option>
             ))}
           </select>
@@ -151,7 +143,7 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
               htmlFor="share-url"
               className="block text-sm font-medium text-slate-700 dark:text-slate-300"
             >
-              分享链接
+              {t('share.link')}
             </label>
             <div className="mt-2 flex gap-2">
               <input
@@ -166,11 +158,11 @@ export function ShareDialog({ entry, onClose }: { entry: FileEntry; onClose: () 
                 onClick={() => void copy()}
                 className="shrink-0 rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-slate-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
               >
-                {copied ? '已复制' : '一键复制'}
+                {copied ? t('share.copied') : t('share.copy')}
               </button>
             </div>
             <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-              有效期至 {new Date(share.expires_at).toLocaleString('zh-CN')}
+              {t('share.expiresAt', { time: new Date(share.expires_at).toLocaleString(i18n.language) })}
             </p>
           </div>
         ) : null}

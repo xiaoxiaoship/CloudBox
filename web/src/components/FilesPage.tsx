@@ -607,7 +607,7 @@ export function FilesPage() {
               释放鼠标即可上传
             </p>
             <p className="mt-1 max-w-[16rem] truncate text-xs text-slate-500 dark:text-slate-400">
-              目标目录：{currentPath || '根目录'}
+              {t('files.targetDir', { path: currentPath || t('files.root') })}
             </p>
           </div>
         </div>
@@ -615,10 +615,10 @@ export function FilesPage() {
 
       {dialog?.kind === 'folder' ? (
         <PromptDialog
-          title="新建文件夹"
-          description={`将在「${currentPath || '根目录'}」下创建`}
-          label="文件夹名称"
-          placeholder="例如：照片"
+          title={t('common.newFolder')}
+          description={t('files.createIn', { path: currentPath || t('files.root') })}
+          label={t('files.folderName')}
+          placeholder={t('files.folderNamePlaceholder')}
           confirmLabel="创建"
           onClose={() => setDialog(null)}
           onSubmit={async (name) => {

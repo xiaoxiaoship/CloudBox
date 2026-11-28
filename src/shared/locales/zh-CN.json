@@ -103,7 +103,16 @@
     "copy": "复制",
     "move": "移动",
     "copySelected": "复制选中项",
-    "moveSelected": "移动选中项"
+    "moveSelected": "移动选中项",
+    "selectAll": "全选当前目录",
+    "selectItem": "选择 {{name}}",
+    "extractItem": "解压 {{name}}",
+    "scanItem": "查杀 {{name}}",
+    "shareItem": "分享 {{name}}",
+    "downloadItem": "下载 {{name}}",
+    "renameItem": "重命名 {{name}}",
+    "deleteItem": "删除 {{name}}",
+    "folderNamePlaceholder": "例如：照片"
   },
   "settings": {
     "title": "系统设置",
@@ -557,5 +566,47 @@
     "newUsername": "新用户名",
     "usernameChangedHint": "修改后下次登录使用新用户名，密码和文件不变。",
     "save": "保存"
+  },
+  "userSettings": {
+    "myShares": "我的直链分享",
+    "shareCount": "{{count}} 条",
+    "noShares": "暂无直链分享"
+  },
+  "share": {
+    "title": "分享直链",
+    "file": "文件：{{name}}",
+    "warning": "任何人获得此链接均可下载该文件，请勿分享给不信任的人。链接将在 {{duration}} 后自动失效。",
+    "validity": "链接有效期",
+    "link": "分享链接",
+    "generate": "生成直链",
+    "regenerate": "重新生成",
+    "copied": "已复制",
+    "copy": "一键复制",
+    "expiresAt": "有效期至 {{time}}",
+    "createFailed": "生成分享链接失败",
+    "copyFailed": "复制失败，请手动选中链接复制",
+    "duration": {
+      "30": "30 秒",
+      "60": "1 分钟",
+      "300": "5 分钟",
+      "1800": "30 分钟",
+      "3600": "1 小时",
+      "7200": "2 小时"
+    }
+  },
+  "compress": {
+    "title": "压缩文件",
+    "description": "将选中的 {{count}} 个文件压缩为 ZIP",
+    "name": "压缩包名称",
+    "level": "压缩级别",
+    "levelOption": "级别 {{level}}",
+    "encrypt": "加密压缩包（ZIP AES-256）",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "start": "开始压缩",
+    "running": "压缩中…",
+    "failed": "压缩失败",
+    "passwordRequired": "请输入压缩密码",
+    "passwordMismatch": "两次输入的密码不一致"
   }
 }
